@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TrendChart, type ChartSeries } from '../components/TrendChart'
 import { formatRuDate, todayIso } from '../lib/date'
+import {
+  checkHealthStepsAvailable,
+  isHealthStepsSupported,
+  openHealthConnectSettings,
+  syncStepsFromHealth,
+} from '../lib/healthSteps'
 import type { AppData } from '../types'
 
 const STEPS_GOAL = 7000
@@ -21,7 +27,10 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
   const today = data.steps.find((s) => s.date === date)
   const [count, setCount] = useState(today?.count?.toString() ?? '')
   const [busy, setBusy] = useState(false)
+  const [syncBusy, setSyncBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [syncMsg, setSyncMsg] = useState<string | null>(null)
+  const healthSupported = isHealthStepsSupported()
 
   useEffect(() => {
     setCount(today?.count?.toString() ?? '')
@@ -49,12 +58,39 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
     }
     setBusy(true)
     setError(null)
+    setSyncMsg(null)
     try {
       await onSave(date, Math.round(stepsVal))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
     } finally {
       setBusy(false)
+    }
+  }
+
+  const importFromWatch = async () => {
+    setSyncBusy(true)
+    setError(null)
+    setSyncMsg(null)
+    try {
+      const available = await checkHealthStepsAvailable()
+      if (!available.ok) {
+        setError(available.reason)
+        return
+      }
+      const result = await syncStepsFromHealth(onSave, { daysBack: 30 })
+      if (result.todayCount != null) {
+        setCount(String(result.todayCount))
+      }
+      setSyncMsg(
+        result.updated > 0
+          ? `Импортировано дней: ${result.updated}`
+          : 'В Health Connect нет шагов за выбранный период. Проверьте синхронизацию Samsung Health → Health Connect.',
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ошибка импорта')
+    } finally {
+      setSyncBusy(false)
     }
   }
 
@@ -66,6 +102,37 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
         </button>
         <h1>Шаги</h1>
       </header>
+
+      {healthSupported && (
+        <div className="panel">
+          <h2 className="subhead" style={{ marginTop: 0 }}>
+            С часов
+          </h2>
+          <p className="muted small" style={{ marginTop: 0 }}>
+            Galaxy Watch → Samsung Health → Health Connect → Planer. Один раз
+            разрешите доступ к шагам.
+          </p>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={syncBusy || busy}
+              onClick={() => void importFromWatch()}
+            >
+              {syncBusy ? 'Импорт…' : 'Импорт из Health Connect'}
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              disabled={syncBusy}
+              onClick={() => void openHealthConnectSettings()}
+            >
+              Настройки
+            </button>
+          </div>
+          {syncMsg && <p className="form-msg">{syncMsg}</p>}
+        </div>
+      )}
 
       <div className="panel">
         <h2 className="subhead" style={{ marginTop: 0 }}>
@@ -82,7 +149,7 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
           <button
             type="button"
             className="primary-btn day-log-ok"
-            disabled={busy}
+            disabled={busy || syncBusy}
             onClick={() => void saveToday()}
           >
             {busy ? '…' : 'OK'}

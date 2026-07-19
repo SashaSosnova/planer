@@ -38,4 +38,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Optional: read Health Connect steps older than ~30 days -->
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
 </manifest>

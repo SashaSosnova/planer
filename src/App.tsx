@@ -1,6 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAppData } from './hooks/useAppData'
 import { useSettings } from './hooks/useSettings'
+import {
+  hasStepsPermission,
+  isHealthStepsSupported,
+  syncStepsFromHealth,
+} from './lib/healthSteps'
 import { AddMealScreen } from './screens/AddMealScreen'
 import { MeasuresScreen } from './screens/MeasuresScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
@@ -42,6 +47,35 @@ export default function App() {
 
   const { dailyKcalGoal, profileReady, saveProfile, syncGoalFromWeight } =
     useSettings(latestWeightKg)
+
+  const saveStepsRef = useRef(saveSteps)
+  saveStepsRef.current = saveSteps
+  const stepsRef = useRef(data.steps)
+  stepsRef.current = data.steps
+
+  // Quiet refresh from Health Connect when permission was already granted.
+  useEffect(() => {
+    if (!ready || !isHealthStepsSupported()) return
+    let cancelled = false
+    void (async () => {
+      if (!(await hasStepsPermission())) return
+      if (cancelled) return
+      try {
+        await syncStepsFromHealth(saveStepsRef.current, {
+          daysBack: 7,
+          onlyIfHigherOrMissing: true,
+          existingByDate: new Map(
+            stepsRef.current.map((s) => [s.date, s.count] as const),
+          ),
+        })
+      } catch {
+        // Ignore background sync failures.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [ready])
 
   const editMeal =
     overlay?.type === 'edit-meal'

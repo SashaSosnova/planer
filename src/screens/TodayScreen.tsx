@@ -4,6 +4,7 @@ import { MeasureTapeIcon } from '../components/MeasureTapeIcon'
 import { PromptDialog } from '../components/PromptDialog'
 import { formatRuDate, todayIso } from '../lib/date'
 import { buildTodayTimeline, type WeekStats } from '../lib/dayStats'
+import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS } from '../lib/labels'
 import {
   getWeekNutritionSummary,
@@ -136,11 +137,13 @@ export function TodayScreen({
   }
 
   const openSteps = () => {
-    if (steps) onOpenStepsHistory()
-    else {
-      setPromptError(null)
-      setPrompt('steps')
+    // On Android, open the steps screen so Health Connect import is one tap away.
+    if (steps || isHealthStepsSupported()) {
+      onOpenStepsHistory()
+      return
     }
+    setPromptError(null)
+    setPrompt('steps')
   }
 
   const confirmPrompt = async (raw: string) => {

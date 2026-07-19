@@ -68,15 +68,51 @@ function restoreDecimals(text: string): string {
   return text.replaceAll(DECIMAL_GUARD, ',')
 }
 
-function extractGrams(part: string): { name: string; grams: number | null } {
-  const match = part.trim().match(
-    /^(.*?)\s+(\d+(?:[.,]\d+)?)\s*(?:грамм(?:а|ов)?|гр|г|мл|ml|g)\s*$/iu,
+const GRAM_UNIT = '(?:грамм(?:а|ов)?|гр|г|мл|ml|g)'
+const KG_UNIT = '(?:кг|kg)'
+const APPROX_PREFIX = /^(?:около|примерно|где[- ]?то|порядка|~)\s+/iu
+const APPROX_MID = /\s+(?:примерно|около|где[- ]?то)\s+/iu
+
+function toGrams(value: number, unit: string): number {
+  return /кг|kg/i.test(unit) ? round1(value * 1000) : value
+}
+
+function stripApproxWords(text: string): string {
+  return text.replace(APPROX_PREFIX, '').replace(APPROX_MID, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/** «творог 200 г» / «200 г творога» / «0.2 кг творога». */
+export function extractMealGrams(part: string): { name: string; grams: number | null } {
+  const text = stripApproxWords(part.trim())
+  if (!text) return { name: '', grams: null }
+
+  const unit = `(?:${GRAM_UNIT}|${KG_UNIT})`
+
+  const trailing = text.match(
+    new RegExp(`^(.*?)\\s+(\\d+(?:[.,]\\d+)?)\\s*(${unit})\\s*$`, 'iu'),
   )
-  if (match) {
-    const grams = Number(match[2].replace(',', '.'))
-    return { name: match[1].trim(), grams: Number.isFinite(grams) ? grams : null }
+  if (trailing) {
+    const raw = Number(trailing[2].replace(',', '.'))
+    const grams = toGrams(raw, trailing[3])
+    const name = trailing[1].trim()
+    if (name && Number.isFinite(grams) && grams > 0) return { name, grams }
   }
-  return { name: part.trim(), grams: null }
+
+  const leading = text.match(
+    new RegExp(`^(\\d+(?:[.,]\\d+)?)\\s*(${unit})\\s+(.+)$`, 'iu'),
+  )
+  if (leading) {
+    const raw = Number(leading[1].replace(',', '.'))
+    const grams = toGrams(raw, leading[2])
+    const name = leading[3].trim()
+    if (name && Number.isFinite(grams) && grams > 0) return { name, grams }
+  }
+
+  return { name: text, grams: null }
+}
+
+function extractGrams(part: string): { name: string; grams: number | null } {
+  return extractMealGrams(part)
 }
 
 function defaultGramsForBase(name: string): number {

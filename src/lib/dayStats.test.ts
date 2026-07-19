@@ -21,6 +21,8 @@ const empty: AppData = {
   weights: [],
   measurements: [],
   steps: [],
+  checkIns: [],
+  periodStarts: [],
 }
 
 describe('statsForDate', () => {

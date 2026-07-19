@@ -1,10 +1,15 @@
 import { useEffect, useMemo, useState } from 'react'
 import { TrendChart, type ChartSeries } from '../components/TrendChart'
 import { formatRuDate, todayIso } from '../lib/date'
+import { forecastFromAppData } from '../lib/weightForecast'
 import type { AppData } from '../types'
 
 type Props = {
   data: AppData
+  targetWeightKg: number | null
+  maintainKcalGoal: number
+  cycleLengthDays: number
+  periodLengthDays: number
   onBack: () => void
   onSave: (date: string, kg: number) => Promise<unknown>
 }
@@ -14,7 +19,15 @@ function num(v: string): number | undefined {
   return Number.isFinite(n) ? n : undefined
 }
 
-export function WeightHistoryScreen({ data, onBack, onSave }: Props) {
+export function WeightHistoryScreen({
+  data,
+  targetWeightKg,
+  maintainKcalGoal,
+  cycleLengthDays,
+  periodLengthDays,
+  onBack,
+  onSave,
+}: Props) {
   const date = todayIso()
   const today = data.weights.find((w) => w.date === date)
   const [kg, setKg] = useState(today?.kg?.toString() ?? '')
@@ -28,6 +41,18 @@ export function WeightHistoryScreen({ data, onBack, onSave }: Props) {
   const history = useMemo(
     () => [...data.weights].filter((w) => w.kg > 0).sort((a, b) => b.date.localeCompare(a.date)),
     [data.weights],
+  )
+
+  const forecast = useMemo(
+    () =>
+      forecastFromAppData(data, {
+        targetKg: targetWeightKg,
+        maintainKcal: maintainKcalGoal,
+        cycleLengthDays,
+        periodLengthDays,
+        today: date,
+      }),
+    [data, targetWeightKg, maintainKcalGoal, cycleLengthDays, periodLengthDays, date],
   )
 
   const series = useMemo((): ChartSeries[] => {
@@ -86,6 +111,29 @@ export function WeightHistoryScreen({ data, onBack, onSave }: Props) {
         </div>
         {error && <p className="form-msg error">{error}</p>}
       </div>
+
+      {forecast && (
+        <div className="panel">
+          <h2 className="subhead" style={{ marginTop: 0 }}>
+            Прогноз
+          </h2>
+          <p className="muted small">{forecast.summary}</p>
+          {forecast.inTwoWeeks != null && forecast.inFourWeeks != null && (
+            <p className="muted small">
+              Через 2 нед ≈ {forecast.inTwoWeeks.toFixed(1).replace('.', ',')} кг · через 4 нед ≈{' '}
+              {forecast.inFourWeeks.toFixed(1).replace('.', ',')} кг
+            </p>
+          )}
+          {forecast.notes.map((note) => (
+            <p key={note} className="muted small cycle-weight-note">
+              {note}
+            </p>
+          ))}
+          {targetWeightKg == null && (
+            <p className="muted small">Задайте целевой вес в профиле — появится срок до цели.</p>
+          )}
+        </div>
+      )}
 
       {series[0] && series[0].points.length > 1 && (
         <div className="panel chart-panel">

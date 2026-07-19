@@ -19,6 +19,15 @@ export function formatRuDate(iso: string): string {
   })
 }
 
+/** Shift an ISO date by `delta` calendar days. */
+export function addDaysIso(iso: string, delta: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + delta)
+  return toIsoDate(dt)
+}
+
 export function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID()

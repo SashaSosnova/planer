@@ -9,17 +9,21 @@ import {
 import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
 import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../firebase'
 import {
+  sanitizeCheckIn,
   sanitizeFood,
   sanitizeMeal,
   sanitizeMeasurement,
+  sanitizePeriodStart,
   sanitizeSteps,
   sanitizeWeight,
 } from '../lib/sanitize'
 import type {
   AppData,
+  DayCheckIn,
   FoodItem,
   Meal,
   MeasurementEntry,
+  PeriodStart,
   StepsEntry,
   WeightEntry,
 } from '../types'
@@ -86,6 +90,10 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
     sanitizeMeasurement({ ...data, id }),
   )
   watch<StepsEntry>('steps', 'steps', (id, data) => sanitizeSteps({ ...data, id }))
+  watch<DayCheckIn>('checkIns', 'checkIns', (id, data) => sanitizeCheckIn({ ...data, id }))
+  watch<PeriodStart>('periodStarts', 'periodStarts', (id, data) =>
+    sanitizePeriodStart({ ...data, id }),
+  )
 
   return () => {
     for (const u of unsubs) u()

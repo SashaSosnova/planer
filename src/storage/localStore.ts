@@ -12,6 +12,8 @@ export const emptyAppData = (): AppData => ({
   weights: [],
   measurements: [],
   steps: [],
+  checkIns: [],
+  periodStarts: [],
 })
 
 function wipeDemoIfNeeded(): void {

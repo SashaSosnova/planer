@@ -2,11 +2,14 @@ import { coerceMealType } from './labels'
 import { round1, sumMacros } from './nutrition'
 import type {
   AppData,
+  DayCheckIn,
   FoodItem,
   MacroSet,
   Meal,
   MealItem,
   MeasurementEntry,
+  MoodLevel,
+  PeriodStart,
   StepsEntry,
   WeightEntry,
 } from '../types'
@@ -163,6 +166,41 @@ export function sanitizeMeasurement(raw: unknown): MeasurementEntry | null {
   return hasAny ? entry : null
 }
 
+export function sanitizeCheckIn(raw: unknown): DayCheckIn | null {
+  if (!raw || typeof raw !== 'object') return null
+  const c = raw as Record<string, unknown>
+  const id = String(c.id ?? '')
+  const date = String(c.date ?? '')
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  let mood: MoodLevel | undefined
+  const moodN = Number(c.mood)
+  if (moodN === 1 || moodN === 2 || moodN === 3 || moodN === 4 || moodN === 5) {
+    mood = moodN
+  }
+  let sleepHours: number | undefined
+  if (c.sleepHours != null) {
+    const h = Number(c.sleepHours)
+    if (Number.isFinite(h) && h >= 0 && h <= 16) sleepHours = Math.round(h * 2) / 2
+  }
+  if (mood == null && sleepHours == null) return null
+  return {
+    id,
+    date,
+    ...(mood != null ? { mood } : {}),
+    ...(sleepHours != null ? { sleepHours } : {}),
+    createdAt: Number(c.createdAt) || Date.now(),
+  }
+}
+
+export function sanitizePeriodStart(raw: unknown): PeriodStart | null {
+  if (!raw || typeof raw !== 'object') return null
+  const p = raw as Record<string, unknown>
+  const id = String(p.id ?? '')
+  const date = String(p.date ?? '')
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  return { id, date, createdAt: Number(p.createdAt) || Date.now() }
+}
+
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
@@ -170,7 +208,15 @@ function asArray(value: unknown): unknown[] {
 /** Normalize legacy / corrupt payloads before they hit UI stats. */
 export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): AppData {
   if (!parsed || typeof parsed !== 'object') {
-    return { foods: [], meals: [], weights: [], measurements: [], steps: [] }
+    return {
+      foods: [],
+      meals: [],
+      weights: [],
+      measurements: [],
+      steps: [],
+      checkIns: [],
+      periodStarts: [],
+    }
   }
   return {
     foods: asArray(parsed.foods).map(sanitizeFood).filter((f): f is FoodItem => f != null),
@@ -180,5 +226,11 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
       .map(sanitizeMeasurement)
       .filter((m): m is MeasurementEntry => m != null),
     steps: asArray(parsed.steps).map(sanitizeSteps).filter((s): s is StepsEntry => s != null),
+    checkIns: asArray(parsed.checkIns)
+      .map(sanitizeCheckIn)
+      .filter((c): c is DayCheckIn => c != null),
+    periodStarts: asArray(parsed.periodStarts)
+      .map(sanitizePeriodStart)
+      .filter((p): p is PeriodStart => p != null),
   }
 }

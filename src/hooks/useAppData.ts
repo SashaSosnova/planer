@@ -12,17 +12,28 @@ import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/
 import { emptyAppData, loadLocalData, saveLocalData } from '../storage/localStore'
 import type {
   AppData,
+  DayCheckIn,
   FoodItem,
   MacroSet,
   Meal,
   MealItem,
   MealType,
   MeasurementEntry,
+  MoodLevel,
+  PeriodStart,
   StepsEntry,
   WeightEntry,
 } from '../types'
 
-const CLOUD_KEYS: (keyof AppData)[] = ['foods', 'meals', 'weights', 'measurements', 'steps']
+const CLOUD_KEYS: (keyof AppData)[] = [
+  'foods',
+  'meals',
+  'weights',
+  'measurements',
+  'steps',
+  'checkIns',
+  'periodStarts',
+]
 
 export function useAppData() {
   const [data, setData] = useState<AppData>(() => loadLocalData())
@@ -265,6 +276,86 @@ export function useAppData() {
     [data.measurements, persistLocal, uid, useCloud],
   )
 
+  const saveCheckIn = useCallback(
+    async (input: { date: string; mood?: MoodLevel | null; sleepHours?: number | null }) => {
+      const existing = data.checkIns.find((c) => c.date === input.date)
+      let mood: MoodLevel | undefined =
+        input.mood === undefined
+          ? existing?.mood
+          : input.mood === null
+            ? undefined
+            : input.mood
+      let sleepHours: number | undefined =
+        input.sleepHours === undefined
+          ? existing?.sleepHours
+          : input.sleepHours === null
+            ? undefined
+            : Math.round(input.sleepHours * 2) / 2
+
+      if (mood != null && (mood < 1 || mood > 5)) {
+        throw new Error('Настроение от 1 до 5')
+      }
+      if (sleepHours != null && (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 16)) {
+        throw new Error('Сон от 0 до 16 часов')
+      }
+
+      if (mood == null && sleepHours == null) {
+        if (existing && useCloud && uid) await removeDoc(uid, 'checkIns', existing.id)
+        persistLocal((prev) => ({
+          ...prev,
+          checkIns: prev.checkIns.filter((c) => c.date !== input.date),
+        }))
+        return null
+      }
+
+      const entry: DayCheckIn = {
+        id: existing?.id ?? newId(),
+        date: input.date,
+        ...(mood != null ? { mood } : {}),
+        ...(sleepHours != null ? { sleepHours } : {}),
+        createdAt: existing?.createdAt ?? Date.now(),
+      }
+      if (useCloud && uid) await upsertDoc(uid, 'checkIns', entry.id, { ...entry })
+      persistLocal((prev) => ({
+        ...prev,
+        checkIns: [...prev.checkIns.filter((c) => c.date !== entry.date), entry],
+      }))
+      return entry
+    },
+    [data.checkIns, persistLocal, uid, useCloud],
+  )
+
+  const savePeriodStart = useCallback(
+    async (date: string) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Некорректная дата')
+      const existing = data.periodStarts.find((p) => p.date === date)
+      if (existing) return existing
+      const entry: PeriodStart = {
+        id: newId(),
+        date,
+        createdAt: Date.now(),
+      }
+      if (useCloud && uid) await upsertDoc(uid, 'periodStarts', entry.id, { ...entry })
+      persistLocal((prev) => ({
+        ...prev,
+        periodStarts: [...prev.periodStarts, entry],
+      }))
+      return entry
+    },
+    [data.periodStarts, persistLocal, uid, useCloud],
+  )
+
+  const removePeriodStart = useCallback(
+    async (id: string) => {
+      if (useCloud && uid) await removeDoc(uid, 'periodStarts', id)
+      persistLocal((prev) => ({
+        ...prev,
+        periodStarts: prev.periodStarts.filter((p) => p.id !== id),
+      }))
+    },
+    [persistLocal, uid, useCloud],
+  )
+
   const resetLocal = useCallback(() => {
     const empty = emptyAppData()
     saveLocalData(empty)
@@ -288,6 +379,9 @@ export function useAppData() {
     saveWeight,
     saveSteps,
     saveMeasurement,
+    saveCheckIn,
+    savePeriodStart,
+    removePeriodStart,
     resetLocal,
   }
 }

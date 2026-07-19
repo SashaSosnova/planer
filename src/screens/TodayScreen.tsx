@@ -11,6 +11,7 @@ import {
   localWeekNutritionNote,
   weekFingerprint,
 } from '../lib/weekSummaryLlm'
+import { forecastFromAppData } from '../lib/weightForecast'
 import type { AppData } from '../types'
 
 type PromptKind = 'weight' | 'steps' | null
@@ -21,11 +22,16 @@ type Props = {
   maintainKcalGoal: number
   proteinGoal: number | null
   profileReady: boolean
+  targetWeightKg: number | null
+  cycleLengthDays: number
+  periodLengthDays: number
   onAddMeal: () => void
   onOpenMeal: (mealId: string) => void
   onOpenProfile: () => void
   onOpenWeightHistory: () => void
   onOpenStepsHistory: () => void
+  onOpenAchievements: () => void
+  onOpenWellness: () => void
   onSaveWeight: (date: string, kg: number) => Promise<unknown>
   onSaveSteps: (date: string, count: number) => Promise<unknown>
 }
@@ -115,11 +121,16 @@ export function TodayScreen({
   maintainKcalGoal,
   proteinGoal,
   profileReady,
+  targetWeightKg,
+  cycleLengthDays,
+  periodLengthDays,
   onAddMeal,
   onOpenMeal,
   onOpenProfile,
   onOpenWeightHistory,
   onOpenStepsHistory,
+  onOpenAchievements,
+  onOpenWellness,
   onSaveWeight,
   onSaveSteps,
 }: Props) {
@@ -130,10 +141,23 @@ export function TodayScreen({
   const [prompt, setPrompt] = useState<PromptKind>(null)
   const [busy, setBusy] = useState(false)
   const [promptError, setPromptError] = useState<string | null>(null)
+  const [forecastNotesOpen, setForecastNotesOpen] = useState(false)
 
   const { today, recentDays, completedWeeks } = useMemo(
     () => buildTodayTimeline(data, dailyKcalGoal, date),
     [data, dailyKcalGoal, date],
+  )
+
+  const forecast = useMemo(
+    () =>
+      forecastFromAppData(data, {
+        targetKg: targetWeightKg,
+        maintainKcal: maintainKcalGoal,
+        cycleLengthDays,
+        periodLengthDays,
+        today: date,
+      }),
+    [data, targetWeightKg, maintainKcalGoal, cycleLengthDays, periodLengthDays, date],
   )
 
   const openWeight = () => {
@@ -145,7 +169,6 @@ export function TodayScreen({
   }
 
   const openSteps = () => {
-    // On Android, open the steps screen so Health Connect import is one tap away.
     if (steps || isHealthStepsSupported()) {
       onOpenStepsHistory()
       return
@@ -203,6 +226,50 @@ export function TodayScreen({
         <div className="btn-row tight">
           <button
             type="button"
+            className="icon-btn"
+            onClick={onOpenWellness}
+            aria-label="Самочувствие"
+            title="Самочувствие"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M12 21s-6.5-4.35-9-8.5C1.5 9.5 3.2 6 6.5 6c1.9 0 3.4 1.1 4.2 2.2C11.5 7.1 13 6 14.9 6 18.2 6 19.9 9.5 18.4 12.5 15.9 16.65 12 21 12 21Z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onOpenAchievements}
+            aria-label="Достижения"
+            title="Достижения"
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M8 4h8v2.2c0 2.4-1.6 4.4-4 4.8-2.4-.4-4-2.4-4-4.8V4Z"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M12 11v3M8 20h8M9.5 17h5"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+              <path
+                d="M6 6H4.5A1.5 1.5 0 0 0 3 7.5V8a3 3 0 0 0 3 3M18 6h1.5A1.5 1.5 0 0 1 21 7.5V8a3 3 0 0 1-3 3"
+                stroke="currentColor"
+                strokeWidth="1.8"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+          <button
+            type="button"
             className={`icon-btn profile-btn${profileReady ? '' : ' warn'}`}
             onClick={onOpenProfile}
             aria-label="Профиль и норма калорий"
@@ -232,6 +299,41 @@ export function TodayScreen({
         <p className="banner">
           Задайте рост, возраст и активность в профиле — норма калорий посчитается сама.
         </p>
+      )}
+
+      {forecast && (
+        <div className="progress-card">
+          <div className="progress-card-top">
+            <span>Прогресс</span>
+            <strong>
+              {forecast.currentKg.toFixed(1).replace('.', ',')}
+              {forecast.targetKg != null
+                ? ` → ${forecast.targetKg.toFixed(1).replace('.', ',')} кг`
+                : ' кг'}
+            </strong>
+          </div>
+          <p className="muted small">{forecast.summary}</p>
+          {forecast.targetKg == null && (
+            <p className="muted small">Цель по весу можно задать в профиле.</p>
+          )}
+          {forecast.notes.length > 0 && (
+            <>
+              <button
+                type="button"
+                className="link-btn"
+                onClick={() => setForecastNotesOpen((v) => !v)}
+              >
+                {forecastNotesOpen ? 'Скрыть детали' : 'Ещё'}
+              </button>
+              {forecastNotesOpen &&
+                forecast.notes.map((note) => (
+                  <p key={note} className="muted small cycle-weight-note">
+                    {note}
+                  </p>
+                ))}
+            </>
+          )}
+        </div>
       )}
 
       <div className="today-hero">
@@ -266,13 +368,13 @@ export function TodayScreen({
       </div>
 
       <div className="section-head" style={{ justifyContent: 'flex-end' }}>
-        <button type="button" className="link-btn" onClick={onAddMeal}>
-          Добавить
+        <button type="button" className="primary-btn section-cta" onClick={onAddMeal}>
+          Добавить приём
         </button>
       </div>
 
       {today.meals.length === 0 ? (
-        <p className="muted">Пока пусто — нажмите «Добавить».</p>
+        <p className="muted">Пока пусто — добавьте первый приём за сегодня.</p>
       ) : (
         <ul className="meal-list">
           {today.meals.map((meal) => (

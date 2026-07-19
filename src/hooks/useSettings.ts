@@ -5,6 +5,7 @@ import {
   loadSettings,
   refreshGoalFromWeight,
   saveBodyProfile,
+  saveSettings,
   type AppSettings,
 } from '../lib/settings'
 
@@ -44,13 +45,42 @@ export function useSettings(latestWeightKg?: number) {
     return next
   }, [])
 
+  const saveTargets = useCallback(
+    (input: {
+      targetWeightKg?: number | null
+      cycleLengthDays?: number
+      periodLengthDays?: number
+    }) => {
+      const savingCycle =
+        input.cycleLengthDays != null || input.periodLengthDays != null
+      const next = saveSettings({
+        ...(input.targetWeightKg !== undefined
+          ? { targetWeightKg: input.targetWeightKg }
+          : {}),
+        ...(input.cycleLengthDays != null ? { cycleLengthDays: input.cycleLengthDays } : {}),
+        ...(input.periodLengthDays != null
+          ? { periodLengthDays: input.periodLengthDays }
+          : {}),
+        ...(savingCycle ? { cycleConfigured: true } : {}),
+      })
+      setSettings(next)
+      return next
+    },
+    [],
+  )
+
   return {
     settings,
     dailyKcalGoal,
     maintainKcalGoal,
     proteinGoal,
     profileReady,
+    targetWeightKg: settings.targetWeightKg,
+    cycleLengthDays: settings.cycleLengthDays,
+    periodLengthDays: settings.periodLengthDays,
+    cycleConfigured: settings.cycleConfigured,
     saveProfile,
     syncGoalFromWeight,
+    saveTargets,
   }
 }

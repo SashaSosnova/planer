@@ -6,12 +6,15 @@ import {
   isHealthStepsSupported,
   syncStepsFromHealth,
 } from './lib/healthSteps'
+import { hasSleepPermission, syncSleepFromHealth } from './lib/healthSleep'
+import { AchievementsScreen } from './screens/AchievementsScreen'
 import { AddMealScreen } from './screens/AddMealScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { StepsHistoryScreen } from './screens/StepsHistoryScreen'
 import { TodayScreen } from './screens/TodayScreen'
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen'
+import { WellnessScreen } from './screens/WellnessScreen'
 import './App.css'
 
 type Overlay =
@@ -20,6 +23,8 @@ type Overlay =
   | { type: 'profile' }
   | { type: 'weight-history' }
   | { type: 'steps-history' }
+  | { type: 'achievements' }
+  | { type: 'wellness' }
   | null
 
 export default function App() {
@@ -36,6 +41,9 @@ export default function App() {
     saveWeight,
     saveSteps,
     saveMeasurement,
+    saveCheckIn,
+    savePeriodStart,
+    removePeriodStart,
   } = useAppData()
 
   const latestWeightKg = useMemo(() => {
@@ -48,14 +56,22 @@ export default function App() {
     maintainKcalGoal,
     proteinGoal,
     profileReady,
+    targetWeightKg,
+    cycleLengthDays,
+    periodLengthDays,
     saveProfile,
     syncGoalFromWeight,
+    saveTargets,
   } = useSettings(latestWeightKg)
 
   const saveStepsRef = useRef(saveSteps)
   saveStepsRef.current = saveSteps
   const stepsRef = useRef(data.steps)
   stepsRef.current = data.steps
+  const saveCheckInRef = useRef(saveCheckIn)
+  saveCheckInRef.current = saveCheckIn
+  const checkInsRef = useRef(data.checkIns)
+  checkInsRef.current = data.checkIns
 
   // Quiet refresh from Health Connect when permission was already granted.
   useEffect(() => {
@@ -72,6 +88,36 @@ export default function App() {
             stepsRef.current.map((s) => [s.date, s.count] as const),
           ),
         })
+      } catch {
+        // Ignore background sync failures.
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [ready])
+
+  useEffect(() => {
+    if (!ready || !isHealthStepsSupported()) return
+    let cancelled = false
+    void (async () => {
+      if (!(await hasSleepPermission())) return
+      if (cancelled) return
+      try {
+        await syncSleepFromHealth(
+          async (date, hours) => {
+            await saveCheckInRef.current({ date, sleepHours: hours })
+          },
+          {
+            daysBack: 7,
+            onlyIfMissing: true,
+            existingByDate: new Map(
+              checkInsRef.current
+                .filter((c) => c.sleepHours != null)
+                .map((c) => [c.date, c.sleepHours!] as const),
+            ),
+          },
+        )
       } catch {
         // Ignore background sync failures.
       }
@@ -116,11 +162,16 @@ export default function App() {
             maintainKcalGoal={maintainKcalGoal}
             proteinGoal={proteinGoal}
             profileReady={profileReady}
+            targetWeightKg={targetWeightKg}
+            cycleLengthDays={cycleLengthDays}
+            periodLengthDays={periodLengthDays}
             onAddMeal={() => setOverlay({ type: 'add-meal' })}
             onOpenMeal={(mealId) => setOverlay({ type: 'edit-meal', mealId })}
             onOpenProfile={() => setOverlay({ type: 'profile' })}
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
             onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
+            onOpenAchievements={() => setOverlay({ type: 'achievements' })}
+            onOpenWellness={() => setOverlay({ type: 'wellness' })}
             onSaveWeight={async (date, kg) => {
               const entry = await saveWeight(date, kg)
               syncGoalFromWeight(kg)
@@ -165,6 +216,7 @@ export default function App() {
             data={data}
             onBack={closeOverlay}
             onSaveProfile={saveProfile}
+            onSaveTargets={saveTargets}
             onSaveMeasurement={saveMeasurement}
           />
         )}
@@ -172,6 +224,10 @@ export default function App() {
         {overlay?.type === 'weight-history' && (
           <WeightHistoryScreen
             data={data}
+            targetWeightKg={targetWeightKg}
+            maintainKcalGoal={maintainKcalGoal}
+            cycleLengthDays={cycleLengthDays}
+            periodLengthDays={periodLengthDays}
             onBack={closeOverlay}
             onSave={async (date, kg) => {
               const entry = await saveWeight(date, kg)
@@ -183,6 +239,26 @@ export default function App() {
 
         {overlay?.type === 'steps-history' && (
           <StepsHistoryScreen data={data} onBack={closeOverlay} onSave={saveSteps} />
+        )}
+
+        {overlay?.type === 'achievements' && (
+          <AchievementsScreen
+            data={data}
+            targetWeightKg={targetWeightKg}
+            onBack={closeOverlay}
+          />
+        )}
+
+        {overlay?.type === 'wellness' && (
+          <WellnessScreen
+            data={data}
+            cycleLengthDays={cycleLengthDays}
+            periodLengthDays={periodLengthDays}
+            onBack={closeOverlay}
+            onSaveCheckIn={saveCheckIn}
+            onSavePeriodStart={savePeriodStart}
+            onRemovePeriodStart={removePeriodStart}
+          />
         )}
       </main>
     </div>

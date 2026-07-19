@@ -990,6 +990,101 @@
   color: var(--warm);
 }
 
+.add-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.add-header-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.add-header-main h1 {
+  margin: 0;
+}
+
+.add-library-link {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.meal-type-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.meal-type-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 8px 12px;
+  color: var(--muted);
+  font-weight: 600;
+  font: inherit;
+  cursor: pointer;
+}
+
+.meal-type-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.add-date-toggle {
+  align-self: flex-start;
+  font-size: 0.92rem;
+}
+
+.add-date-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.add-date-row .field {
+  margin: 0;
+}
+
+.form-msg-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mode-tabs-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.llm-plug {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.llm-plug.on {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, var(--line));
+  background: color-mix(in srgb, var(--ok) 12%, var(--surface));
+}
+
+.llm-plug.off {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  background: color-mix(in srgb, var(--danger) 10%, var(--surface));
+}
+
 .recipe-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1220,4 +1315,199 @@
   .nav-btn {
     font-size: 0.78rem;
   }
+}
+
+.progress-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: linear-gradient(135deg, var(--accent-soft), var(--surface));
+  border-radius: var(--radius);
+  padding: 14px;
+}
+
+.progress-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.progress-card-top span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.cycle-weight-note {
+  color: var(--warm) !important;
+}
+
+.wellness-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.wellness-teaser {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+}
+
+.wellness-teaser-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.wellness-teaser-text span {
+  line-height: 1.35;
+}
+
+.wellness-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.wellness-label {
+  margin: 0;
+}
+
+.section-cta {
+  padding: 8px 12px;
+  font-size: 0.9rem;
+}
+
+.mood-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mood-chip {
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mood-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.wellness-meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 8px;
+}
+
+.wellness-actions {
+  margin-top: 2px;
+}
+
+.ghost-btn.active-soft {
+  background: var(--warm-soft);
+  border-color: #e2c4b0;
+  color: var(--warm);
+}
+
+.cycle-chip strong {
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.achievements-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.achievements-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.achievement-card {
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--bg);
+  opacity: 0.55;
+}
+
+.achievement-card.unlocked {
+  opacity: 1;
+  background: var(--surface);
+  border-color: #c5d8dc;
+}
+
+.achievement-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.achievement-card.unlocked .achievement-mark {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.achievement-card p {
+  margin: 2px 0 0;
+}
+
+.achievement-mark.sticker-slot {
+  font-size: 0.95rem;
+}
+
+.sticker-character {
+  margin-top: 4px !important;
+  font-weight: 600;
+  color: var(--accent) !important;
+}
+
+.achievement-card:not(.unlocked) .sticker-character {
+  color: var(--muted) !important;
+  font-weight: 500;
 }

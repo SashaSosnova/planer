@@ -2,12 +2,12 @@ import { httpsCallable } from 'firebase/functions'
 import { getFirebaseFunctions, isFirebaseConfigured } from '../firebase'
 import type { FoodRef, MealType, ParsedMealDraft } from '../types'
 import { textSuggestsEatingOut } from './eatingOut'
-import { findBestFood } from './foodMatch'
+import { findBestFood, scoreFoodMatch } from './foodMatch'
 import { isComplexMealText } from './mealComplexity'
 import { isLlmConfigured, parseMealWithLlm } from './parseMealLlm'
-import { parseMealLocal } from './parseMealLocal'
+import { extractMealGrams, parseMealLocal } from './parseMealLocal'
 import { coerceMealType, defaultMealTypeForNow, extractMealTypeFromText } from './labels'
-import { scalePer100g, sumMacros } from './nutrition'
+import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
 import { sanitizeMealItems } from './sanitize'
 
 /** Comma/semicolon/newline lists must not collapse to a single fuzzy library hit. */
@@ -23,11 +23,8 @@ function tryWholeLibraryMatch(
   if (looksLikeMealList(text)) return null
 
   const collapsed = text.replace(/\s+/g, ' ').trim()
-  const match = collapsed.match(
-    /^(.*?)\s+(\d+(?:[.,]\d+)?)\s*(?:грамм(?:а|ов)?|гр|г|мл|ml|g)\s*$/iu,
-  )
-  const name = (match?.[1] ?? collapsed).trim()
-  const grams = match ? Number(match[2].replace(',', '.')) : 100
+  const { name, grams: parsedGrams } = extractMealGrams(collapsed)
+  const grams = parsedGrams ?? 100
   if (!name || !Number.isFinite(grams) || grams <= 0) return null
 
   const food = findBestFood(name, foods, 70)
@@ -78,18 +75,43 @@ type ParseMealResponse = {
   notes?: string
 }
 
-function finalizeDraft(
+/**
+ * Cloud/LLM sometimes picks a related catalog item («творожный сыр» for «творога»).
+ * Re-check against the user phrase; rematch or fall back to estimate.
+ */
+function resolveLibraryFood(
+  item: ParseMealResponse['items'][number],
+  foods: FoodRef[],
+  userQuery: string | undefined,
+  singleItem: boolean,
+): FoodRef | null {
+  if (!item.foodId) return null
+  const claimed = foods.find((f) => f.id === item.foodId)
+  if (!claimed) return null
+
+  const query = singleItem && userQuery ? userQuery : item.name
+  if (scoreFoodMatch(query, claimed) >= 55) return claimed
+
+  return findBestFood(query, foods, 55)
+}
+
+/** Visible for tests — applies library foodId checks against the user phrase. */
+export function finalizeDraft(
   mealType: MealType,
   items: ParseMealResponse['items'],
   foods: FoodRef[],
   eatingOut: boolean,
   notes?: string,
   parseSource: ParsedMealDraft['parseSource'] = 'cloud',
+  userText?: string,
 ): ParsedMealDraft {
+  const queryName = userText ? extractMealGrams(userText.replace(/\s+/g, ' ').trim()).name : ''
+  const singleItem = items.length === 1
+
   const resolved = items.map((item) => {
     const grams = item.grams > 0 ? item.grams : 100
     if (!eatingOut && item.source === 'library' && item.foodId) {
-      const food = foods.find((f) => f.id === item.foodId)
+      const food = resolveLibraryFood(item, foods, queryName || undefined, singleItem)
       if (food) {
         const macros = scalePer100g(food.per100g, grams)
         return {
@@ -99,6 +121,15 @@ function finalizeDraft(
           ...macros,
           source: 'library' as const,
         }
+      }
+      // Reject bogus catalog hit — keep user wording + rough estimate
+      const label = (queryName && singleItem ? queryName : item.name) || 'Блюдо'
+      const macros = scalePer100g(guessFallbackCategory(label), grams)
+      return {
+        name: label,
+        grams,
+        ...macros,
+        source: 'estimate' as const,
       }
     }
     return {
@@ -175,6 +206,7 @@ export async function parseMeal(
         Boolean(result.data.eatingOut ?? eatingOut),
         result.data.notes,
         'cloud',
+        body,
       )
     } catch {
       // continue

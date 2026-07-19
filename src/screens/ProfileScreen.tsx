@@ -8,6 +8,7 @@ import {
   type GoalMode,
   type Sex,
 } from '../lib/calorieGoal'
+import { DEFAULT_CYCLE_LENGTH, DEFAULT_PERIOD_LENGTH } from '../lib/cycle'
 import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
 import { loadSettings } from '../lib/settings'
 import type { AppData, MeasurementEntry } from '../types'
@@ -22,6 +23,11 @@ type Props = {
   data: AppData
   onBack: () => void
   onSaveProfile: (profile: BodyProfile, weightKg: number) => { dailyKcalGoal: number }
+  onSaveTargets: (input: {
+    targetWeightKg?: number | null
+    cycleLengthDays?: number
+    periodLengthDays?: number
+  }) => unknown
   onSaveMeasurement: (
     input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string },
   ) => Promise<unknown>
@@ -32,7 +38,13 @@ function latestWeight(data: AppData): number | undefined {
   return sorted[0]?.kg
 }
 
-export function ProfileScreen({ data, onBack, onSaveProfile, onSaveMeasurement }: Props) {
+export function ProfileScreen({
+  data,
+  onBack,
+  onSaveProfile,
+  onSaveTargets,
+  onSaveMeasurement,
+}: Props) {
   const saved = loadSettings()
   const savedProfile = saved.profile
   const weightKg = latestWeight(data)
@@ -44,6 +56,27 @@ export function ProfileScreen({ data, onBack, onSaveProfile, onSaveMeasurement }
   const [activity, setActivity] = useState<ActivityLevel>(savedProfile?.activity ?? 'light')
   const [goalMode, setGoalMode] = useState<GoalMode>(savedProfile?.goalMode ?? 'mild')
   const [error, setError] = useState<string | null>(null)
+
+  const [targetKg, setTargetKg] = useState(
+    saved.targetWeightKg != null ? String(saved.targetWeightKg) : '',
+  )
+  const [savedTargetKg, setSavedTargetKg] = useState<number | null>(saved.targetWeightKg)
+  const [editingTarget, setEditingTarget] = useState(saved.targetWeightKg == null)
+  const [targetError, setTargetError] = useState<string | null>(null)
+
+  const [cycleLen, setCycleLen] = useState(String(saved.cycleLengthDays || DEFAULT_CYCLE_LENGTH))
+  const [periodLen, setPeriodLen] = useState(
+    String(saved.periodLengthDays || DEFAULT_PERIOD_LENGTH),
+  )
+  const [savedCycleLen, setSavedCycleLen] = useState(
+    saved.cycleLengthDays || DEFAULT_CYCLE_LENGTH,
+  )
+  const [savedPeriodLen, setSavedPeriodLen] = useState(
+    saved.periodLengthDays || DEFAULT_PERIOD_LENGTH,
+  )
+  const [cycleConfigured, setCycleConfigured] = useState(Boolean(saved.cycleConfigured))
+  const [editingCycle, setEditingCycle] = useState(!saved.cycleConfigured)
+  const [cycleError, setCycleError] = useState<string | null>(null)
 
   const previewGoal = useMemo(() => {
     const ageN = Number(age.replace(',', '.'))
@@ -118,6 +151,185 @@ export function ProfileScreen({ data, onBack, onSaveProfile, onSaveMeasurement }
         <p className="muted">Норма калорий, параметры и обмеры</p>
       </header>
 
+      {savedTargetKg != null && !editingTarget ? (
+        <div className="panel">
+          <div className="profile-summary">
+            <div className="profile-summary-text">
+              <strong>Цель {savedTargetKg} кг</strong>
+              <p className="muted small">
+                {weightKg != null
+                  ? `Сейчас ${weightKg} кг · для прогноза и срока до цели`
+                  : 'Для прогноза и срока до цели'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setTargetKg(String(savedTargetKg))
+              setTargetError(null)
+              setEditingTarget(true)
+            }}
+          >
+            Изменить цель
+          </button>
+        </div>
+      ) : (
+        <div className="panel">
+          <h2 className="subhead" style={{ marginTop: 0 }}>
+            Целевой вес
+          </h2>
+          <p className="muted small">Нужен для прогноза и срока до цели.</p>
+          <label className="field">
+            <span>Целевой вес, кг</span>
+            <input
+              inputMode="decimal"
+              value={targetKg}
+              onChange={(e) => setTargetKg(e.target.value)}
+              placeholder="например 60"
+            />
+          </label>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => {
+                const t = Number(targetKg.replace(',', '.'))
+                if (!Number.isFinite(t) || t < 30 || t > 400) {
+                  setTargetError('Целевой вес от 30 до 400 кг')
+                  return
+                }
+                const nextTarget = Math.round(t * 10) / 10
+                onSaveTargets({ targetWeightKg: nextTarget })
+                setSavedTargetKg(nextTarget)
+                setTargetError(null)
+                setEditingTarget(false)
+              }}
+            >
+              Сохранить
+            </button>
+            {savedTargetKg != null && (
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  setTargetKg(String(savedTargetKg))
+                  setTargetError(null)
+                  setEditingTarget(false)
+                }}
+              >
+                Отмена
+              </button>
+            )}
+          </div>
+          {targetError && <p className="form-msg error">{targetError}</p>}
+        </div>
+      )}
+
+      {cycleConfigured && !editingCycle ? (
+        <div className="panel">
+          <div className="profile-summary">
+            <div className="profile-summary-text">
+              <strong>
+                Цикл {savedCycleLen} дн. · месячные {savedPeriodLen} дн.
+              </strong>
+              <p className="muted small">
+                Начало месячных отмечайте на экране «Сегодня»
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="ghost-btn"
+            onClick={() => {
+              setCycleLen(String(savedCycleLen))
+              setPeriodLen(String(savedPeriodLen))
+              setCycleError(null)
+              setEditingCycle(true)
+            }}
+          >
+            Изменить цикл
+          </button>
+        </div>
+      ) : (
+        <div className="panel">
+          <h2 className="subhead" style={{ marginTop: 0 }}>
+            Цикл
+          </h2>
+          <p className="muted small">
+            Помогает понять скачки веса из‑за воды. Начало месячных отмечайте на экране
+            «Сегодня».
+          </p>
+          <div className="form-grid">
+            <label className="field">
+              <span>Длина цикла, дни</span>
+              <input
+                inputMode="numeric"
+                value={cycleLen}
+                onChange={(e) => setCycleLen(e.target.value)}
+                placeholder="28"
+              />
+            </label>
+            <label className="field">
+              <span>Длина месячных, дни</span>
+              <input
+                inputMode="numeric"
+                value={periodLen}
+                onChange={(e) => setPeriodLen(e.target.value)}
+                placeholder="5"
+              />
+            </label>
+          </div>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="primary-btn"
+              onClick={() => {
+                const c = Number(cycleLen.replace(',', '.'))
+                const p = Number(periodLen.replace(',', '.'))
+                if (!Number.isFinite(c) || c < 21 || c > 45) {
+                  setCycleError('Цикл обычно 21–45 дней')
+                  return
+                }
+                if (!Number.isFinite(p) || p < 2 || p > 10) {
+                  setCycleError('Месячные обычно 2–10 дней')
+                  return
+                }
+                const nextCycle = Math.round(c)
+                const nextPeriod = Math.round(p)
+                onSaveTargets({
+                  cycleLengthDays: nextCycle,
+                  periodLengthDays: nextPeriod,
+                })
+                setSavedCycleLen(nextCycle)
+                setSavedPeriodLen(nextPeriod)
+                setCycleConfigured(true)
+                setCycleError(null)
+                setEditingCycle(false)
+              }}
+            >
+              Сохранить
+            </button>
+            {cycleConfigured && (
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => {
+                  setCycleLen(String(savedCycleLen))
+                  setPeriodLen(String(savedPeriodLen))
+                  setCycleError(null)
+                  setEditingCycle(false)
+                }}
+              >
+                Отмена
+              </button>
+            )}
+          </div>
+          {cycleError && <p className="form-msg error">{cycleError}</p>}
+        </div>
+      )}
+
       {savedProfile && !editing ? (
         <div className="panel">
           <div className="profile-summary">
@@ -126,6 +338,7 @@ export function ProfileScreen({ data, onBack, onSaveProfile, onSaveMeasurement }
               <p className="muted small">
                 {[
                   weightKg != null ? `${weightKg} кг` : null,
+                  savedTargetKg != null ? `цель ${savedTargetKg} кг` : null,
                   proteinGoal != null ? `белок ${proteinGoal} г` : null,
                   `овощи ${VEG_GOAL_G} г`,
                 ]

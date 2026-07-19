@@ -68,7 +68,8 @@ body {
 
   .ghost-btn,
   .primary-btn,
-  .mode-tab {
+  .mode-tab,
+  .meal-type-chip {
     min-height: 44px;
   }
 

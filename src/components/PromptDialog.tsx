@@ -5,10 +5,15 @@ type Props = {
   label: string
   placeholder?: string
   inputMode?: 'decimal' | 'numeric' | 'text'
+  /** Native input type; use `date` for calendar pickers */
+  type?: 'text' | 'date'
+  min?: string
+  max?: string
   initialValue?: string
   confirmLabel?: string
   busy?: boolean
   error?: string | null
+  hint?: string | null
   onCancel: () => void
   onConfirm: (value: string) => void
 }
@@ -18,10 +23,14 @@ export function PromptDialog({
   label,
   placeholder,
   inputMode = 'decimal',
+  type = 'text',
+  min,
+  max,
   initialValue = '',
   confirmLabel = 'Сохранить',
   busy = false,
   error = null,
+  hint = null,
   onCancel,
   onConfirm,
 }: Props) {
@@ -54,7 +63,10 @@ export function PromptDialog({
           <input
             ref={inputRef}
             className="day-log-input"
-            inputMode={inputMode}
+            type={type}
+            inputMode={type === 'date' ? undefined : inputMode}
+            min={min}
+            max={max}
             value={value}
             placeholder={placeholder}
             onChange={(e) => setValue(e.target.value)}
@@ -64,6 +76,7 @@ export function PromptDialog({
             }}
           />
         </label>
+        {hint && <p className="muted small">{hint}</p>}
         {error && <p className="form-msg error">{error}</p>}
         <div className="btn-row">
           <button

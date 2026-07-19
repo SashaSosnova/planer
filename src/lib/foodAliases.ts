@@ -103,9 +103,13 @@ export function generateAliases(name: string): string[] {
     aliases.add(`${tokens[1]} ${tokens[0]}`)
   }
 
-  // Head noun + rest: keep first token as short key if multi-word
+  // Head noun + rest: keep first token as short key if multi-word.
+  // Skip for «X с Y и Z» dishes — otherwise alias «паста» steals short queries.
   if (tokens.length >= 2) {
-    aliases.add(tokens[0])
+    const dishWithParts = tokens.length >= 3 && /(?:^|\s)с(?:\s|$)/i.test(full)
+    if (!dishWithParts) {
+      aliases.add(tokens[0])
+    }
     // last token often the product: сыр, форель, хлеб
     const last = tokens[tokens.length - 1]
     if (last.length >= 3) aliases.add(last)

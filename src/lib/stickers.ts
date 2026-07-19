@@ -33,8 +33,24 @@ export const STICKER_ART_BRIEF: Record<string, string> = {
   aragorn: 'rugged man long dark hair slight beard, grey eyes, kingly calm smile, travel cloak and leather collar',
 }
 
+/** Anime stickers ready in public/stickers (personal collection). */
+export const READY_STICKER_KEYS = new Set([
+  'yuji',
+  'megumi',
+  'nobara',
+  'gojo',
+  'levi',
+  'mikasa',
+  'hange',
+  'eren',
+])
+
 export function stickerSrc(artKey: string): string {
   return `/stickers/${artKey}.png`
+}
+
+export function hasStickerArt(artKey: string): boolean {
+  return READY_STICKER_KEYS.has(artKey)
 }
 
 export type { AchievementId }

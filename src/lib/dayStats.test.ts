@@ -36,12 +36,15 @@ describe('statsForDate', () => {
       ],
       weights: [{ id: 'w', date: '2026-07-15', kg: 60, createdAt: 1 }],
       steps: [{ id: 's', date: '2026-07-15', count: 5000, createdAt: 1 }],
+      checkIns: [{ id: 'c', date: '2026-07-15', mood: 4, sleepHours: 7.5, createdAt: 1 }],
     }
     const day = statsForDate(data, '2026-07-15')
     expect(day.meals.map((m) => m.id)).toEqual(['a', 'b'])
     expect(day.totals.kcal).toBe(300)
     expect(day.weightKg).toBe(60)
     expect(day.steps).toBe(5000)
+    expect(day.mood).toBe(4)
+    expect(day.sleepHours).toBe(7.5)
     expect(day.approximate).toBe(false)
   })
 
@@ -103,6 +106,10 @@ describe('buildWeekStats', () => {
         { id: 's1', date: '2026-07-13', count: 4000, createdAt: 1 },
         { id: 's2', date: '2026-07-14', count: 6000, createdAt: 2 },
       ],
+      checkIns: [
+        { id: 'c1', date: '2026-07-13', mood: 3, sleepHours: 6, createdAt: 1 },
+        { id: 'c2', date: '2026-07-14', mood: 5, sleepHours: 8, createdAt: 2 },
+      ],
     }
     // 2026-07-13 is Monday
     const week = buildWeekStats(data, '2026-07-13', 1800)
@@ -112,6 +119,8 @@ describe('buildWeekStats', () => {
     expect(week.weightEnd).toBe(60.5)
     expect(week.weightDelta).toBe(-0.5)
     expect(week.avgSteps).toBe(5000)
+    expect(week.avgMood).toBe(4)
+    expect(week.avgSleepHours).toBe(7)
   })
 })
 
@@ -129,5 +138,18 @@ describe('buildTodayTimeline', () => {
     expect(tl.recentDays.some((d) => d.date === '2026-07-14')).toBe(true)
     expect(tl.completedWeeks.some((w) => w.weekStart === '2026-07-06')).toBe(true)
     expect(tl.completedWeeks.some((w) => w.weekStart === '2026-07-13')).toBe(false)
+  })
+
+  it('includes check-in-only days and weeks', () => {
+    const data: AppData = {
+      ...empty,
+      checkIns: [
+        { id: 'c1', date: '2026-07-06', sleepHours: 7, createdAt: 1 },
+        { id: 'c2', date: '2026-07-14', mood: 4, createdAt: 2 },
+      ],
+    }
+    const tl = buildTodayTimeline(data, 1800, '2026-07-15')
+    expect(tl.recentDays.some((d) => d.date === '2026-07-14' && d.mood === 4)).toBe(true)
+    expect(tl.completedWeeks.some((w) => w.weekStart === '2026-07-06')).toBe(true)
   })
 })

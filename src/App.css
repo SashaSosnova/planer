@@ -122,45 +122,102 @@
 }
 
 .today-hero {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 10px;
-  align-items: center;
-}
-
-.today-hero-side {
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  min-width: 0;
+  gap: 8px;
 }
 
-.today-hero-side .bju-line {
+.today-hero-top,
+.week-card-top,
+.day-summary-top {
+  --meta-ring-size: 112px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: minmax(var(--meta-ring-size), auto);
+  gap: 10px;
+  align-items: stretch;
+}
+
+.today-hero-top .calorie-ring,
+.week-card-top .calorie-ring,
+.day-summary-top .calorie-ring {
+  align-self: center;
+}
+
+.today-hero-macros,
+.week-card-macros,
+.day-summary-macros {
   display: block;
+  min-width: 0;
   font-size: 0.78rem;
   line-height: 1.3;
   overflow-wrap: anywhere;
 }
 
-.today-meta-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
+.today-meta-stack {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-evenly;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
 }
 
-.today-hero-side .stat-chip.compact {
-  padding: 6px 8px;
-  border-radius: 12px;
-  gap: 2px;
+.meta-metric {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  border-radius: 8px;
+  min-height: 0;
+  cursor: pointer;
 }
 
-.today-hero-side .stat-chip span {
-  font-size: 0.72rem;
+.meta-metric span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  flex: 0 1 auto;
+  line-height: 1.2;
 }
 
-.today-hero-side .stat-chip strong {
-  font-size: 0.98rem;
+.meta-metric strong {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  text-align: right;
+  min-width: 0;
+  max-width: 55%;
+  line-height: 1.15;
+}
+
+.meta-metric--mood strong {
+  font-size: 0.85rem;
+  white-space: normal;
+}
+
+.meta-metric:active {
+  background: var(--accent-soft);
+}
+
+.meta-metric.static {
+  cursor: default;
+  pointer-events: none;
+}
+
+.meta-metric.static:active {
+  background: transparent;
 }
 
 .stat-chip.compact {
@@ -521,23 +578,21 @@
 
 .day-summary-card {
   display: flex;
-  gap: 12px;
-  align-items: center;
+  flex-direction: column;
+  gap: 8px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 10px 12px;
+  padding: 12px;
 }
 
-.day-summary-body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.day-summary-body .muted.small {
+.day-summary-title {
   margin: 0;
+  font-size: 1.05rem;
+}
+
+.day-summary-top {
+  gap: 12px;
 }
 
 .week-card {
@@ -550,23 +605,13 @@
   gap: 10px;
 }
 
-.week-card-main {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 12px;
-  align-items: center;
-}
-
-.week-card-side {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.week-card-side h3 {
+.week-card-title {
   font-size: 1.1rem;
   margin: 0;
+}
+
+.week-card-top {
+  gap: 12px;
 }
 
 .week-note {
@@ -585,19 +630,24 @@
 
 @media (max-width: 420px) {
   .today-hero {
-    gap: 8px;
-    align-items: center;
+    gap: 6px;
   }
 
-  .today-hero-side .stat-chip.compact {
-    padding: 5px 6px;
+  .meta-metric {
+    padding: 2px 5px;
   }
 
-  .today-hero-side .stat-chip strong {
-    font-size: 0.92rem;
+  .meta-metric strong {
+    font-size: 0.88rem;
   }
 
-  .today-hero-side .bju-line {
+  .meta-metric--mood strong {
+    font-size: 0.8rem;
+  }
+
+  .today-hero-macros,
+  .week-card-macros,
+  .day-summary-macros {
     font-size: 0.74rem;
   }
 

@@ -30,6 +30,8 @@ export function weekFingerprint(week: WeekStats): string {
     Math.round(week.totals.carbs),
     week.weightDelta ?? 'x',
     week.avgSteps ?? 'x',
+    week.avgMood ?? 'x',
+    week.avgSleepHours ?? 'x',
     week.mealSnippets.length,
   ].join('|')
 }
@@ -48,6 +50,12 @@ export function localWeekNutritionNote(week: WeekStats): string {
   if (week.weightDelta != null) {
     const sign = week.weightDelta > 0 ? '+' : ''
     parts.push(`Вес ${sign}${week.weightDelta} кг.`)
+  }
+  if (week.avgSleepHours != null) {
+    parts.push(`Сон ${String(week.avgSleepHours).replace('.', ',')} ч.`)
+  }
+  if (week.avgMood != null) {
+    parts.push(`Настроение ${week.avgMood.toFixed(1).replace('.', ',')}/5.`)
   }
   return parts.join(' ')
 }
@@ -69,6 +77,8 @@ export async function getWeekNutritionSummary(week: WeekStats): Promise<string> 
 Белки/жиры/углеводы: ${Math.round(week.totals.protein)} / ${Math.round(week.totals.fat)} / ${Math.round(week.totals.carbs)}
 Изменение веса: ${week.weightDelta != null ? `${week.weightDelta} кг` : 'нет данных'}
 Средние шаги: ${week.avgSteps ?? 'нет данных'}
+Средний сон: ${week.avgSleepHours != null ? `${week.avgSleepHours} ч` : 'нет данных'}
+Среднее настроение (1–5): ${week.avgMood ?? 'нет данных'}
 
 Приёмы пищи:
 ${week.mealSnippets.slice(0, 40).join('\n')}

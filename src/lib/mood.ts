@@ -12,3 +12,14 @@ export function moodLabel(level: MoodLevel | undefined): string {
   if (level == null) return '—'
   return MOOD_OPTIONS.find((o) => o.value === level)?.label ?? '—'
 }
+
+export function formatSleepHours(hours: number | undefined): string {
+  if (hours == null) return '—'
+  return `${String(hours).replace('.', ',')} ч`
+}
+
+/** Average mood on 1–5 scale, one decimal. */
+export function formatAvgMood(avg: number | undefined): string {
+  if (avg == null) return '—'
+  return avg.toFixed(1).replace('.', ',')
+}

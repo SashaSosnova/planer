@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { PromptDialog } from '../components/PromptDialog'
 import {
   ACTIVITY_LABELS,
   GOAL_MODE_LABELS,
@@ -8,7 +9,14 @@ import {
   type GoalMode,
   type Sex,
 } from '../lib/calorieGoal'
-import { DEFAULT_CYCLE_LENGTH, DEFAULT_PERIOD_LENGTH } from '../lib/cycle'
+import {
+  DEFAULT_CYCLE_LENGTH,
+  DEFAULT_PERIOD_LENGTH,
+  cyclePhaseLabel,
+  getCycleInfo,
+  latestPeriodStart,
+} from '../lib/cycle'
+import { addDaysIso, formatRuDate, todayIso } from '../lib/date'
 import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
 import { loadSettings } from '../lib/settings'
 import type { AppData, MeasurementEntry } from '../types'
@@ -31,6 +39,8 @@ type Props = {
   onSaveMeasurement: (
     input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string },
   ) => Promise<unknown>
+  onSavePeriodStart: (date: string) => Promise<unknown>
+  onRemovePeriodStart: (id: string) => Promise<unknown>
 }
 
 function latestWeight(data: AppData): number | undefined {
@@ -44,10 +54,14 @@ export function ProfileScreen({
   onSaveProfile,
   onSaveTargets,
   onSaveMeasurement,
+  onSavePeriodStart,
+  onRemovePeriodStart,
 }: Props) {
   const saved = loadSettings()
   const savedProfile = saved.profile
   const weightKg = latestWeight(data)
+  const today = todayIso()
+  const lastPeriod = latestPeriodStart(data.periodStarts)
 
   const [editing, setEditing] = useState(!savedProfile)
   const [sex, setSex] = useState<Sex>(savedProfile?.sex ?? 'female')
@@ -77,6 +91,14 @@ export function ProfileScreen({
   const [cycleConfigured, setCycleConfigured] = useState(Boolean(saved.cycleConfigured))
   const [editingCycle, setEditingCycle] = useState(!saved.cycleConfigured)
   const [cycleError, setCycleError] = useState<string | null>(null)
+  const [periodPromptOpen, setPeriodPromptOpen] = useState(false)
+  const [periodBusy, setPeriodBusy] = useState(false)
+  const [periodError, setPeriodError] = useState<string | null>(null)
+
+  const cycle = useMemo(
+    () => getCycleInfo(data.periodStarts, today, savedCycleLen, savedPeriodLen),
+    [data.periodStarts, today, savedCycleLen, savedPeriodLen],
+  )
 
   const previewGoal = useMemo(() => {
     const ageN = Number(age.replace(',', '.'))
@@ -100,6 +122,46 @@ export function ProfileScreen({
       : saved.dailyKcalGoal
 
   const proteinGoal = weightKg != null ? calcProteinGoal(weightKg) : null
+
+  const removeLastPeriod = async () => {
+    if (!lastPeriod) return
+    setPeriodBusy(true)
+    try {
+      await onRemovePeriodStart(lastPeriod.id)
+    } finally {
+      setPeriodBusy(false)
+    }
+  }
+
+  const confirmPeriodStart = async (raw: string) => {
+    const startDate = raw.trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      setPeriodError('Выберите дату')
+      return
+    }
+    if (startDate > today) {
+      setPeriodError('Дата не может быть в будущем')
+      return
+    }
+    if (startDate < addDaysIso(today, -120)) {
+      setPeriodError('Укажите дату за последние 4 месяца')
+      return
+    }
+    setPeriodBusy(true)
+    setPeriodError(null)
+    try {
+      const prev = latestPeriodStart(data.periodStarts)
+      if (prev && prev.date !== startDate) {
+        await onRemovePeriodStart(prev.id)
+      }
+      await onSavePeriodStart(startDate)
+      setPeriodPromptOpen(false)
+    } catch (err) {
+      setPeriodError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setPeriodBusy(false)
+    }
+  }
 
   const save = () => {
     const ageN = Number(age.replace(',', '.'))
@@ -235,9 +297,47 @@ export function ProfileScreen({
                 Цикл {savedCycleLen} дн. · месячные {savedPeriodLen} дн.
               </strong>
               <p className="muted small">
-                Начало месячных отмечайте на экране «Сегодня»
+                {cycle.phase === 'unknown'
+                  ? 'Начало месячных ещё не указано'
+                  : `${cyclePhaseLabel(cycle.phase)}${
+                      cycle.dayInCycle != null ? ` · день ${cycle.dayInCycle}` : ''
+                    }`}
               </p>
+              {cycle.weightNote && (
+                <p className="muted small cycle-weight-note">{cycle.weightNote}</p>
+              )}
+              {lastPeriod && (
+                <p className="muted small">
+                  Последние начались {formatRuDate(lastPeriod.date)}
+                  {cycle.daysUntilPeriod != null && cycle.daysUntilPeriod > 0
+                    ? ` · до следующих ≈ ${cycle.daysUntilPeriod} дн.`
+                    : ''}
+                </p>
+              )}
             </div>
+          </div>
+          <div className="btn-row tight">
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={periodBusy}
+              onClick={() => {
+                setPeriodError(null)
+                setPeriodPromptOpen(true)
+              }}
+            >
+              {lastPeriod ? 'Изменить дату начала' : 'Указать начало месячных'}
+            </button>
+            {lastPeriod && (
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={periodBusy}
+                onClick={() => void removeLastPeriod()}
+              >
+                Сбросить
+              </button>
+            )}
           </div>
           <button
             type="button"
@@ -249,7 +349,7 @@ export function ProfileScreen({
               setEditingCycle(true)
             }}
           >
-            Изменить цикл
+            Изменить длину цикла
           </button>
         </div>
       ) : (
@@ -258,8 +358,8 @@ export function ProfileScreen({
             Цикл
           </h2>
           <p className="muted small">
-            Помогает понять скачки веса из‑за воды. Начало месячных отмечайте на экране
-            «Сегодня».
+            Помогает понять скачки веса из‑за воды. После сохранения можно указать дату
+            начала месячных.
           </p>
           <div className="form-grid">
             <label className="field">
@@ -433,6 +533,22 @@ export function ProfileScreen({
       )}
 
       <MeasuresPanel data={data} onSave={onSaveMeasurement} />
+
+      {periodPromptOpen && (
+        <PromptDialog
+          title="Начало месячных"
+          label="Когда начались последние?"
+          type="date"
+          min={addDaysIso(today, -120)}
+          max={today}
+          initialValue={lastPeriod?.date ?? today}
+          hint="Можно указать прошедшую дату — цикл посчитается сразу."
+          busy={periodBusy}
+          error={periodError}
+          onCancel={() => setPeriodPromptOpen(false)}
+          onConfirm={(v) => void confirmPeriodStart(v)}
+        />
+      )}
     </section>
   )
 }

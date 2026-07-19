@@ -242,7 +242,7 @@ const GROUP_ORDER: AchievementDef['group'][] = ['habits', 'body', 'wellness']
 export const ACHIEVEMENT_GROUP_LABELS: Record<AchievementDef['group'], string> = {
   habits: 'Привычки',
   body: 'Вес и тело',
-  wellness: 'Самочувствие',
+  wellness: 'Сон и настроение',
 }
 
 function uniqueSortedDates(dates: string[]): string[] {

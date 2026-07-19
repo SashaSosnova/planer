@@ -1,20 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalorieRing } from '../components/CalorieRing'
+import { MoodDialog } from '../components/MoodDialog'
 import { PromptDialog } from '../components/PromptDialog'
 import { formatRuDate, todayIso } from '../lib/date'
 import { buildTodayTimeline, type WeekStats } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
+import { formatAvgMood, formatSleepHours, moodLabel } from '../lib/mood'
 import {
   getWeekNutritionSummary,
   localWeekNutritionNote,
   weekFingerprint,
 } from '../lib/weekSummaryLlm'
 import { forecastFromAppData } from '../lib/weightForecast'
-import type { AppData } from '../types'
+import type { AppData, MoodLevel } from '../types'
 
-type PromptKind = 'weight' | 'steps' | null
+type PromptKind = 'weight' | 'steps' | 'sleep' | null
 
 type Props = {
   data: AppData
@@ -31,9 +33,44 @@ type Props = {
   onOpenWeightHistory: () => void
   onOpenStepsHistory: () => void
   onOpenAchievements: () => void
-  onOpenWellness: () => void
   onSaveWeight: (date: string, kg: number) => Promise<unknown>
   onSaveSteps: (date: string, count: number) => Promise<unknown>
+  onSaveCheckIn: (input: {
+    date: string
+    mood?: MoodLevel | null
+    sleepHours?: number | null
+  }) => Promise<unknown>
+}
+
+type MetaMetric = {
+  label: string
+  value: string
+  mood?: boolean
+  onClick?: () => void
+}
+
+function MetaStack({ metrics, static: isStatic }: { metrics: MetaMetric[]; static?: boolean }) {
+  return (
+    <div className="today-meta-stack">
+      {metrics.map((m) => {
+        const className = `meta-metric${m.mood ? ' meta-metric--mood' : ''}${isStatic ? ' static' : ''}`
+        if (isStatic || !m.onClick) {
+          return (
+            <div key={m.label} className={className}>
+              <span>{m.label}</span>
+              <strong>{m.value}</strong>
+            </div>
+          )
+        }
+        return (
+          <button key={m.label} type="button" className={className} onClick={m.onClick}>
+            <span>{m.label}</span>
+            <strong>{m.value}</strong>
+          </button>
+        )
+      })}
+    </div>
+  )
 }
 
 function WeekCard({
@@ -65,8 +102,8 @@ function WeekCard({
 
   const weightLabel =
     week.weightDelta == null
-      ? 'нет данных'
-      : `${week.weightDelta > 0 ? '+' : ''}${week.weightDelta} кг`
+      ? '—'
+      : `${week.weightDelta > 0 ? '+' : ''}${String(week.weightDelta).replace('.', ',')} кг`
 
   const dayCount = 7
   const avgKcal = week.totals.kcal / dayCount
@@ -77,34 +114,32 @@ function WeekCard({
 
   return (
     <article className="week-card">
-      <div className="week-card-main">
+      <h3 className="week-card-title">{week.label}</h3>
+      <div className="week-card-top">
         <CalorieRing
           eaten={avgKcal}
           goal={dailyGoal}
           maintainGoal={maintainKcalGoal}
           size="md"
         />
-        <div className="week-card-side">
-          <h3>{week.label}</h3>
-          <div className="today-meta-row">
-            <div className="stat-chip compact static">
-              <span>Вес</span>
-              <strong>{weightLabel}</strong>
-            </div>
-            <div className="stat-chip compact static">
-              <span>Шаги</span>
-              <strong>
-                {week.avgSteps != null ? week.avgSteps.toLocaleString('ru-RU') : '—'}
-              </strong>
-            </div>
-          </div>
-          <p className="bju-line muted small">
-            Белки {Math.round(avgProtein)} · Жиры {Math.round(avgFat)} · Углеводы{' '}
-            {Math.round(avgCarbs)}
-          </p>
-        </div>
+        <MetaStack
+          static
+          metrics={[
+            { label: 'Вес', value: weightLabel },
+            {
+              label: 'Шаги',
+              value:
+                week.avgSteps != null ? week.avgSteps.toLocaleString('ru-RU') : '—',
+            },
+            { label: 'Сон', value: formatSleepHours(week.avgSleepHours) },
+            { label: 'Настроение', value: formatAvgMood(week.avgMood), mood: true },
+          ]}
+        />
       </div>
-
+      <p className="bju-line muted small week-card-macros">
+        Белки {Math.round(avgProtein)} · Жиры {Math.round(avgFat)} · Углеводы{' '}
+        {Math.round(avgCarbs)}
+      </p>
       <p className={`week-note${loadingNote ? ' loading' : ''}`}>{note}</p>
     </article>
   )
@@ -130,18 +165,18 @@ export function TodayScreen({
   onOpenWeightHistory,
   onOpenStepsHistory,
   onOpenAchievements,
-  onOpenWellness,
   onSaveWeight,
   onSaveSteps,
+  onSaveCheckIn,
 }: Props) {
   const date = todayIso()
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
 
   const [prompt, setPrompt] = useState<PromptKind>(null)
+  const [moodOpen, setMoodOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [promptError, setPromptError] = useState<string | null>(null)
-  const [forecastNotesOpen, setForecastNotesOpen] = useState(false)
 
   const { today, recentDays, completedWeeks } = useMemo(
     () => buildTodayTimeline(data, dailyKcalGoal, date),
@@ -175,6 +210,23 @@ export function TodayScreen({
     }
     setPromptError(null)
     setPrompt('steps')
+  }
+
+  const openSleep = () => {
+    setPromptError(null)
+    setPrompt('sleep')
+  }
+
+  const selectMood = async (mood: MoodLevel | null) => {
+    setBusy(true)
+    try {
+      await onSaveCheckIn({ date, mood })
+      setMoodOpen(false)
+    } catch {
+      /* keep dialog open */
+    } finally {
+      setBusy(false)
+    }
   }
 
   const confirmPrompt = async (raw: string) => {
@@ -213,6 +265,25 @@ export function TodayScreen({
       } finally {
         setBusy(false)
       }
+      return
+    }
+
+    if (prompt === 'sleep') {
+      const hours = num(raw)
+      if (hours == null || hours < 0 || hours > 16) {
+        setPromptError('Укажите часы сна от 0 до 16')
+        return
+      }
+      setBusy(true)
+      setPromptError(null)
+      try {
+        await onSaveCheckIn({ date, sleepHours: Math.round(hours * 2) / 2 })
+        setPrompt(null)
+      } catch (err) {
+        setPromptError(err instanceof Error ? err.message : 'Ошибка')
+      } finally {
+        setBusy(false)
+      }
     }
   }
 
@@ -223,23 +294,7 @@ export function TodayScreen({
           <p className="eyebrow">Сегодня</p>
           <h1>{formatRuDate(date)}</h1>
         </div>
-        <div className="btn-row tight">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onOpenWellness}
-            aria-label="Самочувствие"
-            title="Самочувствие"
-          >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M12 21s-6.5-4.35-9-8.5C1.5 9.5 3.2 6 6.5 6c1.9 0 3.4 1.1 4.2 2.2C11.5 7.1 13 6 14.9 6 18.2 6 19.9 9.5 18.4 12.5 15.9 16.65 12 21 12 21Z"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </button>
+        <div className="btn-row tight nowrap">
           <button
             type="button"
             className="icon-btn"
@@ -316,55 +371,55 @@ export function TodayScreen({
           {forecast.targetKg == null && (
             <p className="muted small">Цель по весу можно задать в профиле.</p>
           )}
-          {forecast.notes.length > 0 && (
-            <>
-              <button
-                type="button"
-                className="link-btn"
-                onClick={() => setForecastNotesOpen((v) => !v)}
-              >
-                {forecastNotesOpen ? 'Скрыть детали' : 'Ещё'}
-              </button>
-              {forecastNotesOpen &&
-                forecast.notes.map((note) => (
-                  <p key={note} className="muted small cycle-weight-note">
-                    {note}
-                  </p>
-                ))}
-            </>
-          )}
+          {forecast.notes.map((note) => (
+            <p key={note} className="muted small cycle-weight-note">
+              {note}
+            </p>
+          ))}
         </div>
       )}
 
       <div className="today-hero">
-        <CalorieRing
-          eaten={today.totals.kcal}
-          goal={dailyKcalGoal}
-          maintainGoal={maintainKcalGoal}
-          size="md"
-        />
-        <div className="today-hero-side">
-          <div className="today-meta-row">
-            <button type="button" className="stat-chip compact" onClick={openWeight}>
-              <span>Вес</span>
-              <strong>{weight ? `${weight.kg} кг` : '—'}</strong>
-            </button>
-            <button type="button" className="stat-chip compact" onClick={openSteps}>
-              <span>Шаги</span>
-              <strong>
-                {steps ? steps.count.toLocaleString('ru-RU') : '—'}
-              </strong>
-            </button>
-          </div>
-          <p className="bju-line muted small">
-            Белки {Math.round(today.totals.protein)}
-            {proteinGoal != null ? ` / ${proteinGoal}` : ''} · Жиры{' '}
-            {Math.round(today.totals.fat)} · Углеводы {Math.round(today.totals.carbs)}
-          </p>
-          <p className="bju-line muted small">
-            Овощи {today.vegGrams} / {VEG_GOAL_G} г
-          </p>
+        <div className="today-hero-top">
+          <CalorieRing
+            eaten={today.totals.kcal}
+            goal={dailyKcalGoal}
+            maintainGoal={maintainKcalGoal}
+            size="md"
+          />
+          <MetaStack
+            metrics={[
+              {
+                label: 'Вес',
+                value: weight ? `${weight.kg} кг` : '—',
+                onClick: openWeight,
+              },
+              {
+                label: 'Шаги',
+                value: steps ? steps.count.toLocaleString('ru-RU') : '—',
+                onClick: openSteps,
+              },
+              {
+                label: 'Сон',
+                value: formatSleepHours(today.sleepHours),
+                onClick: openSleep,
+              },
+              {
+                label: 'Настроение',
+                value: moodLabel(today.mood),
+                mood: true,
+                onClick: () => setMoodOpen(true),
+              },
+            ]}
+          />
         </div>
+        <p className="today-hero-macros bju-line muted small">
+          Белки {Math.round(today.totals.protein)}
+          {proteinGoal != null ? ` / ${proteinGoal}` : ''} · Жиры{' '}
+          {Math.round(today.totals.fat)} · Углеводы {Math.round(today.totals.carbs)}
+          {' · '}
+          Овощи {today.vegGrams} / {VEG_GOAL_G} г
+        </p>
       </div>
 
       <div className="section-head" style={{ justifyContent: 'flex-end' }}>
@@ -410,26 +465,44 @@ export function TodayScreen({
           <ul className="day-summary-list">
             {recentDays.map((day) => (
               <li key={day.date} className="day-summary-card">
-                <CalorieRing
-                  eaten={day.totals.kcal}
-                  goal={dailyKcalGoal}
-                  maintainGoal={maintainKcalGoal}
-                  size="sm"
-                />
-                <div className="day-summary-body">
-                  <strong>{day.label}</strong>
-                  <p className="muted small">
-                    Б {Math.round(day.totals.protein)} · Ж {Math.round(day.totals.fat)} · У{' '}
-                    {Math.round(day.totals.carbs)}
-                  </p>
-                  <p className="muted small">
-                    {day.weightKg != null ? `${day.weightKg} кг` : 'вес —'}
-                    {' · '}
-                    {day.steps != null
-                      ? `${day.steps.toLocaleString('ru-RU')} шагов`
-                      : 'шаги —'}
-                  </p>
+                <strong className="day-summary-title">{day.label}</strong>
+                <div className="day-summary-top">
+                  <CalorieRing
+                    eaten={day.totals.kcal}
+                    goal={dailyKcalGoal}
+                    maintainGoal={maintainKcalGoal}
+                    size="md"
+                  />
+                  <MetaStack
+                    static
+                    metrics={[
+                      {
+                        label: 'Вес',
+                        value:
+                          day.weightKg != null
+                            ? `${String(day.weightKg).replace('.', ',')} кг`
+                            : '—',
+                      },
+                      {
+                        label: 'Шаги',
+                        value:
+                          day.steps != null
+                            ? day.steps.toLocaleString('ru-RU')
+                            : '—',
+                      },
+                      { label: 'Сон', value: formatSleepHours(day.sleepHours) },
+                      {
+                        label: 'Настроение',
+                        value: moodLabel(day.mood),
+                        mood: true,
+                      },
+                    ]}
+                  />
                 </div>
+                <p className="bju-line muted small day-summary-macros">
+                  Белки {Math.round(day.totals.protein)} · Жиры{' '}
+                  {Math.round(day.totals.fat)} · Углеводы {Math.round(day.totals.carbs)}
+                </p>
               </li>
             ))}
           </ul>
@@ -476,6 +549,29 @@ export function TodayScreen({
           error={promptError}
           onCancel={() => setPrompt(null)}
           onConfirm={(v) => void confirmPrompt(v)}
+        />
+      )}
+
+      {prompt === 'sleep' && (
+        <PromptDialog
+          title="Сон прошлой ночью"
+          label="Сколько часов?"
+          placeholder="например 7.5"
+          inputMode="decimal"
+          initialValue={today.sleepHours?.toString() ?? ''}
+          busy={busy}
+          error={promptError}
+          onCancel={() => setPrompt(null)}
+          onConfirm={(v) => void confirmPrompt(v)}
+        />
+      )}
+
+      {moodOpen && (
+        <MoodDialog
+          current={today.mood}
+          busy={busy}
+          onCancel={() => setMoodOpen(false)}
+          onSelect={(mood) => void selectMood(mood)}
         />
       )}
     </section>

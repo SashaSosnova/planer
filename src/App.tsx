@@ -14,7 +14,6 @@ import { ProfileScreen } from './screens/ProfileScreen'
 import { StepsHistoryScreen } from './screens/StepsHistoryScreen'
 import { TodayScreen } from './screens/TodayScreen'
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen'
-import { WellnessScreen } from './screens/WellnessScreen'
 import './App.css'
 
 type Overlay =
@@ -24,7 +23,6 @@ type Overlay =
   | { type: 'weight-history' }
   | { type: 'steps-history' }
   | { type: 'achievements' }
-  | { type: 'wellness' }
   | null
 
 export default function App() {
@@ -171,13 +169,13 @@ export default function App() {
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
             onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
             onOpenAchievements={() => setOverlay({ type: 'achievements' })}
-            onOpenWellness={() => setOverlay({ type: 'wellness' })}
             onSaveWeight={async (date, kg) => {
               const entry = await saveWeight(date, kg)
               syncGoalFromWeight(kg)
               return entry
             }}
             onSaveSteps={saveSteps}
+            onSaveCheckIn={saveCheckIn}
           />
         </div>
 
@@ -218,6 +216,8 @@ export default function App() {
             onSaveProfile={saveProfile}
             onSaveTargets={saveTargets}
             onSaveMeasurement={saveMeasurement}
+            onSavePeriodStart={savePeriodStart}
+            onRemovePeriodStart={removePeriodStart}
           />
         )}
 
@@ -249,17 +249,6 @@ export default function App() {
           />
         )}
 
-        {overlay?.type === 'wellness' && (
-          <WellnessScreen
-            data={data}
-            cycleLengthDays={cycleLengthDays}
-            periodLengthDays={periodLengthDays}
-            onBack={closeOverlay}
-            onSaveCheckIn={saveCheckIn}
-            onSavePeriodStart={savePeriodStart}
-            onRemovePeriodStart={removePeriodStart}
-          />
-        )}
       </main>
     </div>
   )

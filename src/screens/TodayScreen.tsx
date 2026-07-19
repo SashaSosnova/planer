@@ -232,12 +232,12 @@ export function TodayScreen({
             title="Профиль"
           >
             <svg
-              width="22"
-              height="22"
+              width="24"
+              height="24"
               viewBox="0 0 24 24"
               fill="none"
               aria-hidden
-              style={{ width: 22, height: 22, display: 'block', flexShrink: 0 }}
+              style={{ width: 24, height: 24, display: 'block', flexShrink: 0 }}
             >
               <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
               <path
@@ -261,140 +261,148 @@ export function TodayScreen({
         <CalorieRing
           eaten={today.totals.kcal}
           goal={dailyKcalGoal}
-          size="md"
+          size="lg"
           approximate={today.approximate}
         />
         <div className="today-hero-side">
-          <div className="day-log-grid today-body-grid">
-            <div className="panel day-log-card">
-              <div className="day-log-head">
-                <span className="muted small">Вес</span>
-                <div className="btn-row tight">
-                  <button
-                    type="button"
-                    className={`icon-btn sm${chartKind === 'weight' ? ' active' : ''}`}
-                    onClick={() => setChartKind((k) => (k === 'weight' ? null : 'weight'))}
-                    aria-label="График веса"
-                  >
-                    <ChartIcon size={14} />
-                  </button>
-                  {!editingWeight && weight && (
-                    <button
-                      type="button"
-                      className="icon-btn sm"
-                      onClick={() => {
-                        setKg(String(weight.kg))
-                        setEditingWeight(true)
-                      }}
-                      aria-label="Изменить вес"
-                    >
-                      <PencilIcon size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {!editingWeight && weight ? (
-                <strong className="day-log-value">{weight.kg} кг</strong>
-              ) : (
-                <div className="day-log-edit">
-                  <input
-                    className="day-log-input"
-                    inputMode="decimal"
-                    value={kg}
-                    onChange={(e) => setKg(e.target.value)}
-                    placeholder="кг"
-                  />
-                  <button
-                    type="button"
-                    className="primary-btn day-log-ok"
-                    disabled={busy != null}
-                    onClick={() => void saveWeight()}
-                  >
-                    OK
-                  </button>
-                  {weight && (
-                    <button
-                      type="button"
-                      className="ghost-btn day-log-ok"
-                      onClick={() => {
-                        setKg(String(weight.kg))
-                        setEditingWeight(false)
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+          <p className="bju-line">
+            <span>
+              Белки <strong>{today.totals.protein}</strong>
+              {today.approximate ? ' ≈' : ''}
+            </span>
+            <span>
+              Жиры <strong>{today.totals.fat}</strong>
+            </span>
+            <span>
+              Углеводы <strong>{today.totals.carbs}</strong>
+            </span>
+          </p>
+        </div>
+      </div>
 
-            <div className="panel day-log-card">
-              <div className="day-log-head">
-                <span className="muted small">Шаги</span>
-                <div className="btn-row tight">
-                  <button
-                    type="button"
-                    className={`icon-btn sm${chartKind === 'steps' ? ' active' : ''}`}
-                    onClick={() => setChartKind((k) => (k === 'steps' ? null : 'steps'))}
-                    aria-label="График шагов"
-                  >
-                    <ChartIcon size={14} />
-                  </button>
-                  {!editingSteps && steps && (
-                    <button
-                      type="button"
-                      className="icon-btn sm"
-                      onClick={() => {
-                        setStepCount(String(steps.count))
-                        setEditingSteps(true)
-                      }}
-                      aria-label="Изменить шаги"
-                    >
-                      <PencilIcon size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-              {!editingSteps && steps ? (
-                <strong className="day-log-value">{steps.count.toLocaleString('ru-RU')}</strong>
-              ) : (
-                <div className="day-log-edit">
-                  <input
-                    className="day-log-input"
-                    inputMode="numeric"
-                    value={stepCount}
-                    onChange={(e) => setStepCount(e.target.value)}
-                    placeholder="шаги"
-                  />
-                  <button
-                    type="button"
-                    className="primary-btn day-log-ok"
-                    disabled={busy != null}
-                    onClick={() => void saveSteps()}
-                  >
-                    OK
-                  </button>
-                  {steps && (
-                    <button
-                      type="button"
-                      className="ghost-btn day-log-ok"
-                      onClick={() => {
-                        setStepCount(String(steps.count))
-                        setEditingSteps(false)
-                      }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
+      <div className="day-log-grid">
+        <div className="panel day-log-card">
+          <div className="day-log-head">
+            <span className="muted small">Вес</span>
+            <div className="btn-row tight nowrap">
+              <button
+                type="button"
+                className={`icon-btn sm${chartKind === 'weight' ? ' active' : ''}`}
+                onClick={() => setChartKind((k) => (k === 'weight' ? null : 'weight'))}
+                aria-label="График веса"
+              >
+                <ChartIcon size={18} />
+              </button>
+              {!editingWeight && weight && (
+                <button
+                  type="button"
+                  className="icon-btn sm"
+                  onClick={() => {
+                    setKg(String(weight.kg))
+                    setEditingWeight(true)
+                  }}
+                  aria-label="Изменить вес"
+                >
+                  <PencilIcon size={18} />
+                </button>
               )}
             </div>
           </div>
-          <p className="bju-line muted small">
-            Белки {today.totals.protein}
-            {today.approximate ? ' ≈' : ''} · Жиры {today.totals.fat} · Углеводы{' '}
-            {today.totals.carbs}
-          </p>
+          {!editingWeight && weight ? (
+            <strong className="day-log-value">{weight.kg} кг</strong>
+          ) : (
+            <div className="day-log-edit">
+              <input
+                className="day-log-input"
+                inputMode="decimal"
+                value={kg}
+                onChange={(e) => setKg(e.target.value)}
+                placeholder="кг"
+              />
+              <button
+                type="button"
+                className="primary-btn day-log-ok"
+                disabled={busy != null}
+                onClick={() => void saveWeight()}
+              >
+                OK
+              </button>
+              {weight && (
+                <button
+                  type="button"
+                  className="ghost-btn day-log-ok"
+                  onClick={() => {
+                    setKg(String(weight.kg))
+                    setEditingWeight(false)
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="panel day-log-card">
+          <div className="day-log-head">
+            <span className="muted small">Шаги</span>
+            <div className="btn-row tight nowrap">
+              <button
+                type="button"
+                className={`icon-btn sm${chartKind === 'steps' ? ' active' : ''}`}
+                onClick={() => setChartKind((k) => (k === 'steps' ? null : 'steps'))}
+                aria-label="График шагов"
+              >
+                <ChartIcon size={18} />
+              </button>
+              {!editingSteps && steps && (
+                <button
+                  type="button"
+                  className="icon-btn sm"
+                  onClick={() => {
+                    setStepCount(String(steps.count))
+                    setEditingSteps(true)
+                  }}
+                  aria-label="Изменить шаги"
+                >
+                  <PencilIcon size={18} />
+                </button>
+              )}
+            </div>
+          </div>
+          {!editingSteps && steps ? (
+            <strong className="day-log-value">{steps.count.toLocaleString('ru-RU')}</strong>
+          ) : (
+            <div className="day-log-edit">
+              <input
+                className="day-log-input"
+                inputMode="numeric"
+                value={stepCount}
+                onChange={(e) => setStepCount(e.target.value)}
+                placeholder="шаги"
+              />
+              <button
+                type="button"
+                className="primary-btn day-log-ok"
+                disabled={busy != null}
+                onClick={() => void saveSteps()}
+              >
+                OK
+              </button>
+              {steps && (
+                <button
+                  type="button"
+                  className="ghost-btn day-log-ok"
+                  onClick={() => {
+                    setStepCount(String(steps.count))
+                    setEditingSteps(false)
+                  }}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 /** Soft measuring / tailor tape icon */
-export function MeasureTapeIcon({ size = 20 }: { size?: number }) {
+export function MeasureTapeIcon({ size = 24 }: { size?: number }) {
   return (
     <svg
       width={size}

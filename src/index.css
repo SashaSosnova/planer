@@ -63,6 +63,21 @@ body {
       var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
     );
     --safe-top: max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+    font-size: 16px;
+  }
+
+  .ghost-btn,
+  .primary-btn,
+  .mode-tab {
+    min-height: 44px;
+  }
+
+  .link-btn {
+    padding: 8px 4px;
+  }
+
+  .icon-btn {
+    min-height: 0;
   }
 }
 

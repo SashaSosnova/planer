@@ -263,7 +263,7 @@ export function AddMealScreen({
                   setMealTypeTouched(false)
                 }
               }}
-              placeholder="обед: паста с кабачком 200 гр — или вне дома стрипсы и салат"
+              placeholder="Что съели и сколько граммов. Можно указать приём: завтрак, обед…"
             />
           </label>
 

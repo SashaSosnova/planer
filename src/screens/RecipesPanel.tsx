@@ -3,12 +3,8 @@ import { parseRecipe } from '../lib/parseRecipe'
 import { computeRecipe, recipeToFoodItem } from '../lib/recipeCalc'
 import type { AppData, FoodItem, RecipeDraft, RecipeIngredientLine } from '../types'
 
-const RECIPE_PLACEHOLDER = `Паста с кабачком и курицей
-Куриное филе сырое - 300 гр
-Кабачок сырой - 300 гр
-Сливки 20% - 200 гр
-Спагетти сухие - 200 гр
-Масло для жарки - 10 гр`
+const RECIPE_PLACEHOLDER =
+  'Первая строка — название блюда.\nДальше ингредиенты: продукт — граммы до готовки (каждый с новой строки).'
 
 type Props = {
   data: AppData
@@ -18,7 +14,7 @@ type Props = {
 
 export function RecipesPanel({ data, onSave, onDelete }: Props) {
   const [view, setView] = useState<'list' | 'new'>('list')
-  const [recipeText, setRecipeText] = useState(RECIPE_PLACEHOLDER)
+  const [recipeText, setRecipeText] = useState('')
   const [draft, setDraft] = useState<RecipeDraft | null>(null)
   const [cookedOverride, setCookedOverride] = useState('')
   const [busy, setBusy] = useState(false)
@@ -49,7 +45,7 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setError(null)
     setDraft(null)
     setCookedOverride('')
-    setRecipeText(RECIPE_PLACEHOLDER)
+    setRecipeText('')
   }
 
   const backToList = () => {
@@ -104,6 +100,10 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
 
   const saveRecipe = async () => {
     if (!draft) return
+    if (!draft.name.trim()) {
+      setError('Укажите название блюда')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -154,16 +154,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
               <span>Название блюда</span>
               <input
                 value={draft.name}
-                onChange={(e) =>
-                  setDraft(
-                    computeRecipe({
-                      name: e.target.value,
-                      ingredients: draft.ingredients,
-                      cookedGramsOverride: Number(cookedOverride.replace(',', '.')) || null,
-                      notes: draft.notes,
-                    }),
-                  )
-                }
+                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                placeholder="Название блюда"
               />
             </label>
 

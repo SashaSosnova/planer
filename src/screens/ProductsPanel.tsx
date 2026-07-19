@@ -92,7 +92,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Форель слабосоленая"
+            placeholder="Название продукта"
           />
         </label>
         <label className="field">
@@ -102,7 +102,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
             enterKeyHint="done"
             value={kbju}
             onChange={(e) => setKbju(e.target.value)}
-            placeholder="140 20 6 0"
+            placeholder="ккал белки жиры углеводы через пробел"
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"

@@ -115,7 +115,7 @@ export function ProfileScreen({ data, onBack, onSaveProfile }: Props) {
               inputMode="numeric"
               value={age}
               onChange={(e) => setAge(e.target.value)}
-              placeholder="32"
+              placeholder="лет"
             />
           </label>
           <label className="field">
@@ -124,7 +124,7 @@ export function ProfileScreen({ data, onBack, onSaveProfile }: Props) {
               inputMode="decimal"
               value={heightCm}
               onChange={(e) => setHeightCm(e.target.value)}
-              placeholder="165"
+              placeholder="см"
             />
           </label>
           <label className="field">

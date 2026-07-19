@@ -41,7 +41,7 @@ export function computeRecipe(draft: {
       : emptyMacros()
 
   return {
-    name: draft.name.trim() || 'Блюдо',
+    name: draft.name,
     ingredients: withYield.map(({ macros: _m, cookedGrams: _c, ...rest }) => rest),
     totalRawGrams,
     totalCookedGrams,
@@ -58,7 +58,7 @@ export function recipeToFoodItem(
 ): Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string } {
   return {
     id: existingId,
-    name: recipe.name,
+    name: recipe.name.trim(),
     aliases: [],
     per100g: recipe.per100g,
     kind: 'dish',

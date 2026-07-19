@@ -295,7 +295,7 @@ export function TodayScreen({
                     inputMode="decimal"
                     value={kg}
                     onChange={(e) => setKg(e.target.value)}
-                    placeholder="62.4"
+                    placeholder="кг"
                   />
                   <button
                     type="button"
@@ -357,7 +357,7 @@ export function TodayScreen({
                     inputMode="numeric"
                     value={stepCount}
                     onChange={(e) => setStepCount(e.target.value)}
-                    placeholder="8000"
+                    placeholder="шаги"
                   />
                   <button
                     type="button"

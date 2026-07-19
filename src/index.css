@@ -46,6 +46,12 @@ body,
   min-height: 100%;
 }
 
+html {
+  /* Prevent Android WebView from boosting text relative to system font size */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 body {
   min-width: 320px;
 }

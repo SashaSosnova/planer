@@ -6,21 +6,29 @@ import { findBestFood } from './foodMatch'
 import { isComplexMealText } from './mealComplexity'
 import { isLlmConfigured, parseMealWithLlm } from './parseMealLlm'
 import { parseMealLocal } from './parseMealLocal'
-import { defaultMealTypeForNow, extractMealTypeFromText } from './labels'
+import { coerceMealType, defaultMealTypeForNow, extractMealTypeFromText } from './labels'
 import { scalePer100g, sumMacros } from './nutrition'
+import { sanitizeMealItems } from './sanitize'
+
+/** Comma/semicolon/newline lists must not collapse to a single fuzzy library hit. */
+function looksLikeMealList(text: string): boolean {
+  return /[,;\n]/.test(text)
+}
 
 function tryWholeLibraryMatch(
   text: string,
   foods: FoodRef[],
   mealType: MealType | undefined,
 ): ParsedMealDraft | null {
+  if (looksLikeMealList(text)) return null
+
   const collapsed = text.replace(/\s+/g, ' ').trim()
   const match = collapsed.match(
     /^(.*?)\s+(\d+(?:[.,]\d+)?)\s*(?:грамм(?:а|ов)?|гр|г|мл|ml|g)\s*$/iu,
   )
   const name = (match?.[1] ?? collapsed).trim()
   const grams = match ? Number(match[2].replace(',', '.')) : 100
-  if (!name || !Number.isFinite(grams)) return null
+  if (!name || !Number.isFinite(grams) || grams <= 0) return null
 
   const food = findBestFood(name, foods, 70)
   if (!food) return null
@@ -105,11 +113,12 @@ function finalizeDraft(
     }
   })
 
+  const clean = sanitizeMealItems(resolved)
   return {
-    mealType,
-    items: resolved,
-    totals: sumMacros(resolved),
-    isApproximate: eatingOut || resolved.some((i) => i.source === 'estimate'),
+    mealType: coerceMealType(mealType),
+    items: clean,
+    totals: sumMacros(clean),
+    isApproximate: eatingOut || clean.some((i) => i.source === 'estimate'),
     eatingOut,
     parseSource,
     notes,
@@ -160,7 +169,7 @@ export async function parseMeal(
         })),
       })
       return finalizeDraft(
-        fromText.mealType ?? result.data.mealType,
+        fromText.mealType ?? coerceMealType(result.data.mealType, resolvedType ?? defaultMealTypeForNow()),
         result.data.items,
         foods,
         Boolean(result.data.eatingOut ?? eatingOut),

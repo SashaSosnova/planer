@@ -1,3 +1,4 @@
+import { sanitizeAppData } from '../lib/sanitize'
 import type { AppData } from '../types'
 
 const KEY = 'planer-app-data-v1'
@@ -30,18 +31,14 @@ function wipeDemoIfNeeded(): void {
 
 wipeDemoIfNeeded()
 
+export { sanitizeAppData }
+
 export function loadLocalData(): AppData {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return emptyAppData()
     const parsed = JSON.parse(raw) as Partial<AppData>
-    return {
-      foods: parsed.foods ?? [],
-      meals: parsed.meals ?? [],
-      weights: parsed.weights ?? [],
-      measurements: parsed.measurements ?? [],
-      steps: parsed.steps ?? [],
-    }
+    return sanitizeAppData(parsed)
   } catch {
     return emptyAppData()
   }

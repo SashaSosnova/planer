@@ -8,6 +8,13 @@ import {
 } from 'firebase/firestore'
 import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
 import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../firebase'
+import {
+  sanitizeFood,
+  sanitizeMeal,
+  sanitizeMeasurement,
+  sanitizeSteps,
+  sanitizeWeight,
+} from '../lib/sanitize'
 import type {
   AppData,
   FoodItem,
@@ -56,13 +63,15 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
   const watch = <T extends { id: string }>(
     colName: string,
     key: keyof AppData,
-    map: (id: string, data: Record<string, unknown>) => T,
+    map: (id: string, data: Record<string, unknown>) => T | null,
   ) => {
     unsubs.push(
       onSnapshot(
         planerCol(uid, colName),
         (snap) => {
-          const items = snap.docs.map((d) => map(d.id, d.data() as Record<string, unknown>))
+          const items = snap.docs
+            .map((d) => map(d.id, d.data() as Record<string, unknown>))
+            .filter((x): x is T => x != null)
           handlers.onData({ [key]: items } as Partial<AppData>)
         },
         (err) => handlers.onError?.(err),
@@ -70,63 +79,13 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
     )
   }
 
-  watch<FoodItem>('foods', 'foods', (id, data) => ({
-    id,
-    name: String(data.name ?? ''),
-    aliases: Array.isArray(data.aliases) ? (data.aliases as string[]) : [],
-    per100g: {
-      kcal: Number(data.per100g && (data.per100g as { kcal: number }).kcal) || 0,
-      protein: Number(data.per100g && (data.per100g as { protein: number }).protein) || 0,
-      fat: Number(data.per100g && (data.per100g as { fat: number }).fat) || 0,
-      carbs: Number(data.per100g && (data.per100g as { carbs: number }).carbs) || 0,
-    },
-    kind: data.kind === 'dish' ? 'dish' : 'ingredient',
-    recipe: data.recipe as FoodItem['recipe'],
-    updatedAt: Number(data.updatedAt) || Date.now(),
-  }))
-
-  watch<Meal>('meals', 'meals', (id, data) => ({
-    id,
-    date: String(data.date ?? ''),
-    mealType: (data.mealType as Meal['mealType']) ?? 'snack',
-    rawText: String(data.rawText ?? ''),
-    items: Array.isArray(data.items) ? (data.items as Meal['items']) : [],
-    totals: (data.totals as Meal['totals']) ?? { kcal: 0, protein: 0, fat: 0, carbs: 0 },
-    isApproximate: Boolean(data.isApproximate),
-    eatingOut: Boolean(data.eatingOut),
-    createdAt: Number(data.createdAt) || Date.now(),
-  }))
-
-  watch<WeightEntry>('weights', 'weights', (id, data) => ({
-    id,
-    date: String(data.date ?? ''),
-    kg: Number(data.kg) || 0,
-    createdAt: Number(data.createdAt) || Date.now(),
-  }))
-
-  watch<MeasurementEntry>('measurements', 'measurements', (id, data) => ({
-    id,
-    date: String(data.date ?? ''),
-    chest: data.chest != null ? Number(data.chest) : undefined,
-    waist: data.waist != null ? Number(data.waist) : undefined,
-    belly: data.belly != null ? Number(data.belly) : undefined,
-    hips: data.hips != null ? Number(data.hips) : undefined,
-    thigh: data.thigh != null ? Number(data.thigh) : undefined,
-    bicep:
-      data.bicep != null
-        ? Number(data.bicep)
-        : data.arm != null
-          ? Number(data.arm)
-          : undefined,
-    createdAt: Number(data.createdAt) || Date.now(),
-  }))
-
-  watch<StepsEntry>('steps', 'steps', (id, data) => ({
-    id,
-    date: String(data.date ?? ''),
-    count: Number(data.count) || 0,
-    createdAt: Number(data.createdAt) || Date.now(),
-  }))
+  watch<FoodItem>('foods', 'foods', (id, data) => sanitizeFood({ ...data, id }))
+  watch<Meal>('meals', 'meals', (id, data) => sanitizeMeal({ ...data, id }))
+  watch<WeightEntry>('weights', 'weights', (id, data) => sanitizeWeight({ ...data, id }))
+  watch<MeasurementEntry>('measurements', 'measurements', (id, data) =>
+    sanitizeMeasurement({ ...data, id }),
+  )
+  watch<StepsEntry>('steps', 'steps', (id, data) => sanitizeSteps({ ...data, id }))
 
   return () => {
     for (const u of unsubs) u()

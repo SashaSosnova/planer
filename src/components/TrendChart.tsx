@@ -211,7 +211,14 @@ export function TrendChart({
 
 export function ChartIcon({ size = 18 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      style={{ width: size, height: size, display: 'block', flexShrink: 0 }}
+    >
       <path
         d="M4 19V5M4 19h16"
         stroke="currentColor"

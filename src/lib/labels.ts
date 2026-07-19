@@ -17,6 +17,13 @@ export function defaultMealTypeForNow(): MealType {
   return 'snack'
 }
 
+export function coerceMealType(value: unknown, fallback: MealType = 'snack'): MealType {
+  if (value === 'breakfast' || value === 'lunch' || value === 'dinner' || value === 'snack') {
+    return value
+  }
+  return fallback
+}
+
 /** Next empty slot for the day: breakfast → lunch → dinner → snack. */
 export function nextMealType(existing: Iterable<MealType>): MealType {
   const have = new Set(existing)
@@ -28,12 +35,22 @@ export function nextMealType(existing: Iterable<MealType>): MealType {
 
 type MealMarker = { type: MealType; re: RegExp }
 
+/** Verb + «на обед» etc. — strip the whole phrase so leftovers aren't parsed as food. */
+const ATE_PREFIX = '(?:съел(?:а|и)?|ел(?:а|и)?|кушал(?:а|и)?)\\s+'
+
 /** Phrases that name the meal in free text. Longer / more specific first. */
 const MEAL_MARKERS: MealMarker[] = [
-  { type: 'breakfast', re: /(?:^|[\n,;])\s*(?:на\s+)?завтрак\s*[:.\-]?\s*/i },
-  { type: 'lunch', re: /(?:^|[\n,;])\s*(?:на\s+)?обед\s*[:.\-]?\s*/i },
-  { type: 'dinner', re: /(?:^|[\n,;])\s*(?:на\s+)?ужин\s*[:.\-]?\s*/i },
-  { type: 'snack', re: /(?:^|[\n,;])\s*(?:на\s+)?(?:перекус|полдник|снек)\s*[:.\-]?\s*/i },
+  { type: 'breakfast', re: new RegExp(`${ATE_PREFIX}(?:на\\s+)?завтрак\\s*[:.-]?\\s*`, 'i') },
+  { type: 'lunch', re: new RegExp(`${ATE_PREFIX}(?:на\\s+)?обед\\s*[:.-]?\\s*`, 'i') },
+  { type: 'dinner', re: new RegExp(`${ATE_PREFIX}(?:на\\s+)?ужин\\s*[:.-]?\\s*`, 'i') },
+  {
+    type: 'snack',
+    re: new RegExp(`${ATE_PREFIX}(?:на\\s+)?(?:перекус|полдник|снек)\\s*[:.-]?\\s*`, 'i'),
+  },
+  { type: 'breakfast', re: /(?:^|[\n,;])\s*(?:на\s+)?завтрак\s*[:.-]?\s*/i },
+  { type: 'lunch', re: /(?:^|[\n,;])\s*(?:на\s+)?обед\s*[:.-]?\s*/i },
+  { type: 'dinner', re: /(?:^|[\n,;])\s*(?:на\s+)?ужин\s*[:.-]?\s*/i },
+  { type: 'snack', re: /(?:^|[\n,;])\s*(?:на\s+)?(?:перекус|полдник|снек)\s*[:.-]?\s*/i },
   { type: 'breakfast', re: /\bна\s+завтрак\b/i },
   { type: 'lunch', re: /\bна\s+обед\b/i },
   { type: 'dinner', re: /\bна\s+ужин\b/i },
@@ -54,7 +71,11 @@ export function extractMealTypeFromText(text: string): {
   for (const { type, re } of MEAL_MARKERS) {
     if (re.test(cleaned)) {
       mealType = type
-      cleaned = cleaned.replace(re, ' ').replace(/\s{2,}/g, ' ').trim()
+      cleaned = cleaned
+        .replace(re, ' ')
+        .replace(/^[:.-\s]+/, '')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
       break
     }
   }

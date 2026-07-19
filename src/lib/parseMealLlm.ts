@@ -1,8 +1,9 @@
 import type { FoodRef, MealType, ParsedMealDraft } from '../types'
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
-import { defaultMealTypeForNow } from './labels'
+import { coerceMealType, defaultMealTypeForNow } from './labels'
 import { buildParseMealPrompt } from './parseMealPrompt'
 import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
+import { nonNeg, sanitizeMealItems } from './sanitize'
 
 type LlmItem = {
   name: string
@@ -37,13 +38,13 @@ export async function parseMealWithLlm(
   const parsed = await deepseekJson<LlmResult>(prompt)
 
   let usedZeroFallback = false
-  const items = (parsed.items ?? []).map((item) => {
+  const mapped = (parsed.items ?? []).map((item) => {
     const grams = Number(item.grams) > 0 ? Number(item.grams) : 300
     const name = String(item.name || 'Блюдо')
-    let kcal = Number(item.kcal) || 0
-    let protein = Number(item.protein) || 0
-    let fat = Number(item.fat) || 0
-    let carbs = Number(item.carbs) || 0
+    let kcal = nonNeg(item.kcal)
+    let protein = nonNeg(item.protein)
+    let fat = nonNeg(item.fat)
+    let carbs = nonNeg(item.carbs)
 
     // Flash sometimes returns 0/0/0/0 when unsure — replace with local estimate
     const looksLikeDrink = /вода|чай(?!\s*с)|американо|эспрессо|чёрн\w*\s*кофе/i.test(name)
@@ -68,6 +69,7 @@ export async function parseMealWithLlm(
     }
   })
 
+  const items = sanitizeMealItems(mapped)
   if (items.length === 0) {
     throw new Error('DeepSeek не вернул позиции')
   }
@@ -77,7 +79,7 @@ export async function parseMealWithLlm(
     ? `DeepSeek flash: ${parsed.notes}`
     : 'Оценка через DeepSeek flash (без поиска в интернете).'
   return {
-    mealType: parsed.mealType ?? mealType ?? defaultMealTypeForNow(),
+    mealType: coerceMealType(parsed.mealType ?? mealType, defaultMealTypeForNow()),
     items,
     totals: sumMacros(items),
     isApproximate: true,

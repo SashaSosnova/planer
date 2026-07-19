@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isFirebaseConfigured } from '../firebase'
 import { newId } from '../lib/date'
 import { generateAliases } from '../lib/foodAliases'
 import { sumMacros } from '../lib/nutrition'
+import {
+  assertNonNegMacros,
+  sanitizeMacros,
+  sanitizeMealItems,
+} from '../lib/sanitize'
 import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/cloudSync'
 import { emptyAppData, loadLocalData, saveLocalData } from '../storage/localStore'
 import type {
@@ -17,12 +22,16 @@ import type {
   WeightEntry,
 } from '../types'
 
+const CLOUD_KEYS: (keyof AppData)[] = ['foods', 'meals', 'weights', 'measurements', 'steps']
+
 export function useAppData() {
   const [data, setData] = useState<AppData>(() => loadLocalData())
   const [uid, setUid] = useState<string | null>(null)
   const [ready, setReady] = useState(!isFirebaseConfigured())
   const [cloudError, setCloudError] = useState<string | null>(null)
   const useCloud = Boolean(uid)
+  /** Collections already accepted from cloud (prevents empty first snapshot wiping local). */
+  const cloudHydrated = useRef(new Set<keyof AppData>())
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -31,6 +40,7 @@ export function useAppData() {
     }
     let unsub: (() => void) | undefined
     let cancelled = false
+    cloudHydrated.current = new Set()
     ;(async () => {
       try {
         const user = await ensureAuth()
@@ -42,7 +52,29 @@ export function useAppData() {
         unsub = subscribeUserData(user.uid, {
           onData: (partial) => {
             setData((prev) => {
-              const next = { ...prev, ...partial }
+              const next: AppData = { ...prev }
+              for (const key of CLOUD_KEYS) {
+                if (!(key in partial)) continue
+                const cloudItems = partial[key]
+                if (!Array.isArray(cloudItems)) continue
+                const localItems = prev[key] as Array<{ id: string }>
+                // Empty cloud on first snapshot: seed cloud from local, keep local data.
+                if (
+                  cloudItems.length === 0 &&
+                  localItems.length > 0 &&
+                  !cloudHydrated.current.has(key)
+                ) {
+                  cloudHydrated.current.add(key)
+                  void Promise.all(
+                    localItems.map((item) =>
+                      upsertDoc(user.uid, key, item.id, { ...item } as Record<string, unknown>),
+                    ),
+                  )
+                  continue
+                }
+                cloudHydrated.current.add(key)
+                Object.assign(next, { [key]: cloudItems })
+              }
               saveLocalData(next)
               return next
             })
@@ -74,11 +106,14 @@ export function useAppData() {
   const saveFood = useCallback(
     async (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => {
       const name = input.name.trim()
+      if (!name) throw new Error('Укажите название продукта')
+      const per100g = sanitizeMacros(input.per100g)
+      assertNonNegMacros(per100g)
       const item: FoodItem = {
         id: input.id ?? newId(),
         name,
         aliases: generateAliases(name),
-        per100g: input.per100g,
+        per100g,
         kind: input.kind ?? (input.recipe ? 'dish' : 'ingredient'),
         updatedAt: Date.now(),
         ...(input.recipe ? { recipe: input.recipe } : {}),
@@ -113,7 +148,9 @@ export function useAppData() {
       isApproximate: boolean
       eatingOut?: boolean
     }) => {
-      const totals: MacroSet = sumMacros(input.items)
+      const items = sanitizeMealItems(input.items)
+      if (items.length === 0) throw new Error('Добавьте хотя бы один продукт с граммами > 0')
+      const totals: MacroSet = sumMacros(items)
       let createdAt = Date.now()
       if (input.id) {
         const existing = data.meals.find((m) => m.id === input.id)
@@ -124,7 +161,7 @@ export function useAppData() {
         date: input.date,
         mealType: input.mealType,
         rawText: input.rawText,
-        items: input.items,
+        items,
         totals,
         isApproximate: input.isApproximate,
         eatingOut: Boolean(input.eatingOut),
@@ -150,11 +187,14 @@ export function useAppData() {
 
   const saveWeight = useCallback(
     async (date: string, kg: number) => {
+      if (!Number.isFinite(kg) || kg < 30 || kg > 400) {
+        throw new Error('Укажите вес от 30 до 400 кг')
+      }
       const existing = data.weights.find((w) => w.date === date)
       const entry: WeightEntry = {
         id: existing?.id ?? newId(),
         date,
-        kg,
+        kg: Math.round(kg * 10) / 10,
         createdAt: existing?.createdAt ?? Date.now(),
       }
       if (useCloud && uid) await upsertDoc(uid, 'weights', entry.id, { ...entry })
@@ -169,11 +209,14 @@ export function useAppData() {
 
   const saveSteps = useCallback(
     async (date: string, count: number) => {
+      if (!Number.isFinite(count) || count < 0) {
+        throw new Error('Шаги не могут быть отрицательными')
+      }
       const existing = data.steps.find((s) => s.date === date)
       const entry: StepsEntry = {
         id: existing?.id ?? newId(),
         date,
-        count,
+        count: Math.round(count),
         createdAt: existing?.createdAt ?? Date.now(),
       }
       if (useCloud && uid) await upsertDoc(uid, 'steps', entry.id, { ...entry })
@@ -188,17 +231,29 @@ export function useAppData() {
 
   const saveMeasurement = useCallback(
     async (input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string }) => {
+      const clamp = (v: number | undefined) =>
+        v != null && Number.isFinite(v) && v >= 0 ? Math.round(v * 10) / 10 : undefined
       const existing = data.measurements.find((m) => m.date === input.date)
       const entry: MeasurementEntry = {
         id: input.id ?? existing?.id ?? newId(),
         date: input.date,
-        chest: input.chest,
-        waist: input.waist,
-        belly: input.belly,
-        hips: input.hips,
-        thigh: input.thigh,
-        bicep: input.bicep,
+        chest: clamp(input.chest),
+        waist: clamp(input.waist),
+        belly: clamp(input.belly),
+        hips: clamp(input.hips),
+        thigh: clamp(input.thigh),
+        bicep: clamp(input.bicep),
         createdAt: existing?.createdAt ?? Date.now(),
+      }
+      if (
+        entry.chest == null &&
+        entry.waist == null &&
+        entry.belly == null &&
+        entry.hips == null &&
+        entry.thigh == null &&
+        entry.bicep == null
+      ) {
+        throw new Error('Заполните хотя бы один обмер')
       }
       if (useCloud && uid) await upsertDoc(uid, 'measurements', entry.id, { ...entry })
       persistLocal((prev) => ({

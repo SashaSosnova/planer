@@ -14,7 +14,7 @@ function parseKbjuLine(line: string): MacroSet | null {
     .filter(Boolean)
   if (parts.length !== 4) return null
   const nums = parts.map(Number)
-  if (nums.some((n) => !Number.isFinite(n))) return null
+  if (nums.some((n) => !Number.isFinite(n) || n < 0)) return null
   return { kcal: nums[0], protein: nums[1], fat: nums[2], carbs: nums[3] }
 }
 

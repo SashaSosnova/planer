@@ -1,7 +1,14 @@
 /** Soft measuring / tailor tape icon */
 export function MeasureTapeIcon({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      style={{ width: size, height: size, display: 'block', flexShrink: 0 }}
+    >
       <path
         d="M4.5 8.5c0-1.4 1.1-2.5 2.5-2.5h7.2c3.1 0 5.6 2.5 5.6 5.6v.2c0 3.1-2.5 5.6-5.6 5.6H9.2A2.7 2.7 0 0 1 6.5 14.7V11"
         stroke="currentColor"

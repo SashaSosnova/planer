@@ -18,7 +18,8 @@ type Props = {
 
 function num(v: string): number | undefined {
   const n = Number(v.replace(',', '.'))
-  return Number.isFinite(n) ? n : undefined
+  if (!Number.isFinite(n) || n < 0) return undefined
+  return n
 }
 
 export function MeasuresScreen({ data, onBack, onSave }: Props) {

@@ -231,7 +231,14 @@ export function TodayScreen({
             aria-label="Профиль и норма калорий"
             title="Профиль"
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden
+              style={{ width: 22, height: 22, display: 'block', flexShrink: 0 }}
+            >
               <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
               <path
                 d="M5 19.5c1.2-3.2 3.6-4.8 7-4.8s5.8 1.6 7 4.8"

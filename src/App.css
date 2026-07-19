@@ -45,12 +45,29 @@
   place-items: center;
   padding: 0;
   flex-shrink: 0;
+  overflow: hidden;
+  line-height: 0;
+}
+
+/* Explicit CSS sizes — Android WebView often ignores SVG width/height attributes under text zoom */
+.icon-btn svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  max-width: none;
+  max-height: none;
 }
 
 .icon-btn.sm {
   width: 28px;
   height: 28px;
   border-radius: 8px;
+}
+
+.icon-btn.sm svg {
+  width: 14px;
+  height: 14px;
 }
 
 .icon-btn.warn {

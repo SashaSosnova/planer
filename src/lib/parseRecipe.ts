@@ -4,6 +4,7 @@ import { deepseekJson, isDeepseekConfigured } from './deepseek'
 import { findBestFood } from './foodMatch'
 import { guessFallbackCategory } from './nutrition'
 import { computeRecipe } from './recipeCalc'
+import { nonNeg, sanitizeMacros } from './sanitize'
 
 function extractGrams(line: string): { name: string; grams: number | null } {
   const m = line.trim().match(
@@ -133,36 +134,43 @@ ${text}`
     }>
   }>(prompt)
 
-  const ingredients: RecipeIngredientLine[] = (parsed.ingredients ?? []).map((ing) => {
-    const lib = ing.foodId ? foods.find((f) => f.id === ing.foodId) : findBestFood(ing.name, foods)
-    const yieldInfo = guessYieldFactor(ing.name)
+  const ingredients: RecipeIngredientLine[] = []
+  for (const ing of parsed.ingredients ?? []) {
+    const gramsRaw = nonNeg(ing.gramsRaw)
+    const name = String(ing.name ?? '').trim()
+    if (!name || !(gramsRaw > 0)) continue
+    const lib = ing.foodId ? foods.find((f) => f.id === ing.foodId) : findBestFood(name, foods)
+    const yieldInfo = guessYieldFactor(name)
+    const yieldFactor = Number(ing.yieldFactor) > 0 ? Number(ing.yieldFactor) : yieldInfo.factor
     if (lib) {
-      return {
+      ingredients.push({
         name: lib.name,
-        gramsRaw: Number(ing.gramsRaw) || 0,
+        gramsRaw,
         foodId: lib.id,
-        per100g: lib.per100g,
-        source: 'library' as const,
-        yieldFactor: Number(ing.yieldFactor) > 0 ? Number(ing.yieldFactor) : yieldInfo.factor,
+        per100g: sanitizeMacros(lib.per100g),
+        source: 'library',
+        yieldFactor,
         yieldNote: ing.yieldNote ?? yieldInfo.note,
-      }
+      })
+    } else {
+      ingredients.push({
+        name,
+        gramsRaw,
+        per100g: sanitizeMacros(ing.per100g ?? guessFallbackCategory(name)),
+        source: 'estimate',
+        yieldFactor,
+        yieldNote: ing.yieldNote ?? yieldInfo.note,
+      })
     }
-    return {
-      name: String(ing.name),
-      gramsRaw: Number(ing.gramsRaw) || 0,
-      per100g: ing.per100g ?? guessFallbackCategory(ing.name),
-      source: 'estimate' as const,
-      yieldFactor: Number(ing.yieldFactor) > 0 ? Number(ing.yieldFactor) : yieldInfo.factor,
-      yieldNote: ing.yieldNote ?? yieldInfo.note,
-    }
-  })
+  }
 
   if (ingredients.length === 0) throw new Error('DeepSeek не вернул ингредиенты')
 
+  const cookedOverride = nonNeg(parsed.cookedGramsEstimate, 0)
   return computeRecipe({
-    name: parsed.name || 'Блюдо',
+    name: String(parsed.name || 'Блюдо').trim() || 'Блюдо',
     ingredients,
-    cookedGramsOverride: parsed.cookedGramsEstimate ?? null,
+    cookedGramsOverride: cookedOverride > 0 ? cookedOverride : null,
     notes: parsed.notes,
   })
 }

@@ -6,6 +6,7 @@ import { isComplexMealText } from './mealComplexity'
 import {
   guessFallbackCategory,
   restaurantPortionGrams,
+  round1,
   scalePer100g,
   sumMacros,
 } from './nutrition'
@@ -111,11 +112,22 @@ function expandWithParts(seg: Segment): Segment[] {
   const addon = resolveAddon(withPart)
   if (!addon) return [seg]
 
+  // Explicit total weight (e.g. «кофе с молоком 200 г») — allocate, don't double-count.
+  if (seg.grams != null && seg.grams > 0) {
+    const addonGrams = Math.min(addon.grams, seg.grams)
+    const baseGrams = round1(seg.grams - addonGrams)
+    if (baseGrams <= 0) return [seg]
+    return [
+      { raw: baseName, name: baseName, grams: baseGrams },
+      { raw: `${addon.name} ${addonGrams} г`, name: addon.name, grams: addonGrams },
+    ]
+  }
+
   return [
     {
       raw: baseName,
       name: baseName,
-      grams: seg.grams ?? defaultGramsForBase(baseName),
+      grams: defaultGramsForBase(baseName),
     },
     {
       raw: `${addon.name} ${addon.grams} г`,
@@ -179,6 +191,8 @@ function tryMatchWholeFood(
   eatingOut: boolean,
 ): ParsedMealDraft | null {
   if (eatingOut || foods.length === 0) return null
+  // Multi-item lists must go through splitSegments, not a single fuzzy hit.
+  if (/[,;\n]/.test(text)) return null
 
   const collapsed = text.replace(/\s+/g, ' ').trim()
   const { name, grams } = extractGrams(collapsed)

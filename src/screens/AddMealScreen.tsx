@@ -113,7 +113,7 @@ export function AddMealScreen({
     try {
       await onSaveMeal({
         date,
-        mealType: draft.mealType,
+        mealType,
         rawText: text.trim(),
         items: draft.items,
         isApproximate: draft.isApproximate,
@@ -227,6 +227,8 @@ export function AddMealScreen({
                 onChange={(e) => {
                   setDate(e.target.value)
                   setMealTypeTouched(false)
+                  setDraft(null)
+                  setInfo(null)
                 }}
               />
             </label>
@@ -236,7 +238,9 @@ export function AddMealScreen({
                 value={mealType}
                 onChange={(e) => {
                   setMealTypeTouched(true)
-                  setMealType(e.target.value as MealType)
+                  const next = e.target.value as MealType
+                  setMealType(next)
+                  setDraft((prev) => (prev ? { ...prev, mealType: next } : prev))
                 }}
               >
                 {(Object.keys(MEAL_TYPE_LABELS) as MealType[]).map((key) => (
@@ -257,6 +261,9 @@ export function AddMealScreen({
               onChange={(e) => {
                 const value = e.target.value
                 setText(value)
+                // Draft is tied to the calculated text — invalidate on edit.
+                setDraft(null)
+                setInfo(null)
                 const hinted = extractMealTypeFromText(value).mealType
                 if (hinted) {
                   setMealType(hinted)

@@ -19,7 +19,17 @@ function formatPer100(m: MacroSet): string {
 
 function parseNum(value: string): number | null {
   const n = Number(value.replace(',', '.'))
-  return Number.isFinite(n) ? n : null
+  if (!Number.isFinite(n) || n < 0) return null
+  return n
+}
+
+function clampMacroPatch(patch: Partial<MealItem>): Partial<MealItem> {
+  const out: Partial<MealItem> = { ...patch }
+  for (const key of ['grams', 'kcal', 'protein', 'fat', 'carbs'] as const) {
+    const v = out[key]
+    if (v != null && (!Number.isFinite(v) || v < 0)) delete out[key]
+  }
+  return out
 }
 
 export function applyItemPatch(
@@ -28,36 +38,37 @@ export function applyItemPatch(
   patch: Partial<MealItem>,
   foods: FoodItem[],
 ): MealItem[] {
+  const safe = clampMacroPatch(patch)
   return items.map((item, i) => {
     if (i !== index) return item
 
-    if (patch.source === 'library') {
-      return { ...item, ...patch, source: 'library' as const }
+    if (safe.source === 'library') {
+      return { ...item, ...safe, source: 'library' as const }
     }
 
     const editingMacros =
-      patch.kcal != null || patch.protein != null || patch.fat != null || patch.carbs != null
+      safe.kcal != null || safe.protein != null || safe.fat != null || safe.carbs != null
 
-    if (editingMacros && patch.grams == null) {
+    if (editingMacros && safe.grams == null) {
       return {
         ...item,
-        ...patch,
+        ...safe,
         foodId: undefined,
         source: 'estimate' as const,
       }
     }
 
-    const next = { ...item, ...patch }
-    const foodId = patch.foodId ?? item.foodId
-    if (patch.grams != null && foodId) {
+    const next = { ...item, ...safe }
+    const foodId = safe.foodId ?? item.foodId
+    if (safe.grams != null && foodId) {
       const food = foods.find((f) => f.id === foodId)
       if (food) {
-        const macros = scalePer100g(food.per100g, patch.grams)
+        const macros = scalePer100g(food.per100g, safe.grams)
         return { ...next, foodId, ...macros, source: 'library' as const }
       }
     }
-    if (patch.grams != null && item.grams > 0) {
-      const k = patch.grams / item.grams
+    if (safe.grams != null && item.grams > 0) {
+      const k = safe.grams / item.grams
       return {
         ...next,
         kcal: Math.round(item.kcal * k * 10) / 10,

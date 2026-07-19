@@ -38,3 +38,9 @@ android/local.properties
 # Firebase functions
 functions/lib
 functions/node_modules
+
+# Sticker processing leftovers
+public/stickers-bak/
+.check-alpha-out.txt
+.gojo-meta.txt
+

@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   ACHIEVEMENT_GROUP_LABELS,
   evaluateAchievements,
@@ -32,7 +32,7 @@ function StickerVisual({
       <span className={`sticker-frame${unlocked ? ' unlocked' : ' locked'}`}>
         <img
           src={stickerSrc(artKey)}
-          alt={unlocked ? character : ''}
+          alt=""
           className="sticker-img"
           draggable={false}
         />
@@ -40,37 +40,44 @@ function StickerVisual({
     )
   }
   return (
-    <span className={`achievement-mark sticker-slot${unlocked ? '' : ' locked'}`} aria-hidden>
-      {unlocked ? character.slice(0, 1) : '?'}
+    <span className={`sticker-frame placeholder${unlocked ? ' unlocked' : ' locked'}`}>
+      <span className="sticker-placeholder-letter">
+        {unlocked ? character.slice(0, 1) : '?'}
+      </span>
     </span>
   )
 }
 
-function GroupList({
+function GroupGrid({
   title,
   items,
+  onInfo,
 }: {
   title: string
   items: AchievementStatus[]
+  onInfo: (item: AchievementStatus) => void
 }) {
   if (items.length === 0) return null
   return (
     <div className="achievements-group">
       <h2 className="subhead">{title}</h2>
-      <ul className="achievements-list">
+      <ul className="sticker-grid">
         {items.map((a) => (
-          <li key={a.id} className={`achievement-card${a.unlocked ? ' unlocked' : ''}`}>
-            <StickerVisual
-              artKey={a.sticker.artKey}
-              character={a.sticker.character}
-              unlocked={a.unlocked}
-            />
-            <div>
-              <strong>{a.title}</strong>
-              <p className="muted small">{a.description}</p>
-              <p className="muted small sticker-character">
-                {a.unlocked ? a.sticker.character : '???'}
-              </p>
+          <li key={a.id} className={`sticker-cell${a.unlocked ? ' unlocked' : ''}`}>
+            <div className="sticker-cell-inner">
+              <StickerVisual
+                artKey={a.sticker.artKey}
+                character={a.sticker.character}
+                unlocked={a.unlocked}
+              />
+              <button
+                type="button"
+                className="sticker-info-btn"
+                aria-label={`Как получить: ${a.title}`}
+                onClick={() => onInfo(a)}
+              >
+                i
+              </button>
             </div>
           </li>
         ))}
@@ -85,6 +92,7 @@ export function AchievementsScreen({ data, targetWeightKg, onBack }: Props) {
     [data, targetWeightKg],
   )
   const { unlocked, total } = unlockedCount(statuses)
+  const [info, setInfo] = useState<AchievementStatus | null>(null)
 
   return (
     <section className="screen">
@@ -94,17 +102,55 @@ export function AchievementsScreen({ data, targetWeightKg, onBack }: Props) {
         </button>
         <h1>Достижения</h1>
         <p className="muted">
-          {unlocked} из {total} · коллекция стикеров за привычки
+          {unlocked} из {total} · коллекция стикеров
         </p>
       </header>
 
       {GROUP_ORDER.map((group) => (
-        <GroupList
+        <GroupGrid
           key={group}
           title={ACHIEVEMENT_GROUP_LABELS[group]}
           items={statuses.filter((s) => s.group === group)}
+          onInfo={setInfo}
         />
       ))}
+
+      {info && (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => setInfo(null)}
+        >
+          <div
+            className="modal-card sticker-info-card"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sticker-info-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sticker-info-visual">
+              <StickerVisual
+                artKey={info.sticker.artKey}
+                character={info.sticker.character}
+                unlocked={info.unlocked}
+              />
+            </div>
+            <h2 id="sticker-info-title" className="subhead" style={{ marginTop: 0 }}>
+              {info.title}
+            </h2>
+            <p className="muted small">
+              {info.unlocked ? 'Уже есть' : 'Как получить'}
+              {info.unlocked ? ` · ${info.sticker.character}` : ''}
+            </p>
+            <p>{info.description}</p>
+            <div className="btn-row">
+              <button type="button" className="primary-btn" onClick={() => setInfo(null)}>
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

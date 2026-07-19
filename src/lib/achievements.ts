@@ -34,9 +34,11 @@ export type AchievementId =
 export type StickerUniverse =
   | 'jujutsu'
   | 'aot'
-  | 'lotr'
-  | 'expedition33'
-  | 'witcher'
+  | 'deathnote'
+  | 'dmc'
+  | 'codegeass'
+  | 'sailormoon'
+  | 'pandorahearts'
 
 export type AchievementSticker = {
   character: string
@@ -63,14 +65,14 @@ export const ACHIEVEMENT_CATALOG: AchievementDef[] = [
     title: 'Первая запись',
     description: 'Добавили приём пищи в дневник',
     group: 'habits',
-    sticker: { character: 'Гюстав', universe: 'expedition33', artKey: 'gustave' },
+    sticker: { character: 'Оз', universe: 'pandorahearts', artKey: 'oz' },
   },
   {
     id: 'diary_3',
     title: '3 дня подряд',
     description: 'Дневник питания три дня подряд',
     group: 'habits',
-    sticker: { character: 'Сэм', universe: 'lotr', artKey: 'sam' },
+    sticker: { character: 'Брейк', universe: 'pandorahearts', artKey: 'xbreak' },
   },
   {
     id: 'diary_7',
@@ -84,14 +86,14 @@ export const ACHIEVEMENT_CATALOG: AchievementDef[] = [
     title: 'Месяц привычки',
     description: '30 дней подряд с записями о еде',
     group: 'habits',
-    sticker: { character: 'Фродо', universe: 'lotr', artKey: 'frodo' },
+    sticker: { character: 'Армин', universe: 'aot', artKey: 'armin' },
   },
   {
     id: 'weigh_first',
     title: 'Точка отсчёта',
     description: 'Первое взвешивание',
     group: 'body',
-    sticker: { character: 'Геральт', universe: 'witcher', artKey: 'geralt' },
+    sticker: { character: 'L', universe: 'deathnote', artKey: 'lawliet' },
   },
   {
     id: 'weigh_week',
@@ -112,21 +114,21 @@ export const ACHIEVEMENT_CATALOG: AchievementDef[] = [
     title: 'Зелёный день',
     description: `День с ${VEG_GOAL_G} г овощей`,
     group: 'habits',
-    sticker: { character: 'Плотва', universe: 'witcher', artKey: 'roach' },
+    sticker: { character: 'Саша', universe: 'aot', artKey: 'sasha' },
   },
   {
     id: 'veg_week',
     title: 'Овощная неделя',
     description: `5 дней с нормой овощей за 7 дней`,
     group: 'habits',
-    sticker: { character: 'Трисс', universe: 'witcher', artKey: 'triss' },
+    sticker: { character: 'Сейлор Юпитер', universe: 'sailormoon', artKey: 'jupiter' },
   },
   {
     id: 'protein_day',
     title: 'Белковый день',
     description: 'День в зоне цели по белку',
     group: 'habits',
-    sticker: { character: 'Леви', universe: 'aot', artKey: 'levi' },
+    sticker: { character: 'Маки', universe: 'jujutsu', artKey: 'maki' },
   },
   {
     id: 'protein_3',
@@ -154,56 +156,56 @@ export const ACHIEVEMENT_CATALOG: AchievementDef[] = [
     title: 'Динамика фигуры',
     description: 'Повторные обмеры через 2+ недели',
     group: 'body',
-    sticker: { character: 'Ханджи', universe: 'aot', artKey: 'hange' },
+    sticker: { character: 'Эрвин', universe: 'aot', artKey: 'erwin' },
   },
   {
     id: 'own_food',
     title: 'Своя полка',
     description: 'Добавили продукт в библиотеку',
     group: 'habits',
-    sticker: { character: 'Люна', universe: 'expedition33', artKey: 'lune' },
+    sticker: { character: 'Рюк', universe: 'deathnote', artKey: 'ryuk' },
   },
   {
     id: 'own_recipe',
     title: 'Свой рецепт',
     description: 'Сохранили блюдо с рецептом',
     group: 'habits',
-    sticker: { character: 'Трисс', universe: 'witcher', artKey: 'triss' },
+    sticker: { character: 'Алиса', universe: 'pandorahearts', artKey: 'alice' },
   },
   {
     id: 'mood_3',
     title: 'Как я сегодня',
     description: 'Настроение отмечено 3 дня',
     group: 'wellness',
-    sticker: { character: 'Галадриэль', universe: 'lotr', artKey: 'galadriel' },
+    sticker: { character: 'C.C.', universe: 'codegeass', artKey: 'cc' },
   },
   {
     id: 'mood_7',
     title: 'Неделя чувств',
     description: 'Настроение 7 дней подряд',
     group: 'wellness',
-    sticker: { character: 'Йеннифер', universe: 'witcher', artKey: 'yennefer' },
+    sticker: { character: 'Усаги', universe: 'sailormoon', artKey: 'usagi' },
   },
   {
     id: 'sleep_3',
     title: 'Сон в фокусе',
     description: 'Сон записан 3 дня',
     group: 'wellness',
-    sticker: { character: 'Маэль', universe: 'expedition33', artKey: 'maelle' },
+    sticker: { character: 'Ниа', universe: 'deathnote', artKey: 'near' },
   },
   {
     id: 'sleep_good',
     title: 'Выспалась',
     description: '≥7 часов сна три дня подряд',
     group: 'wellness',
-    sticker: { character: 'Галадриэль', universe: 'lotr', artKey: 'galadriel' },
+    sticker: { character: 'Сейлор Меркурий', universe: 'sailormoon', artKey: 'mercury' },
   },
   {
     id: 'cycle_start',
     title: 'Цикл учтён',
     description: 'Отметили начало месячных',
     group: 'wellness',
-    sticker: { character: 'Йеннифер', universe: 'witcher', artKey: 'yennefer' },
+    sticker: { character: 'Сейлор Марс', universe: 'sailormoon', artKey: 'mars' },
   },
   {
     id: 'target_set',
@@ -224,14 +226,14 @@ export const ACHIEVEMENT_CATALOG: AchievementDef[] = [
     title: 'Середина пути',
     description: 'Прошли половину пути к целевому весу',
     group: 'body',
-    sticker: { character: 'Цири', universe: 'witcher', artKey: 'ciri' },
+    sticker: { character: 'Лелуш', universe: 'codegeass', artKey: 'lelouch' },
   },
   {
     id: 'goal_reached',
     title: 'Цель рядом',
     description: 'Достигли целевого веса (или почти)',
     group: 'body',
-    sticker: { character: 'Арагорн', universe: 'lotr', artKey: 'aragorn' },
+    sticker: { character: 'Данте', universe: 'dmc', artKey: 'dante' },
   },
 ]
 

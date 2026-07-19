@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Planer</string>
+    <string name="title_activity_main">Planer</string>
+    <string name="package_name">com.sosnova.planer</string>
+    <string name="custom_url_scheme">com.sosnova.planer</string>
+</resources>

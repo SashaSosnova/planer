@@ -1,0 +1,17 @@
+---
+description: Как делать релиз APK для Planer — только CI, не локальный Gradle
+alwaysApply: true
+---
+
+# Android release
+
+APK **собирается автоматически** GitHub Actions при push в `main` (workflow `.github/workflows/android-apk.yml`).
+
+Когда просят «релиз» / «собрать APK» / «запушить и собрать»:
+
+1. Закоммить изменения (версия в `android/app/build.gradle`: `versionCode` + `versionName`, стиль коммита `Release X.Y.Z: …`).
+2. Запушить в `main`.
+3. **Не** запускать локально `gradlew`, `npm run apk:debug`, `npm run apk:release`, не искать JDK/`JAVA_HOME`.
+4. Сказать, что сборка идёт в Actions: https://github.com/SashaSosnova/planer/actions
+
+Локальную сборку APK делать только если пользователь **явно** просит именно локальный Gradle/APK на этой машине.

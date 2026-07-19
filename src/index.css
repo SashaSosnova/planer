@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Fraunces:opsz,wght@9..144,600&display=swap');
+
+:root {
+  color-scheme: light;
+  --bg: #e8f0f2;
+  --bg-deep: #d5e4e8;
+  --surface: #f7fbfc;
+  --ink: #14262c;
+  --muted: #5a7178;
+  --line: #c5d6dc;
+  --accent: #0f4c5c;
+  --accent-soft: #d2e8ee;
+  --warm: #b85c38;
+  --warm-soft: #f3e2d8;
+  --ok: #2f7d4c;
+  --danger: #a33b3b;
+  --shadow: 0 1px 0 rgba(20, 38, 44, 0.04);
+  --radius: 16px;
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --nav-pad-y: 10px;
+  --nav-btn-h: 48px;
+  --nav-bar-h: calc(var(--nav-pad-y) + var(--nav-btn-h) + var(--nav-pad-y));
+  --nav-total-h: calc(var(--nav-bar-h) + var(--safe-bottom));
+  font-family: 'DM Sans', system-ui, sans-serif;
+  line-height: 1.45;
+  font-weight: 400;
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse 70% 45% at 0% 0%, #cfe3e9 0%, transparent 55%),
+    radial-gradient(ellipse 55% 35% at 100% 10%, #e8ddd4 0%, transparent 50%),
+    var(--bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-width: 320px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --safe-bottom: max(
+      28px,
+      var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+    );
+    --safe-top: max(12px, var(--safe-area-inset-top, env(safe-area-inset-top, 0px)));
+  }
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+h1,
+h2,
+h3 {
+  font-family: Fraunces, Georgia, serif;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+}

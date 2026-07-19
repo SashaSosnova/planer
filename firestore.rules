@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Sheduler — семейный код
+    match /families/{familyCode} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Tom Sawyer reader
+    match /tomSawyerFamilies/{familyCode} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Planer — личные данные (doc id = auth.uid)
+    match /planer/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /planer/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

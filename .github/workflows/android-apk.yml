@@ -103,9 +103,9 @@ jobs:
           gh release delete apk-latest --yes --cleanup-tag || true
           gh release create apk-latest \
             release/planer.apk \
-            --title "Planer 1.0.0" \
+            --title "Planer 1.0.1" \
             --notes "$(cat <<'EOF'
-          **Planer v1.0.0** — APK для установки с файла.
+          **Planer v1.0.1** — APK для установки с файла.
 
           Package id: `com.sosnova.planer`.
 

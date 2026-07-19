@@ -336,11 +336,6 @@
   max-width: 60%;
 }
 
-@media (max-width: 420px) {
-  .day-log-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 .calorie-ring {
   --ring-color: var(--ok);
@@ -500,12 +495,21 @@
 
 @media (max-width: 420px) {
   .today-hero {
-    grid-template-columns: 1fr;
-    justify-items: center;
+    gap: 10px;
+    align-items: start;
   }
 
-  .today-hero-side {
-    width: 100%;
+  .day-log-card {
+    gap: 6px;
+    padding: 10px;
+  }
+
+  .day-log-value {
+    font-size: 1.15rem;
+  }
+
+  .calorie-ring.size-lg .calorie-ring-center strong {
+    font-size: 1.25rem;
   }
 }
 

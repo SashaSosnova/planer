@@ -98,11 +98,14 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         <label className="field">
           <span>Ккал · белки · жиры · углеводы (на 100 г)</span>
           <input
-            inputMode="decimal"
+            inputMode="text"
+            enterKeyHint="done"
             value={kbju}
             onChange={(e) => setKbju(e.target.value)}
             placeholder="140 20 6 0"
             autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
           />
         </label>
         <div className="btn-row">

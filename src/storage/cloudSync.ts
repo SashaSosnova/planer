@@ -133,13 +133,30 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
   }
 }
 
+/** Firestore rejects `undefined` field values — drop them before write. */
+function stripUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(stripUndefined)
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v === undefined) continue
+      out[k] = stripUndefined(v)
+    }
+    return out
+  }
+  return value
+}
+
 export async function upsertDoc(
   uid: string,
   colName: string,
   id: string,
   data: Record<string, unknown>,
 ): Promise<void> {
-  await setDoc(doc(planerCol(uid, colName), id), data, { merge: true })
+  const clean = stripUndefined(data) as Record<string, unknown>
+  await setDoc(doc(planerCol(uid, colName), id), clean, { merge: true })
 }
 
 export async function removeDoc(uid: string, colName: string, id: string): Promise<void> {

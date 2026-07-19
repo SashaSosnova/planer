@@ -254,7 +254,7 @@ export function TodayScreen({
         <CalorieRing
           eaten={today.totals.kcal}
           goal={dailyKcalGoal}
-          size="lg"
+          size="md"
           approximate={today.approximate}
         />
         <div className="today-hero-side">

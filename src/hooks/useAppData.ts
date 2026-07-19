@@ -80,8 +80,8 @@ export function useAppData() {
         aliases: generateAliases(name),
         per100g: input.per100g,
         kind: input.kind ?? (input.recipe ? 'dish' : 'ingredient'),
-        recipe: input.recipe,
         updatedAt: Date.now(),
+        ...(input.recipe ? { recipe: input.recipe } : {}),
       }
       if (useCloud && uid) {
         await upsertDoc(uid, 'foods', item.id, { ...item })

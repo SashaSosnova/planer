@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   bmrMifflin,
   calcDailyKcalGoal,
+  calcMaintainKcalGoal,
   isProfileComplete,
   type BodyProfile,
 } from './calorieGoal'
@@ -45,6 +46,18 @@ describe('calcDailyKcalGoal', () => {
     const maintain = calcDailyKcalGoal({ ...baseProfile, goalMode: 'maintain' }, 60)
     const loss = calcDailyKcalGoal({ ...baseProfile, goalMode: 'loss' }, 60)
     expect(maintain).toBeGreaterThan(loss)
+  })
+})
+
+describe('calcMaintainKcalGoal', () => {
+  it('matches goalMode maintain', () => {
+    const withLoss = { ...baseProfile, goalMode: 'loss' as const }
+    expect(calcMaintainKcalGoal(withLoss, 60)).toBe(
+      calcDailyKcalGoal({ ...baseProfile, goalMode: 'maintain' }, 60),
+    )
+    expect(calcMaintainKcalGoal(withLoss, 60)).toBeGreaterThan(
+      calcDailyKcalGoal(withLoss, 60),
+    )
   })
 })
 

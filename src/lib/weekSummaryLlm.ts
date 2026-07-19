@@ -42,7 +42,7 @@ export function localWeekNutritionNote(week: WeekStats): string {
   const c = Math.round(week.totals.carbs / daysWithFood)
   const outDays = week.days.filter((d) => d.meals.some((m) => m.eatingOut)).length
   const parts = [
-    `В среднем ~${avg} ккал/день (Б ${p} · Ж ${f} · У ${c}).`,
+    `В среднем ${avg} ккал/день (Б ${p} · Ж ${f} · У ${c}).`,
   ]
   if (outDays > 0) parts.push(`Вне дома: ${outDays} дн.`)
   if (week.weightDelta != null) {

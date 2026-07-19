@@ -28,6 +28,7 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
   const [count, setCount] = useState(today?.count?.toString() ?? '')
   const [busy, setBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
+  const [showSync, setShowSync] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [syncMsg, setSyncMsg] = useState<string | null>(null)
   const healthSupported = isHealthStepsSupported()
@@ -103,41 +104,22 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
         <h1>Шаги</h1>
       </header>
 
-      {healthSupported && (
-        <div className="panel">
-          <h2 className="subhead" style={{ marginTop: 0 }}>
-            С часов
-          </h2>
-          <p className="muted small" style={{ marginTop: 0 }}>
-            Galaxy Watch → Samsung Health → Health Connect → Planer. Один раз
-            разрешите доступ к шагам.
-          </p>
-          <div className="btn-row">
-            <button
-              type="button"
-              className="primary-btn"
-              disabled={syncBusy || busy}
-              onClick={() => void importFromWatch()}
-            >
-              {syncBusy ? 'Импорт…' : 'Импорт из Health Connect'}
-            </button>
-            <button
-              type="button"
-              className="ghost-btn"
-              disabled={syncBusy}
-              onClick={() => void openHealthConnectSettings()}
-            >
-              Настройки
-            </button>
-          </div>
-          {syncMsg && <p className="form-msg">{syncMsg}</p>}
-        </div>
-      )}
-
       <div className="panel">
-        <h2 className="subhead" style={{ marginTop: 0 }}>
-          Сегодня · {formatRuDate(date)}
-        </h2>
+        <div className="section-head" style={{ marginBottom: 4 }}>
+          <h2 className="subhead" style={{ marginTop: 0 }}>
+            Сегодня · {formatRuDate(date)}
+          </h2>
+          {healthSupported && (
+            <button
+              type="button"
+              className="link-btn"
+              onClick={() => setShowSync((v) => !v)}
+              aria-expanded={showSync}
+            >
+              {showSync ? 'Скрыть' : 'С часов'}
+            </button>
+          )}
+        </div>
         <div className="day-log-edit">
           <input
             className="day-log-input"
@@ -156,6 +138,33 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
           </button>
         </div>
         {error && <p className="form-msg error">{error}</p>}
+        {healthSupported && showSync && (
+          <div className="steps-sync-block">
+            <p className="muted small" style={{ marginTop: 0 }}>
+              Galaxy Watch → Samsung Health → Health Connect → Planer. Один раз
+              разрешите доступ к шагам.
+            </p>
+            <div className="btn-row">
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={syncBusy || busy}
+                onClick={() => void importFromWatch()}
+              >
+                {syncBusy ? 'Импорт…' : 'Импорт из Health Connect'}
+              </button>
+              <button
+                type="button"
+                className="ghost-btn"
+                disabled={syncBusy}
+                onClick={() => void openHealthConnectSettings()}
+              >
+                Настройки
+              </button>
+            </div>
+            {syncMsg && <p className="form-msg">{syncMsg}</p>}
+          </div>
+        )}
       </div>
 
       {series[0] && series[0].points.length > 0 && (

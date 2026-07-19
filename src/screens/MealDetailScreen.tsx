@@ -117,7 +117,7 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
         <p className="muted small">{meal.date}</p>
       </header>
 
-      <MacroBar totals={totals} approximate={isApproximate} />
+      <MacroBar totals={totals} />
 
       <MealDraftEditor
         key={meal.id}

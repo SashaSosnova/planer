@@ -139,7 +139,6 @@ export function MealDraftEditor({
                   <strong className="draft-compact-name">{item.name}</strong>
                   <p className="muted small">
                     {item.grams} г · {formatPortion(item)}
-                    {item.source === 'estimate' || !fromLibrary ? ' ≈' : ''}
                   </p>
                 </div>
                 <button

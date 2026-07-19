@@ -7,7 +7,6 @@ import {
   syncStepsFromHealth,
 } from './lib/healthSteps'
 import { AddMealScreen } from './screens/AddMealScreen'
-import { MeasuresScreen } from './screens/MeasuresScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
 import { StepsHistoryScreen } from './screens/StepsHistoryScreen'
@@ -19,7 +18,6 @@ type Overlay =
   | { type: 'add-meal' }
   | { type: 'edit-meal'; mealId: string }
   | { type: 'profile' }
-  | { type: 'measures' }
   | { type: 'weight-history' }
   | { type: 'steps-history' }
   | null
@@ -45,8 +43,14 @@ export default function App() {
     return sorted[0]?.kg
   }, [data.weights])
 
-  const { dailyKcalGoal, profileReady, saveProfile, syncGoalFromWeight } =
-    useSettings(latestWeightKg)
+  const {
+    dailyKcalGoal,
+    maintainKcalGoal,
+    proteinGoal,
+    profileReady,
+    saveProfile,
+    syncGoalFromWeight,
+  } = useSettings(latestWeightKg)
 
   const saveStepsRef = useRef(saveSteps)
   saveStepsRef.current = saveSteps
@@ -109,11 +113,12 @@ export default function App() {
           <TodayScreen
             data={data}
             dailyKcalGoal={dailyKcalGoal}
+            maintainKcalGoal={maintainKcalGoal}
+            proteinGoal={proteinGoal}
             profileReady={profileReady}
             onAddMeal={() => setOverlay({ type: 'add-meal' })}
             onOpenMeal={(mealId) => setOverlay({ type: 'edit-meal', mealId })}
             onOpenProfile={() => setOverlay({ type: 'profile' })}
-            onOpenMeasures={() => setOverlay({ type: 'measures' })}
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
             onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
             onSaveWeight={async (date, kg) => {
@@ -156,11 +161,12 @@ export default function App() {
         )}
 
         {overlay?.type === 'profile' && (
-          <ProfileScreen data={data} onBack={closeOverlay} onSaveProfile={saveProfile} />
-        )}
-
-        {overlay?.type === 'measures' && (
-          <MeasuresScreen data={data} onBack={closeOverlay} onSave={saveMeasurement} />
+          <ProfileScreen
+            data={data}
+            onBack={closeOverlay}
+            onSaveProfile={saveProfile}
+            onSaveMeasurement={saveMeasurement}
+          />
         )}
 
         {overlay?.type === 'weight-history' && (

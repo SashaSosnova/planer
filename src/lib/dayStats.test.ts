@@ -50,6 +50,39 @@ describe('statsForDate', () => {
     }
     expect(statsForDate(data, '2026-07-15').approximate).toBe(true)
   })
+
+  it('sums vegetable grams from meal items', () => {
+    const data: AppData = {
+      ...empty,
+      meals: [
+        meal({
+          id: '1',
+          date: '2026-07-15',
+          items: [
+            {
+              name: 'огурец',
+              grams: 120,
+              kcal: 0,
+              protein: 0,
+              fat: 0,
+              carbs: 0,
+              source: 'estimate',
+            },
+            {
+              name: 'курица',
+              grams: 100,
+              kcal: 0,
+              protein: 0,
+              fat: 0,
+              carbs: 0,
+              source: 'estimate',
+            },
+          ],
+        }),
+      ],
+    }
+    expect(statsForDate(data, '2026-07-15').vegGrams).toBe(120)
+  })
 })
 
 describe('buildWeekStats', () => {

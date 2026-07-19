@@ -8,13 +8,23 @@ import {
   type GoalMode,
   type Sex,
 } from '../lib/calorieGoal'
+import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
 import { loadSettings } from '../lib/settings'
-import type { AppData } from '../types'
+import type { AppData, MeasurementEntry } from '../types'
+import { MeasuresPanel } from './MeasuresScreen'
+
+const SEX_LABELS: Record<Sex, string> = {
+  female: 'Женский',
+  male: 'Мужской',
+}
 
 type Props = {
   data: AppData
   onBack: () => void
   onSaveProfile: (profile: BodyProfile, weightKg: number) => { dailyKcalGoal: number }
+  onSaveMeasurement: (
+    input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string },
+  ) => Promise<unknown>
 }
 
 function latestWeight(data: AppData): number | undefined {
@@ -22,11 +32,12 @@ function latestWeight(data: AppData): number | undefined {
   return sorted[0]?.kg
 }
 
-export function ProfileScreen({ data, onBack, onSaveProfile }: Props) {
+export function ProfileScreen({ data, onBack, onSaveProfile, onSaveMeasurement }: Props) {
   const saved = loadSettings()
   const savedProfile = saved.profile
   const weightKg = latestWeight(data)
 
+  const [editing, setEditing] = useState(!savedProfile)
   const [sex, setSex] = useState<Sex>(savedProfile?.sex ?? 'female')
   const [age, setAge] = useState(savedProfile?.age?.toString() ?? '')
   const [heightCm, setHeightCm] = useState(savedProfile?.heightCm?.toString() ?? '')
@@ -55,6 +66,8 @@ export function ProfileScreen({ data, onBack, onSaveProfile }: Props) {
       ? calcDailyKcalGoal(savedProfile, weightKg)
       : saved.dailyKcalGoal
 
+  const proteinGoal = weightKg != null ? calcProteinGoal(weightKg) : null
+
   const save = () => {
     const ageN = Number(age.replace(',', '.'))
     const h = Number(heightCm.replace(',', '.'))
@@ -80,7 +93,19 @@ export function ProfileScreen({ data, onBack, onSaveProfile }: Props) {
       },
       weightKg,
     )
-    onBack()
+    setError(null)
+    setEditing(false)
+  }
+
+  const cancelEdit = () => {
+    if (!savedProfile) return
+    setSex(savedProfile.sex)
+    setAge(savedProfile.age.toString())
+    setHeightCm(savedProfile.heightCm.toString())
+    setActivity(savedProfile.activity)
+    setGoalMode(savedProfile.goalMode)
+    setError(null)
+    setEditing(false)
   }
 
   return (
@@ -90,77 +115,111 @@ export function ProfileScreen({ data, onBack, onSaveProfile }: Props) {
           ← Назад
         </button>
         <h1>Профиль</h1>
-        <p className="muted">Норма калорий по весу, росту и активности</p>
+        <p className="muted">Норма калорий, параметры и обмеры</p>
       </header>
 
-      {savedProfile && (
-        <p className="profile-goal-preview">
-          Сейчас: <strong>{liveGoal} ккал/день</strong>
-          {weightKg != null ? ` · вес ${weightKg} кг` : ''}
-        </p>
-      )}
+      {savedProfile && !editing ? (
+        <div className="panel">
+          <div className="profile-summary">
+            <div className="profile-summary-text">
+              <strong>{liveGoal} ккал/день</strong>
+              <p className="muted small">
+                {[
+                  weightKg != null ? `${weightKg} кг` : null,
+                  proteinGoal != null ? `белок ${proteinGoal} г` : null,
+                  `овощи ${VEG_GOAL_G} г`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </p>
+              <p className="muted small">
+                {SEX_LABELS[savedProfile.sex]} · {savedProfile.age} лет ·{' '}
+                {savedProfile.heightCm} см · {ACTIVITY_LABELS[savedProfile.activity]} ·{' '}
+                {GOAL_MODE_LABELS[savedProfile.goalMode]}
+              </p>
+            </div>
+          </div>
+          <button type="button" className="ghost-btn" onClick={() => setEditing(true)}>
+            Изменить параметры
+          </button>
+        </div>
+      ) : (
+        <div className="panel">
+          <div className="form-grid">
+            <label className="field">
+              <span>Пол</span>
+              <select value={sex} onChange={(e) => setSex(e.target.value as Sex)}>
+                <option value="female">Женский</option>
+                <option value="male">Мужской</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Возраст</span>
+              <input
+                inputMode="numeric"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                placeholder="лет"
+              />
+            </label>
+            <label className="field">
+              <span>Рост, см</span>
+              <input
+                inputMode="decimal"
+                value={heightCm}
+                onChange={(e) => setHeightCm(e.target.value)}
+                placeholder="см"
+              />
+            </label>
+            <label className="field">
+              <span>Активность</span>
+              <select
+                value={activity}
+                onChange={(e) => setActivity(e.target.value as ActivityLevel)}
+              >
+                {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((key) => (
+                  <option key={key} value={key}>
+                    {ACTIVITY_LABELS[key]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
 
-      <div className="panel">
-        <div className="form-grid">
           <label className="field">
-            <span>Пол</span>
-            <select value={sex} onChange={(e) => setSex(e.target.value as Sex)}>
-              <option value="female">Женский</option>
-              <option value="male">Мужской</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>Возраст</span>
-            <input
-              inputMode="numeric"
-              value={age}
-              onChange={(e) => setAge(e.target.value)}
-              placeholder="лет"
-            />
-          </label>
-          <label className="field">
-            <span>Рост, см</span>
-            <input
-              inputMode="decimal"
-              value={heightCm}
-              onChange={(e) => setHeightCm(e.target.value)}
-              placeholder="см"
-            />
-          </label>
-          <label className="field">
-            <span>Активность</span>
-            <select value={activity} onChange={(e) => setActivity(e.target.value as ActivityLevel)}>
-              {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((key) => (
+            <span>Цель</span>
+            <select value={goalMode} onChange={(e) => setGoalMode(e.target.value as GoalMode)}>
+              {(Object.keys(GOAL_MODE_LABELS) as GoalMode[]).map((key) => (
                 <option key={key} value={key}>
-                  {ACTIVITY_LABELS[key]}
+                  {GOAL_MODE_LABELS[key]}
                 </option>
               ))}
             </select>
           </label>
+
+          {previewGoal != null && (
+            <p className="profile-goal-preview">
+              Новая норма: <strong>{previewGoal} ккал/день</strong>
+              {proteinGoal != null ? ` · белок ${proteinGoal} г` : ''}
+              {` · овощи ${VEG_GOAL_G} г`}
+            </p>
+          )}
+
+          <div className="btn-row">
+            <button type="button" className="primary-btn" onClick={save}>
+              Сохранить
+            </button>
+            {savedProfile && (
+              <button type="button" className="ghost-btn" onClick={cancelEdit}>
+                Отмена
+              </button>
+            )}
+          </div>
+          {error && <p className="form-msg error">{error}</p>}
         </div>
+      )}
 
-        <label className="field">
-          <span>Цель</span>
-          <select value={goalMode} onChange={(e) => setGoalMode(e.target.value as GoalMode)}>
-            {(Object.keys(GOAL_MODE_LABELS) as GoalMode[]).map((key) => (
-              <option key={key} value={key}>
-                {GOAL_MODE_LABELS[key]}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {previewGoal != null && (
-          <p className="profile-goal-preview">
-            Новая норма: <strong>{previewGoal} ккал/день</strong>
-          </p>
-        )}
-
-        <button type="button" className="primary-btn" onClick={save}>
-          Сохранить
-        </button>
-        {error && <p className="form-msg error">{error}</p>}
-      </div>
+      <MeasuresPanel data={data} onSave={onSaveMeasurement} />
     </section>
   )
 }

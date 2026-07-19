@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalorieRing } from '../components/CalorieRing'
-import { MeasureTapeIcon } from '../components/MeasureTapeIcon'
 import { PromptDialog } from '../components/PromptDialog'
 import { formatRuDate, todayIso } from '../lib/date'
 import { buildTodayTimeline, type WeekStats } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS } from '../lib/labels'
+import { VEG_GOAL_G } from '../lib/macroGoals'
 import {
   getWeekNutritionSummary,
   localWeekNutritionNote,
@@ -18,18 +18,25 @@ type PromptKind = 'weight' | 'steps' | null
 type Props = {
   data: AppData
   dailyKcalGoal: number
+  maintainKcalGoal: number
+  proteinGoal: number | null
   profileReady: boolean
   onAddMeal: () => void
   onOpenMeal: (mealId: string) => void
   onOpenProfile: () => void
-  onOpenMeasures: () => void
   onOpenWeightHistory: () => void
   onOpenStepsHistory: () => void
   onSaveWeight: (date: string, kg: number) => Promise<unknown>
   onSaveSteps: (date: string, count: number) => Promise<unknown>
 }
 
-function WeekCard({ week }: { week: WeekStats }) {
+function WeekCard({
+  week,
+  maintainKcalGoal,
+}: {
+  week: WeekStats
+  maintainKcalGoal: number
+}) {
   const fingerprint = weekFingerprint(week)
   const [note, setNote] = useState(() => localWeekNutritionNote(week))
   const [loadingNote, setLoadingNote] = useState(false)
@@ -68,8 +75,8 @@ function WeekCard({ week }: { week: WeekStats }) {
         <CalorieRing
           eaten={avgKcal}
           goal={dailyGoal}
+          maintainGoal={maintainKcalGoal}
           size="md"
-          approximate={week.days.some((d) => d.approximate)}
         />
         <div className="week-card-side">
           <h3>{week.label}</h3>
@@ -105,11 +112,12 @@ function num(v: string): number | undefined {
 export function TodayScreen({
   data,
   dailyKcalGoal,
+  maintainKcalGoal,
+  proteinGoal,
   profileReady,
   onAddMeal,
   onOpenMeal,
   onOpenProfile,
-  onOpenMeasures,
   onOpenWeightHistory,
   onOpenStepsHistory,
   onSaveWeight,
@@ -195,15 +203,6 @@ export function TodayScreen({
         <div className="btn-row tight">
           <button
             type="button"
-            className="icon-btn"
-            onClick={onOpenMeasures}
-            aria-label="Обмеры"
-            title="Обмеры"
-          >
-            <MeasureTapeIcon />
-          </button>
-          <button
-            type="button"
             className={`icon-btn profile-btn${profileReady ? '' : ' warn'}`}
             onClick={onOpenProfile}
             aria-label="Профиль и норма калорий"
@@ -239,8 +238,8 @@ export function TodayScreen({
         <CalorieRing
           eaten={today.totals.kcal}
           goal={dailyKcalGoal}
+          maintainGoal={maintainKcalGoal}
           size="md"
-          approximate={today.approximate}
         />
         <div className="today-hero-side">
           <div className="today-meta-row">
@@ -256,15 +255,17 @@ export function TodayScreen({
             </button>
           </div>
           <p className="bju-line muted small">
-            Белки {today.totals.protein}
-            {today.approximate ? ' ≈' : ''} · Жиры {today.totals.fat} · Углеводы{' '}
-            {today.totals.carbs}
+            Белки {Math.round(today.totals.protein)}
+            {proteinGoal != null ? ` / ${proteinGoal}` : ''} · Жиры{' '}
+            {Math.round(today.totals.fat)} · Углеводы {Math.round(today.totals.carbs)}
+          </p>
+          <p className="bju-line muted small">
+            Овощи {today.vegGrams} / {VEG_GOAL_G} г
           </p>
         </div>
       </div>
 
-      <div className="section-head">
-        <h2>Приёмы пищи</h2>
+      <div className="section-head" style={{ justifyContent: 'flex-end' }}>
         <button type="button" className="link-btn" onClick={onAddMeal}>
           Добавить
         </button>
@@ -286,12 +287,13 @@ export function TodayScreen({
                     {MEAL_TYPE_LABELS[meal.mealType]}
                     {meal.eatingOut ? ' · вне дома' : ''}
                   </strong>
-                  <span>
-                    {Math.round(meal.totals.kcal)} ккал
-                    {meal.isApproximate || meal.eatingOut ? ' ≈' : ''}
-                  </span>
+                  <span>{Math.round(meal.totals.kcal)} ккал</span>
                 </div>
                 <p className="meal-preview">{meal.rawText}</p>
+                <p className="meal-bju">
+                  Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
+                  {Math.round(meal.totals.carbs)}
+                </p>
               </button>
             </li>
           ))}
@@ -309,8 +311,8 @@ export function TodayScreen({
                 <CalorieRing
                   eaten={day.totals.kcal}
                   goal={dailyKcalGoal}
+                  maintainGoal={maintainKcalGoal}
                   size="sm"
-                  approximate={day.approximate}
                 />
                 <div className="day-summary-body">
                   <strong>{day.label}</strong>
@@ -339,7 +341,11 @@ export function TodayScreen({
           </div>
           <div className="week-list">
             {completedWeeks.map((week) => (
-              <WeekCard key={week.weekStart} week={week} />
+              <WeekCard
+                key={week.weekStart}
+                week={week}
+                maintainKcalGoal={maintainKcalGoal}
+              />
             ))}
           </div>
         </>

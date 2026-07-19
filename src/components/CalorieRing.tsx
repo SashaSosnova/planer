@@ -1,27 +1,30 @@
 type Props = {
   eaten: number
   goal: number
+  /** Maintain-weight kcal; yellow between goal and this, red above. */
+  maintainGoal?: number
   size?: 'lg' | 'md' | 'sm'
-  approximate?: boolean
   label?: string
 }
 
 type Zone = 'ok' | 'warn' | 'over'
 
-function zoneFor(ratio: number): Zone {
-  if (ratio > 1) return 'over'
-  if (ratio >= 0.85) return 'warn'
+export function zoneFor(eaten: number, goal: number, maintainGoal?: number): Zone {
+  const safeGoal = goal > 0 ? goal : 1
+  const redAt = maintainGoal != null && maintainGoal > safeGoal ? maintainGoal : safeGoal
+  if (eaten > redAt) return 'over'
+  if (eaten > safeGoal) return 'warn'
   return 'ok'
 }
 
-export function CalorieRing({ eaten, goal, size = 'lg', approximate, label }: Props) {
+export function CalorieRing({ eaten, goal, maintainGoal, size = 'lg', label }: Props) {
   const safeGoal = goal > 0 ? goal : 1
   const ratio = eaten / safeGoal
-  const zone = zoneFor(ratio)
+  const zone = zoneFor(eaten, safeGoal, maintainGoal)
   const pct = Math.round(ratio * 100)
 
-  const dim = size === 'lg' ? 128 : size === 'md' ? 96 : 64
-  const stroke = size === 'lg' ? 10 : size === 'md' ? 8 : 6
+  const dim = size === 'lg' ? 128 : size === 'md' ? 112 : 64
+  const stroke = size === 'lg' ? 10 : size === 'md' ? 9 : 6
   const r = (dim - stroke) / 2
   const c = 2 * Math.PI * r
   const progress = Math.min(Math.max(ratio, 0), 1)
@@ -53,10 +56,7 @@ export function CalorieRing({ eaten, goal, size = 'lg', approximate, label }: Pr
       </svg>
       <div className="calorie-ring-center">
         {label && <span className="calorie-ring-label">{label}</span>}
-        <strong>
-          {Math.round(eaten)}
-          {approximate ? ' ≈' : ''}
-        </strong>
+        <strong>{Math.round(eaten)}</strong>
         <span className="calorie-ring-goal">из {Math.round(safeGoal)}</span>
         {size !== 'sm' && <span className="calorie-ring-pct">{pct}%</span>}
       </div>

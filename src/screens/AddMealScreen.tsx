@@ -304,7 +304,7 @@ export function AddMealScreen({
                   {draft.isApproximate && <span className="badge">примерно</span>}
                 </div>
               </div>
-              <MacroBar totals={draft.totals} approximate={draft.isApproximate} />
+              <MacroBar totals={draft.totals} />
 
               <MealDraftEditor
                 data={data}

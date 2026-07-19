@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
-import { calcDailyKcalGoal, type BodyProfile } from '../lib/calorieGoal'
+import { calcDailyKcalGoal, calcMaintainKcalGoal, type BodyProfile } from '../lib/calorieGoal'
+import { calcProteinGoal } from '../lib/macroGoals'
 import {
   loadSettings,
   refreshGoalFromWeight,
@@ -16,6 +17,18 @@ export function useSettings(latestWeightKg?: number) {
     }
     return settings.dailyKcalGoal
   }, [settings, latestWeightKg])
+
+  const maintainKcalGoal = useMemo(() => {
+    if (settings.profile && latestWeightKg != null && latestWeightKg > 0) {
+      return calcMaintainKcalGoal(settings.profile, latestWeightKg)
+    }
+    return dailyKcalGoal
+  }, [settings.profile, latestWeightKg, dailyKcalGoal])
+
+  const proteinGoal = useMemo(
+    () => (latestWeightKg != null ? calcProteinGoal(latestWeightKg) : null),
+    [latestWeightKg],
+  )
 
   const profileReady = Boolean(settings.profile)
 
@@ -34,6 +47,8 @@ export function useSettings(latestWeightKg?: number) {
   return {
     settings,
     dailyKcalGoal,
+    maintainKcalGoal,
+    proteinGoal,
     profileReady,
     saveProfile,
     syncGoalFromWeight,

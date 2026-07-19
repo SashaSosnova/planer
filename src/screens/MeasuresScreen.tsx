@@ -12,7 +12,6 @@ import type { AppData, MeasurementEntry } from '../types'
 
 type Props = {
   data: AppData
-  onBack: () => void
   onSave: (input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string }) => Promise<unknown>
 }
 
@@ -22,7 +21,8 @@ function num(v: string): number | undefined {
   return n
 }
 
-export function MeasuresScreen({ data, onBack, onSave }: Props) {
+/** Body measurements block — used inside Profile. */
+export function MeasuresPanel({ data, onSave }: Props) {
   const date = todayIso()
   const measure = data.measurements.find((m) => m.date === date)
   const [editing, setEditing] = useState(!measureFilled(measure))
@@ -87,24 +87,23 @@ export function MeasuresScreen({ data, onBack, onSave }: Props) {
   }
 
   return (
-    <section className="screen">
-      <header className="screen-header">
-        <button type="button" className="link-btn" onClick={onBack}>
-          ← Назад
+    <div className="panel-stack">
+      <div className="section-head">
+        <h2 className="subhead" style={{ margin: 0 }}>
+          Обмеры
+        </h2>
+        <button
+          type="button"
+          className={`icon-btn${showChart ? ' active' : ''}`}
+          onClick={() => setShowChart((v) => !v)}
+          aria-label="График обмеров"
+        >
+          <ChartIcon />
         </button>
-        <div className="section-head">
-          <h1>Обмеры</h1>
-          <button
-            type="button"
-            className={`icon-btn${showChart ? ' active' : ''}`}
-            onClick={() => setShowChart((v) => !v)}
-            aria-label="График обмеров"
-          >
-            <ChartIcon />
-          </button>
-        </div>
-        <p className="muted">Раз в неделю или реже</p>
-      </header>
+      </div>
+      <p className="muted small" style={{ margin: '-4px 0 0' }}>
+        Раз в неделю или реже
+      </p>
 
       {showChart && (
         <div className="panel chart-panel">
@@ -170,6 +169,6 @@ export function MeasuresScreen({ data, onBack, onSave }: Props) {
           </ul>
         </div>
       )}
-    </section>
+    </div>
   )
 }

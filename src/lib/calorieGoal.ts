@@ -73,6 +73,11 @@ export function calcDailyKcalGoal(profile: BodyProfile, weightKg: number): numbe
   return Math.max(floor, Math.round(tdee - deficit))
 }
 
+/** TDEE without deficit — upper “maintain weight” band for ring colors. */
+export function calcMaintainKcalGoal(profile: BodyProfile, weightKg: number): number {
+  return calcDailyKcalGoal({ ...profile, goalMode: 'maintain' }, weightKg)
+}
+
 export function isProfileComplete(profile: Partial<BodyProfile> | null | undefined): boolean {
   if (!profile) return false
   return (

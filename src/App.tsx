@@ -5,7 +5,9 @@ import { AddMealScreen } from './screens/AddMealScreen'
 import { MeasuresScreen } from './screens/MeasuresScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
+import { StepsHistoryScreen } from './screens/StepsHistoryScreen'
 import { TodayScreen } from './screens/TodayScreen'
+import { WeightHistoryScreen } from './screens/WeightHistoryScreen'
 import './App.css'
 
 type Overlay =
@@ -13,6 +15,8 @@ type Overlay =
   | { type: 'edit-meal'; mealId: string }
   | { type: 'profile' }
   | { type: 'measures' }
+  | { type: 'weight-history' }
+  | { type: 'steps-history' }
   | null
 
 export default function App() {
@@ -76,6 +80,8 @@ export default function App() {
             onOpenMeal={(mealId) => setOverlay({ type: 'edit-meal', mealId })}
             onOpenProfile={() => setOverlay({ type: 'profile' })}
             onOpenMeasures={() => setOverlay({ type: 'measures' })}
+            onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
+            onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
             onSaveWeight={async (date, kg) => {
               const entry = await saveWeight(date, kg)
               syncGoalFromWeight(kg)
@@ -121,6 +127,22 @@ export default function App() {
 
         {overlay?.type === 'measures' && (
           <MeasuresScreen data={data} onBack={closeOverlay} onSave={saveMeasurement} />
+        )}
+
+        {overlay?.type === 'weight-history' && (
+          <WeightHistoryScreen
+            data={data}
+            onBack={closeOverlay}
+            onSave={async (date, kg) => {
+              const entry = await saveWeight(date, kg)
+              syncGoalFromWeight(kg)
+              return entry
+            }}
+          />
+        )}
+
+        {overlay?.type === 'steps-history' && (
+          <StepsHistoryScreen data={data} onBack={closeOverlay} onSave={saveSteps} />
         )}
       </main>
     </div>

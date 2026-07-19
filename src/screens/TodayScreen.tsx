@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalorieRing } from '../components/CalorieRing'
 import { MeasureTapeIcon } from '../components/MeasureTapeIcon'
-import { ChartIcon, TrendChart, type ChartSeries } from '../components/TrendChart'
-import { PencilIcon } from '../components/PencilIcon'
+import { PromptDialog } from '../components/PromptDialog'
 import { formatRuDate, todayIso } from '../lib/date'
 import { buildTodayTimeline, type WeekStats } from '../lib/dayStats'
 import { MEAL_TYPE_LABELS } from '../lib/labels'
@@ -13,9 +12,7 @@ import {
 } from '../lib/weekSummaryLlm'
 import type { AppData } from '../types'
 
-type ChartKind = 'weight' | 'steps' | null
-
-const STEPS_GOAL = 7000
+type PromptKind = 'weight' | 'steps' | null
 
 type Props = {
   data: AppData
@@ -25,6 +22,8 @@ type Props = {
   onOpenMeal: (mealId: string) => void
   onOpenProfile: () => void
   onOpenMeasures: () => void
+  onOpenWeightHistory: () => void
+  onOpenStepsHistory: () => void
   onSaveWeight: (date: string, kg: number) => Promise<unknown>
   onSaveSteps: (date: string, count: number) => Promise<unknown>
 }
@@ -110,6 +109,8 @@ export function TodayScreen({
   onOpenMeal,
   onOpenProfile,
   onOpenMeasures,
+  onOpenWeightHistory,
+  onOpenStepsHistory,
   onSaveWeight,
   onSaveSteps,
 }: Props) {
@@ -117,93 +118,67 @@ export function TodayScreen({
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
 
-  const [editingWeight, setEditingWeight] = useState(!weight)
-  const [editingSteps, setEditingSteps] = useState(!steps)
-  const [kg, setKg] = useState(weight?.kg?.toString() ?? '')
-  const [stepCount, setStepCount] = useState(steps?.count?.toString() ?? '')
-  const [busy, setBusy] = useState<'weight' | 'steps' | null>(null)
-  const [chartKind, setChartKind] = useState<ChartKind>(null)
-  const [bodyError, setBodyError] = useState<string | null>(null)
-
-  useEffect(() => {
-    setKg(weight?.kg?.toString() ?? '')
-    setStepCount(steps?.count?.toString() ?? '')
-    setEditingWeight(!weight)
-    setEditingSteps(!steps)
-  }, [weight, steps])
+  const [prompt, setPrompt] = useState<PromptKind>(null)
+  const [busy, setBusy] = useState(false)
+  const [promptError, setPromptError] = useState<string | null>(null)
 
   const { today, recentDays, completedWeeks } = useMemo(
     () => buildTodayTimeline(data, dailyKcalGoal, date),
     [data, dailyKcalGoal, date],
   )
 
-  const chartSeries = useMemo((): {
-    title: string
-    unit: string
-    series: ChartSeries[]
-    variant?: 'line' | 'bar'
-    goal?: number
-  } | null => {
-    if (chartKind === 'weight') {
-      const points = [...data.weights]
-        .filter((w) => w.kg > 0)
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map((w) => ({ date: w.date, value: w.kg }))
-      return {
-        title: 'Вес',
-        unit: 'кг',
-        series: [{ id: 'weight', label: 'Вес', color: '#0f4c5c', points }],
-      }
-    }
-    if (chartKind === 'steps') {
-      const points = [...data.steps]
-        .filter((s) => s.count > 0)
-        .sort((a, b) => a.date.localeCompare(b.date))
-        .map((s) => ({ date: s.date, value: s.count }))
-      return {
-        title: 'Шаги',
-        unit: 'шагов',
-        variant: 'bar',
-        goal: STEPS_GOAL,
-        series: [{ id: 'steps', label: 'Шаги', color: '#2f7d4c', points }],
-      }
-    }
-    return null
-  }, [chartKind, data.weights, data.steps])
-
-  const saveWeight = async () => {
-    const kgVal = num(kg)
-    if (kgVal == null || kgVal < 30) {
-      setBodyError('Укажите вес')
-      return
-    }
-    setBusy('weight')
-    setBodyError(null)
-    try {
-      await onSaveWeight(date, kgVal)
-      setEditingWeight(false)
-    } catch (err) {
-      setBodyError(err instanceof Error ? err.message : 'Ошибка')
-    } finally {
-      setBusy(null)
+  const openWeight = () => {
+    if (weight) onOpenWeightHistory()
+    else {
+      setPromptError(null)
+      setPrompt('weight')
     }
   }
 
-  const saveSteps = async () => {
-    const stepsVal = num(stepCount)
-    if (stepsVal == null || stepsVal < 0) {
-      setBodyError('Укажите шаги')
+  const openSteps = () => {
+    if (steps) onOpenStepsHistory()
+    else {
+      setPromptError(null)
+      setPrompt('steps')
+    }
+  }
+
+  const confirmPrompt = async (raw: string) => {
+    if (prompt === 'weight') {
+      const kgVal = num(raw)
+      if (kgVal == null || kgVal < 30) {
+        setPromptError('Укажите вес от 30 кг')
+        return
+      }
+      setBusy(true)
+      setPromptError(null)
+      try {
+        await onSaveWeight(date, kgVal)
+        setPrompt(null)
+      } catch (err) {
+        setPromptError(err instanceof Error ? err.message : 'Ошибка')
+      } finally {
+        setBusy(false)
+      }
       return
     }
-    setBusy('steps')
-    setBodyError(null)
-    try {
-      await onSaveSteps(date, Math.round(stepsVal))
-      setEditingSteps(false)
-    } catch (err) {
-      setBodyError(err instanceof Error ? err.message : 'Ошибка')
-    } finally {
-      setBusy(null)
+
+    if (prompt === 'steps') {
+      const stepsVal = num(raw)
+      if (stepsVal == null || stepsVal < 0) {
+        setPromptError('Укажите шаги')
+        return
+      }
+      setBusy(true)
+      setPromptError(null)
+      try {
+        await onSaveSteps(date, Math.round(stepsVal))
+        setPrompt(null)
+      } catch (err) {
+        setPromptError(err instanceof Error ? err.message : 'Ошибка')
+      } finally {
+        setBusy(false)
+      }
     }
   }
 
@@ -261,173 +236,29 @@ export function TodayScreen({
         <CalorieRing
           eaten={today.totals.kcal}
           goal={dailyKcalGoal}
-          size="lg"
+          size="md"
           approximate={today.approximate}
         />
         <div className="today-hero-side">
-          <p className="bju-line">
-            <span>
-              Белки <strong>{today.totals.protein}</strong>
-              {today.approximate ? ' ≈' : ''}
-            </span>
-            <span>
-              Жиры <strong>{today.totals.fat}</strong>
-            </span>
-            <span>
-              Углеводы <strong>{today.totals.carbs}</strong>
-            </span>
+          <div className="today-meta-row">
+            <button type="button" className="stat-chip compact" onClick={openWeight}>
+              <span>Вес</span>
+              <strong>{weight ? `${weight.kg} кг` : '—'}</strong>
+            </button>
+            <button type="button" className="stat-chip compact" onClick={openSteps}>
+              <span>Шаги</span>
+              <strong>
+                {steps ? steps.count.toLocaleString('ru-RU') : '—'}
+              </strong>
+            </button>
+          </div>
+          <p className="bju-line muted small">
+            Белки {today.totals.protein}
+            {today.approximate ? ' ≈' : ''} · Жиры {today.totals.fat} · Углеводы{' '}
+            {today.totals.carbs}
           </p>
         </div>
       </div>
-
-      <div className="day-log-grid">
-        <div className="panel day-log-card">
-          <div className="day-log-head">
-            <span className="muted small">Вес</span>
-            <div className="btn-row tight nowrap">
-              <button
-                type="button"
-                className={`icon-btn sm${chartKind === 'weight' ? ' active' : ''}`}
-                onClick={() => setChartKind((k) => (k === 'weight' ? null : 'weight'))}
-                aria-label="График веса"
-              >
-                <ChartIcon size={18} />
-              </button>
-              {!editingWeight && weight && (
-                <button
-                  type="button"
-                  className="icon-btn sm"
-                  onClick={() => {
-                    setKg(String(weight.kg))
-                    setEditingWeight(true)
-                  }}
-                  aria-label="Изменить вес"
-                >
-                  <PencilIcon size={18} />
-                </button>
-              )}
-            </div>
-          </div>
-          {!editingWeight && weight ? (
-            <strong className="day-log-value">{weight.kg} кг</strong>
-          ) : (
-            <div className="day-log-edit">
-              <input
-                className="day-log-input"
-                inputMode="decimal"
-                value={kg}
-                onChange={(e) => setKg(e.target.value)}
-                placeholder="кг"
-              />
-              <button
-                type="button"
-                className="primary-btn day-log-ok"
-                disabled={busy != null}
-                onClick={() => void saveWeight()}
-              >
-                OK
-              </button>
-              {weight && (
-                <button
-                  type="button"
-                  className="ghost-btn day-log-ok"
-                  onClick={() => {
-                    setKg(String(weight.kg))
-                    setEditingWeight(false)
-                  }}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div className="panel day-log-card">
-          <div className="day-log-head">
-            <span className="muted small">Шаги</span>
-            <div className="btn-row tight nowrap">
-              <button
-                type="button"
-                className={`icon-btn sm${chartKind === 'steps' ? ' active' : ''}`}
-                onClick={() => setChartKind((k) => (k === 'steps' ? null : 'steps'))}
-                aria-label="График шагов"
-              >
-                <ChartIcon size={18} />
-              </button>
-              {!editingSteps && steps && (
-                <button
-                  type="button"
-                  className="icon-btn sm"
-                  onClick={() => {
-                    setStepCount(String(steps.count))
-                    setEditingSteps(true)
-                  }}
-                  aria-label="Изменить шаги"
-                >
-                  <PencilIcon size={18} />
-                </button>
-              )}
-            </div>
-          </div>
-          {!editingSteps && steps ? (
-            <strong className="day-log-value">{steps.count.toLocaleString('ru-RU')}</strong>
-          ) : (
-            <div className="day-log-edit">
-              <input
-                className="day-log-input"
-                inputMode="numeric"
-                value={stepCount}
-                onChange={(e) => setStepCount(e.target.value)}
-                placeholder="шаги"
-              />
-              <button
-                type="button"
-                className="primary-btn day-log-ok"
-                disabled={busy != null}
-                onClick={() => void saveSteps()}
-              >
-                OK
-              </button>
-              {steps && (
-                <button
-                  type="button"
-                  className="ghost-btn day-log-ok"
-                  onClick={() => {
-                    setStepCount(String(steps.count))
-                    setEditingSteps(false)
-                  }}
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {bodyError && <p className="form-msg error">{bodyError}</p>}
-
-      {chartSeries && (
-        <div className="panel chart-panel">
-          <div className="section-head">
-            <h2 className="subhead" style={{ marginTop: 0 }}>
-              {chartSeries.title}
-            </h2>
-            <button type="button" className="link-btn" onClick={() => setChartKind(null)}>
-              Закрыть
-            </button>
-          </div>
-          <TrendChart
-            series={chartSeries.series}
-            unit={chartSeries.unit}
-            height={108}
-            minRange={chartSeries.unit === 'кг' ? 3 : undefined}
-            variant={chartSeries.variant}
-            goal={chartSeries.goal}
-          />
-        </div>
-      )}
 
       <div className="section-head">
         <h2>Приёмы пищи</h2>
@@ -509,6 +340,32 @@ export function TodayScreen({
             ))}
           </div>
         </>
+      )}
+
+      {prompt === 'weight' && (
+        <PromptDialog
+          title="Вес за сегодня"
+          label="Сколько кг?"
+          placeholder="например 63.8"
+          inputMode="decimal"
+          busy={busy}
+          error={promptError}
+          onCancel={() => setPrompt(null)}
+          onConfirm={(v) => void confirmPrompt(v)}
+        />
+      )}
+
+      {prompt === 'steps' && (
+        <PromptDialog
+          title="Шаги за сегодня"
+          label="Сколько шагов?"
+          placeholder="например 7000"
+          inputMode="numeric"
+          busy={busy}
+          error={promptError}
+          onCancel={() => setPrompt(null)}
+          onConfirm={(v) => void confirmPrompt(v)}
+        />
       )}
     </section>
   )

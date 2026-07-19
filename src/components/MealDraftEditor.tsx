@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { foodVariants } from '../lib/foodVariants'
 import { round1, scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, MealItem, ParsedMealDraft } from '../types'
+import { PencilIcon } from './PencilIcon'
 
 function per100FromPortion(item: MealItem): MacroSet | null {
   if (!(item.grams > 0)) return null
@@ -15,6 +17,10 @@ function per100FromPortion(item: MealItem): MacroSet | null {
 
 function formatPer100(m: MacroSet): string {
   return `${Math.round(m.kcal)} ккал · Б ${m.protein} · Ж ${m.fat} · У ${m.carbs}`
+}
+
+function formatPortion(item: MealItem): string {
+  return `${Math.round(item.kcal)} ккал · Б ${item.protein} · Ж ${item.fat} · У ${item.carbs}`
 }
 
 function parseNum(value: string): number | null {
@@ -102,6 +108,8 @@ type Props = {
   onChangeItem: (index: number, patch: Partial<MealItem>) => void
   onSaveToLibrary?: (index: number) => void
   savingFoodIndex?: number | null
+  /** Collapsed rows by default; expand one item with the pencil. */
+  collapsible?: boolean
 }
 
 export function MealDraftEditor({
@@ -110,7 +118,10 @@ export function MealDraftEditor({
   onChangeItem,
   onSaveToLibrary,
   savingFoodIndex = null,
+  collapsible = false,
 }: Props) {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+
   return (
     <ul className="draft-list">
       {items.map((item, index) => {
@@ -118,6 +129,32 @@ export function MealDraftEditor({
         const fromLibrary = item.source === 'library' && linked
         const per100 = fromLibrary ? linked.per100g : per100FromPortion(item)
         const variants = fromLibrary && linked ? foodVariants(linked, data.foods) : []
+        const expanded = !collapsible || editingIndex === index
+
+        if (!expanded) {
+          return (
+            <li key={`${item.name}-${index}`} className="draft-item draft-item-compact">
+              <div className="draft-compact-main">
+                <div className="draft-compact-text">
+                  <strong className="draft-compact-name">{item.name}</strong>
+                  <p className="muted small">
+                    {item.grams} г · {formatPortion(item)}
+                    {item.source === 'estimate' || !fromLibrary ? ' ≈' : ''}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="icon-btn sm"
+                  onClick={() => setEditingIndex(index)}
+                  aria-label={`Редактировать ${item.name}`}
+                  title="Редактировать"
+                >
+                  <PencilIcon size={18} />
+                </button>
+              </div>
+            </li>
+          )
+        }
 
         return (
           <li key={`${item.name}-${index}`} className="draft-item">
@@ -129,9 +166,20 @@ export function MealDraftEditor({
                   onChange={(e) => onChangeItem(index, { name: e.target.value })}
                 />
               </label>
-              <span className={fromLibrary ? 'badge ok' : 'badge'}>
-                {fromLibrary ? 'ваши КБЖУ' : 'примерно'}
-              </span>
+              <div className="draft-item-top-actions">
+                <span className={fromLibrary ? 'badge ok' : 'badge'}>
+                  {fromLibrary ? 'ваши КБЖУ' : 'примерно'}
+                </span>
+                {collapsible && (
+                  <button
+                    type="button"
+                    className="ghost-btn draft-collapse-btn"
+                    onClick={() => setEditingIndex(null)}
+                  >
+                    Готово
+                  </button>
+                )}
+              </div>
             </div>
 
             {per100 && (

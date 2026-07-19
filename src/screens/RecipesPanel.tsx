@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { TrashIcon } from '../components/TrashIcon'
 import { parseRecipe } from '../lib/parseRecipe'
 import { computeRecipe, recipeToFoodItem } from '../lib/recipeCalc'
 import type { AppData, FoodItem, RecipeDraft, RecipeIngredientLine } from '../types'
@@ -270,21 +271,25 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
           <li className="muted">Пока пусто — нажмите «Новое блюдо».</li>
         )}
         {dishes.map((food) => (
-          <li key={food.id} className="food-row">
-            <div>
+          <li key={food.id} className="food-row food-row-icons">
+            <div className="food-row-body">
               <strong>{food.name}</strong>
               <p className="muted small">
                 {food.per100g.kcal} ккал · Б {food.per100g.protein} · Ж {food.per100g.fat} · У{' '}
                 {food.per100g.carbs}
               </p>
             </div>
-            <button
-              type="button"
-              className="ghost-btn danger"
-              onClick={() => void onDelete(food.id)}
-            >
-              Удалить
-            </button>
+            <div className="btn-row tight nowrap food-row-actions">
+              <button
+                type="button"
+                className="icon-btn sm danger"
+                onClick={() => void onDelete(food.id)}
+                aria-label={`Удалить ${food.name}`}
+                title="Удалить"
+              >
+                <TrashIcon size={18} />
+              </button>
+            </div>
           </li>
         ))}
       </ul>

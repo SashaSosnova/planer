@@ -79,6 +79,11 @@
   background: var(--warm-soft);
 }
 
+.icon-btn.danger {
+  color: var(--danger);
+  border-color: #e2b4b4;
+}
+
 .eyebrow {
   font-size: 0.8rem;
   letter-spacing: 0.08em;
@@ -118,8 +123,8 @@
 
 .today-hero {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
   align-items: center;
 }
 
@@ -127,8 +132,14 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+}
+
+.today-hero-side .bju-line {
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.35;
 }
 
 .today-meta-row {
@@ -139,11 +150,29 @@
 
 .stat-chip.compact {
   padding: 10px 10px;
+  cursor: pointer;
+}
+
+.stat-chip.compact:active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
 }
 
 .stat-chip.static {
   cursor: default;
   pointer-events: none;
+}
+
+.stat-chip.static:active {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.stat-chip strong {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.2rem;
+  font-weight: 600;
+  line-height: 1.15;
 }
 
 .day-log-edit {
@@ -528,47 +557,62 @@
 
 @media (max-width: 420px) {
   .today-hero {
-    grid-template-columns: 1fr;
-    justify-items: center;
-    text-align: center;
-    gap: 12px;
-  }
-
-  .today-hero-side {
-    width: 100%;
+    gap: 10px;
     align-items: center;
   }
 
-  .bju-line {
-    flex-direction: row;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px 14px;
-    font-size: 0.92rem;
+  .stat-chip.compact {
+    padding: 10px 8px;
   }
 
-  .day-log-card {
-    gap: 10px;
-    padding: 14px;
+  .stat-chip strong {
+    font-size: 1.1rem;
   }
 
-  .day-log-value {
-    font-size: 1.4rem;
-  }
+}
 
-  .food-row {
-    flex-direction: column;
-    align-items: stretch;
-  }
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(20, 38, 44, 0.45);
+}
 
-  .food-row .btn-row {
-    width: 100%;
-  }
+.modal-card {
+  width: min(100%, 360px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 12px 40px rgba(20, 38, 44, 0.18);
+}
 
-  .food-row .btn-row .ghost-btn {
-    flex: 1;
-    text-align: center;
-  }
+.metric-history li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-history li > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.metric-history-value {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .macro-bar {
@@ -812,6 +856,50 @@
   gap: 10px;
 }
 
+.draft-item-compact {
+  gap: 0;
+  padding: 12px 12px;
+}
+
+.draft-compact-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.draft-compact-text {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.draft-compact-name {
+  font-size: 1.02rem;
+  font-weight: 600;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.draft-compact-text .small {
+  line-height: 1.35;
+}
+
+.draft-item-top-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.draft-collapse-btn {
+  padding: 6px 10px;
+  min-height: 0;
+  font-size: 0.88rem;
+}
+
 .draft-macros .field input {
   padding: 9px 8px;
 }
@@ -918,14 +1006,24 @@
   align-items: center;
 }
 
+.food-row-icons {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.food-row-actions {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.food-row-body {
+  min-width: 0;
+  flex: 1;
+}
+
 .food-row .btn-row {
   flex-shrink: 0;
   flex-wrap: nowrap;
-}
-
-.food-row .btn-row .ghost-btn {
-  padding: 8px 10px;
-  white-space: nowrap;
 }
 
 .simple-list li {

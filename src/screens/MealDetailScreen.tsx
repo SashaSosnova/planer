@@ -23,8 +23,6 @@ type Props = {
 }
 
 export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveFood }: Props) {
-  const [mealType, setMealType] = useState(meal.mealType)
-  const [rawText, setRawText] = useState(meal.rawText)
   const [items, setItems] = useState(meal.items)
   const [eatingOut, setEatingOut] = useState(meal.eatingOut)
   const [busy, setBusy] = useState(false)
@@ -32,8 +30,6 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
 
   useEffect(() => {
-    setMealType(meal.mealType)
-    setRawText(meal.rawText)
     setItems(meal.items)
     setEatingOut(meal.eatingOut)
   }, [meal])
@@ -48,8 +44,8 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
       await onSave({
         id: meal.id,
         date: meal.date,
-        mealType,
-        rawText: rawText.trim() || MEAL_TYPE_LABELS[mealType],
+        mealType: meal.mealType,
+        rawText: meal.rawText.trim() || MEAL_TYPE_LABELS[meal.mealType],
         items,
         isApproximate,
         eatingOut,
@@ -117,31 +113,17 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
         <button type="button" className="link-btn" onClick={onBack}>
           ← Назад
         </button>
-        <h1>{MEAL_TYPE_LABELS[mealType]}</h1>
+        <h1>{MEAL_TYPE_LABELS[meal.mealType]}</h1>
         <p className="muted small">{meal.date}</p>
       </header>
-
-      <label className="field">
-        <span>Приём</span>
-        <select value={mealType} onChange={(e) => setMealType(e.target.value as MealType)}>
-          {(Object.keys(MEAL_TYPE_LABELS) as MealType[]).map((key) => (
-            <option key={key} value={key}>
-              {MEAL_TYPE_LABELS[key]}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="field">
-        <span>Что было</span>
-        <textarea rows={2} value={rawText} onChange={(e) => setRawText(e.target.value)} />
-      </label>
 
       <MacroBar totals={totals} approximate={isApproximate} />
 
       <MealDraftEditor
+        key={meal.id}
         data={data}
         items={items}
+        collapsible
         onChangeItem={(index, patch) =>
           setItems((prev) => applyItemPatch(prev, index, patch, data.foods))
         }

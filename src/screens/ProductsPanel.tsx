@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react'
+import { PencilIcon } from '../components/PencilIcon'
+import { TrashIcon } from '../components/TrashIcon'
 import { generateAliases } from '../lib/foodAliases'
 import type { AppData, FoodItem, MacroSet } from '../types'
 
@@ -88,21 +90,21 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           {editId ? 'Изменить продукт' : 'Новый продукт'}
         </h2>
         <label className="field">
-          <span>Название</span>
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Название продукта"
+            placeholder="Название"
+            aria-label="Название"
           />
         </label>
         <label className="field">
-          <span>Ккал · белки · жиры · углеводы (на 100 г)</span>
           <input
             inputMode="text"
             enterKeyHint="done"
             value={kbju}
             onChange={(e) => setKbju(e.target.value)}
-            placeholder="ккал белки жиры углеводы через пробел"
+            placeholder="Ккал Б Ж У"
+            aria-label="Ккал Б Ж У на 100 г"
             autoComplete="off"
             autoCapitalize="off"
             autoCorrect="off"
@@ -135,24 +137,32 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           <li className="muted">Пока нет простых продуктов.</li>
         )}
         {products.map((food) => (
-          <li key={food.id} className="food-row">
-            <div>
+          <li key={food.id} className="food-row food-row-icons">
+            <div className="food-row-body">
               <strong>{food.name}</strong>
               <p className="muted small">
                 {food.per100g.kcal} ккал · Б {food.per100g.protein} · Ж {food.per100g.fat} · У{' '}
                 {food.per100g.carbs}
               </p>
             </div>
-            <div className="btn-row tight">
-              <button type="button" className="ghost-btn" onClick={() => startEdit(food)}>
-                Изменить
+            <div className="btn-row tight nowrap food-row-actions">
+              <button
+                type="button"
+                className="icon-btn sm"
+                onClick={() => startEdit(food)}
+                aria-label={`Изменить ${food.name}`}
+                title="Изменить"
+              >
+                <PencilIcon size={18} />
               </button>
               <button
                 type="button"
-                className="ghost-btn danger"
+                className="icon-btn sm danger"
                 onClick={() => void onDelete(food.id)}
+                aria-label={`Удалить ${food.name}`}
+                title="Удалить"
               >
-                Удалить
+                <TrashIcon size={18} />
               </button>
             </div>
           </li>

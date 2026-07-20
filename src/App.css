@@ -1421,6 +1421,21 @@
   padding: 14px;
 }
 
+.progress-card-btn {
+  width: 100%;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.progress-card-btn:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+}
+
+.progress-card .muted {
+  margin: 0;
+}
+
 .progress-card-top {
   display: flex;
   justify-content: space-between;
@@ -1438,56 +1453,131 @@
   color: var(--warm) !important;
 }
 
-.cycle-today-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-  text-align: left;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  border-radius: var(--radius);
-  padding: 12px 14px;
-  cursor: pointer;
-  color: inherit;
-  font: inherit;
+.cycle-panel {
+  gap: 12px;
 }
 
-.cycle-today-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
-}
-
-.cycle-today-card .muted {
-  margin: 0;
-}
-
-.cycle-history {
+.cycle-settings {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 12px;
-  padding-top: 12px;
+  padding-top: 4px;
   border-top: 1px solid var(--line);
 }
 
-.cycle-history-add {
+.cycle-cal-expand {
   display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
+  flex-direction: column;
   gap: 10px;
+  padding-top: 4px;
 }
 
-.cycle-history-add .field {
-  flex: 1;
-  min-width: 140px;
-  margin: 0;
+.cycle-cal-panel {
+  gap: 12px;
 }
 
-.cycle-history-list li {
+.cycle-cal {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.cycle-cal-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 6px;
+}
+
+.cycle-cal-title {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 0.98rem;
+  font-weight: 600;
+  text-align: center;
+  flex: 1;
+}
+
+.cycle-cal-nav-btn {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.cycle-cal-weekdays,
+.cycle-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.cycle-cal-weekdays span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: lowercase;
+  padding: 0 0 2px;
+}
+
+.cycle-cal-cell {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cycle-cal-cell.empty {
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.cycle-cal-cell:hover:not(:disabled):not(.period) {
+  background: color-mix(in srgb, var(--accent-soft) 70%, transparent);
+}
+
+.cycle-cal-cell.today:not(.period) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.cycle-cal-cell.period {
+  background: color-mix(in srgb, var(--danger) 16%, var(--surface));
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+}
+
+.cycle-cal-cell.period-start {
+  background: color-mix(in srgb, var(--danger) 28%, var(--surface));
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+.cycle-cal-cell.period.today {
+  outline: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+  outline-offset: 1px;
+}
+
+.cycle-cal-cell:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.cycle-cal-hint {
+  margin: 0;
+  text-align: center;
 }
 
 .section-cta {

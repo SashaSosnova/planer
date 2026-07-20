@@ -53,6 +53,7 @@ type Props = {
   onAddMeal: (opts?: { text?: string; mealType?: MealType }) => void
   onOpenMeal: (mealId: string) => void
   onOpenProfile: () => void
+  onOpenCycle: () => void
   onOpenWeightHistory: () => void
   onOpenStepsHistory: () => void
   onOpenAchievements: () => void
@@ -92,6 +93,7 @@ export function TodayScreen({
   onAddMeal,
   onOpenMeal,
   onOpenProfile,
+  onOpenCycle,
   onOpenWeightHistory,
   onOpenStepsHistory,
   onOpenAchievements,
@@ -500,7 +502,7 @@ export function TodayScreen({
       )}
 
       {cycle.phase !== 'unknown' && cycle.dayInCycle != null && (
-        <button type="button" className="cycle-today-card" onClick={onOpenProfile}>
+        <button type="button" className="progress-card progress-card-btn" onClick={onOpenCycle}>
           <div className="progress-card-top">
             <span>Цикл</span>
             <strong>

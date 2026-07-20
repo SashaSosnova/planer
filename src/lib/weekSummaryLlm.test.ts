@@ -4,7 +4,6 @@ import {
   getCachedWeekSummary,
   getWeekNutritionSummary,
   localWeekNutritionNote,
-  weekSummaryFingerprint,
 } from './weekSummaryLlm'
 
 const store = new Map<string, string>()
@@ -42,23 +41,21 @@ describe('week summary cache', () => {
     vi.restoreAllMocks()
   })
 
-  it('returns cached text while fingerprint matches', async () => {
-    const w = week()
-    const fp = weekSummaryFingerprint(w)
+  it('returns frozen text and never calls LLM again', async () => {
     localStorage.setItem(
-      'planer-week-summaries-v2',
+      'planer-week-summaries-v3',
       JSON.stringify({
-        '2026-07-06': { text: 'Уже сохранённый итог недели.', fingerprint: fp },
+        '2026-07-06': { text: 'Уже сохранённый итог недели.', savedAt: '2026-07-13T08:00:00.000Z' },
       }),
     )
     const spy = vi.spyOn(await import('./deepseek'), 'deepseekJson')
-    const text = await getWeekNutritionSummary(w)
+    const text = await getWeekNutritionSummary(week())
     expect(text).toBe('Уже сохранённый итог недели.')
-    expect(getCachedWeekSummary('2026-07-06', fp)).toBe('Уже сохранённый итог недели.')
+    expect(getCachedWeekSummary('2026-07-06')).toBe('Уже сохранённый итог недели.')
     expect(spy).not.toHaveBeenCalled()
   })
 
-  it('regenerates when week data changes', async () => {
+  it('does not regenerate when week data changes after freeze', async () => {
     vi.spyOn(await import('./deepseek'), 'isDeepseekConfigured').mockReturnValue(false)
     const firstWeek = week()
     const first = await getWeekNutritionSummary(firstWeek)
@@ -69,7 +66,30 @@ describe('week summary cache', () => {
       mealSnippets: ['changed'],
     })
     const second = await getWeekNutritionSummary(changed)
-    expect(second).toBe(localWeekNutritionNote(changed))
-    expect(second).not.toBe(first)
+    expect(second).toBe(first)
+    expect(getCachedWeekSummary('2026-07-06')).toBe(first)
+  })
+
+  it('dedupes concurrent first-time generation', async () => {
+    vi.spyOn(await import('./deepseek'), 'isDeepseekConfigured').mockReturnValue(false)
+    const w = week()
+    const [a, b] = await Promise.all([getWeekNutritionSummary(w), getWeekNutritionSummary(w)])
+    expect(a).toBe(b)
+    expect(a).toBe(localWeekNutritionNote(w))
+  })
+
+  it('migrates legacy v2 cache without fingerprint checks', async () => {
+    localStorage.setItem(
+      'planer-week-summaries-v2',
+      JSON.stringify({
+        '2026-07-06': { text: 'Старый кэш.', fingerprint: 'stale' },
+      }),
+    )
+    const spy = vi.spyOn(await import('./deepseek'), 'deepseekJson')
+    const text = await getWeekNutritionSummary(week())
+    expect(text).toBe('Старый кэш.')
+    expect(spy).not.toHaveBeenCalled()
+    expect(localStorage.getItem('planer-week-summaries-v2')).toBeNull()
+    expect(getCachedWeekSummary('2026-07-06')).toBe('Старый кэш.')
   })
 })

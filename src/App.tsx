@@ -4,11 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppData } from './hooks/useAppData'
 import { useSettings } from './hooks/useSettings'
 import { useSwipeBack } from './hooks/useSwipeBack'
+import { buildTodayTimeline } from './lib/dayStats'
 import {
   hasStepsPermission,
   isHealthStepsSupported,
   syncStepsFromHealth,
 } from './lib/healthSteps'
+import {
+  getCachedWeekSummary,
+  getWeekNutritionSummary,
+} from './lib/weekSummaryLlm'
 import { AchievementsScreen } from './screens/AchievementsScreen'
 import { AddMealScreen } from './screens/AddMealScreen'
 import { DiaryScreen } from './screens/DiaryScreen'
@@ -26,7 +31,7 @@ import './App.css'
 type Overlay =
   | { type: 'add-meal'; prefillText?: string; mealType?: MealType }
   | { type: 'edit-meal'; mealId: string }
-  | { type: 'profile' }
+  | { type: 'profile'; openCycleCal?: boolean }
   | { type: 'weight-history' }
   | { type: 'steps-history' }
   | { type: 'achievements' }
@@ -117,6 +122,14 @@ export default function App() {
     closeOverlay()
   }, [runBackHandlers, closeOverlay])
 
+  // When a week just closed (Mon+), write its report once in the background.
+  useEffect(() => {
+    if (!ready) return
+    const newest = buildTodayTimeline(data, dailyKcalGoal).historyWeeks[0]
+    if (!newest || getCachedWeekSummary(newest.weekStart)) return
+    void getWeekNutritionSummary(newest)
+  }, [ready, data, dailyKcalGoal])
+
   // Quiet refresh from Health Connect when permission was already granted.
   useEffect(() => {
     if (!ready || !isHealthStepsSupported()) return
@@ -203,6 +216,7 @@ export default function App() {
             }
             onOpenMeal={(mealId) => setOverlay({ type: 'edit-meal', mealId })}
             onOpenProfile={() => setOverlay({ type: 'profile' })}
+            onOpenCycle={() => setOverlay({ type: 'profile', openCycleCal: true })}
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
             onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
             onOpenAchievements={() => setOverlay({ type: 'achievements' })}
@@ -261,7 +275,7 @@ export default function App() {
 
         {overlay?.type === 'profile' && (
           <ProfileScreen
-            key={uid ?? 'local'}
+            key={`${uid ?? 'local'}-${overlay.openCycleCal ? 'cal' : 'base'}`}
             data={data}
             user={user}
             settings={settings}
@@ -270,6 +284,7 @@ export default function App() {
             onSaveTargets={saveTargets}
             onSavePeriodStart={savePeriodStart}
             onRemovePeriodStart={removePeriodStart}
+            initialCycleCalOpen={Boolean(overlay.openCycleCal)}
             registerBackHandler={registerBackHandler}
           />
         )}

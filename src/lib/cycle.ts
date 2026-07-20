@@ -158,4 +158,19 @@ export function getCycleInfo(
   }
 }
 
+/** ISO dates that fall in a menstrual stretch for any recorded start. */
+export function menstrualDateSet(
+  starts: PeriodStart[],
+  periodLengthDays = DEFAULT_PERIOD_LENGTH,
+): Set<string> {
+  const periodLen = clampPeriodLength(periodLengthDays)
+  const out = new Set<string>()
+  for (const start of starts) {
+    for (let i = 0; i < periodLen; i++) {
+      out.add(addDaysIso(start.date, i))
+    }
+  }
+  return out
+}
+
 export { addDaysIso }

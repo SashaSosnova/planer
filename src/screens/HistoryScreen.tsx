@@ -1,8 +1,12 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { DaySummaryCard } from '../components/DaySummaryCard'
 import { WeekCard } from '../components/WeekCard'
 import { todayIso } from '../lib/date'
 import { buildTodayTimeline } from '../lib/dayStats'
+import {
+  getCachedWeekSummary,
+  getWeekNutritionSummary,
+} from '../lib/weekSummaryLlm'
 import type { AppData } from '../types'
 
 type Props = {
@@ -22,6 +26,14 @@ export function HistoryScreen({
     () => buildTodayTimeline(data, dailyKcalGoal, todayIso()),
     [data, dailyKcalGoal],
   )
+
+  // Freeze LLM reports once when a week first appears as completed — not on every revisit.
+  useEffect(() => {
+    for (const week of historyWeeks) {
+      if (getCachedWeekSummary(week.weekStart)) continue
+      void getWeekNutritionSummary(week)
+    }
+  }, [historyWeeks])
 
   const empty = recentDays.length === 0 && historyWeeks.length === 0
 

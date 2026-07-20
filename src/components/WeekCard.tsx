@@ -4,7 +4,6 @@ import {
   getCachedWeekSummary,
   getWeekNutritionSummary,
   localWeekNutritionNote,
-  weekSummaryFingerprint,
 } from '../lib/weekSummaryLlm'
 import { CalorieRing } from './CalorieRing'
 
@@ -14,13 +13,12 @@ type Props = {
 }
 
 export function WeekCard({ week, maintainKcalGoal }: Props) {
-  const fingerprint = weekSummaryFingerprint(week)
-  const cached = getCachedWeekSummary(week.weekStart, fingerprint)
+  const cached = getCachedWeekSummary(week.weekStart)
   const [note, setNote] = useState(() => cached ?? localWeekNutritionNote(week))
   const [loadingNote, setLoadingNote] = useState(() => !cached)
 
   useEffect(() => {
-    const existing = getCachedWeekSummary(week.weekStart, fingerprint)
+    const existing = getCachedWeekSummary(week.weekStart)
     if (existing) {
       setNote(existing)
       setLoadingNote(false)
@@ -38,7 +36,7 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
     return () => {
       cancelled = true
     }
-  }, [week, fingerprint])
+  }, [week.weekStart])
 
   const weightLabel =
     week.weightDelta == null

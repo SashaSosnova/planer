@@ -71,11 +71,6 @@ describe('computeWeightForecast', () => {
         count: 9000,
         createdAt: 1,
       })),
-      checkIns: [
-        { id: 'c1', date: '2026-06-20', sleepHours: 5.5, createdAt: 1 },
-        { id: 'c2', date: '2026-06-21', sleepHours: 5, createdAt: 1 },
-        { id: 'c3', date: '2026-06-22', sleepHours: 6, createdAt: 1 },
-      ],
       periodStarts: [{ id: 'p1', date: '2026-06-05', createdAt: 1 }],
       measurements: [
         { id: 'm1', date: '2026-06-01', waist: 75, createdAt: 1 },

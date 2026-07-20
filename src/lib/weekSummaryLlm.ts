@@ -1,11 +1,11 @@
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
 import type { WeekStats } from './dayStats'
 
-const CACHE_KEY = 'planer-week-summaries-v1'
+const CACHE_KEY = 'planer-week-summaries-v2'
 
 type Cached = {
-  fingerprint: string
   text: string
+  fingerprint: string
 }
 
 function loadCache(): Record<string, Cached> {
@@ -22,7 +22,8 @@ function saveCache(map: Record<string, Cached>): void {
   localStorage.setItem(CACHE_KEY, JSON.stringify(map))
 }
 
-export function weekFingerprint(week: WeekStats): string {
+/** Invalidate cache when meals / weight / steps for the week change. */
+export function weekSummaryFingerprint(week: WeekStats): string {
   return [
     Math.round(week.totals.kcal),
     Math.round(week.totals.protein),
@@ -30,10 +31,21 @@ export function weekFingerprint(week: WeekStats): string {
     Math.round(week.totals.carbs),
     week.weightDelta ?? 'x',
     week.avgSteps ?? 'x',
-    week.avgMood ?? 'x',
-    week.avgSleepHours ?? 'x',
     week.mealSnippets.length,
-  ].join('|')
+    week.mealSnippets.slice(0, 24).join('|'),
+  ].join('::')
+}
+
+/** Sync read — only if fingerprint still matches. */
+export function getCachedWeekSummary(
+  weekStart: string,
+  fingerprint?: string,
+): string | null {
+  const hit = loadCache()[weekStart]
+  const text = hit?.text?.trim()
+  if (!text) return null
+  if (fingerprint != null && hit.fingerprint !== fingerprint) return null
+  return text
 }
 
 export function localWeekNutritionNote(week: WeekStats): string {
@@ -51,20 +63,17 @@ export function localWeekNutritionNote(week: WeekStats): string {
     const sign = week.weightDelta > 0 ? '+' : ''
     parts.push(`Вес ${sign}${week.weightDelta} кг.`)
   }
-  if (week.avgSleepHours != null) {
-    parts.push(`Сон ${String(week.avgSleepHours).replace('.', ',')} ч.`)
-  }
-  if (week.avgMood != null) {
-    parts.push(`Настроение ${week.avgMood.toFixed(1).replace('.', ',')}/5.`)
-  }
   return parts.join(' ')
 }
 
+/**
+ * Summary for a completed week. Cached while the week fingerprint is unchanged;
+ * regenerates when meals / weight / steps for that week change.
+ */
 export async function getWeekNutritionSummary(week: WeekStats): Promise<string> {
-  const fingerprint = weekFingerprint(week)
-  const cache = loadCache()
-  const hit = cache[week.weekStart]
-  if (hit && hit.fingerprint === fingerprint) return hit.text
+  const fingerprint = weekSummaryFingerprint(week)
+  const cached = getCachedWeekSummary(week.weekStart, fingerprint)
+  if (cached) return cached
 
   let text = localWeekNutritionNote(week)
 
@@ -77,8 +86,6 @@ export async function getWeekNutritionSummary(week: WeekStats): Promise<string> 
 Белки/жиры/углеводы: ${Math.round(week.totals.protein)} / ${Math.round(week.totals.fat)} / ${Math.round(week.totals.carbs)}
 Изменение веса: ${week.weightDelta != null ? `${week.weightDelta} кг` : 'нет данных'}
 Средние шаги: ${week.avgSteps ?? 'нет данных'}
-Средний сон: ${week.avgSleepHours != null ? `${week.avgSleepHours} ч` : 'нет данных'}
-Среднее настроение (1–5): ${week.avgMood ?? 'нет данных'}
 
 Приёмы пищи:
 ${week.mealSnippets.slice(0, 40).join('\n')}
@@ -91,7 +98,8 @@ ${week.mealSnippets.slice(0, 40).join('\n')}
     }
   }
 
-  cache[week.weekStart] = { fingerprint, text }
+  const cache = loadCache()
+  cache[week.weekStart] = { text, fingerprint }
   saveCache(cache)
   return text
 }

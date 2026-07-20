@@ -12,7 +12,7 @@ export const emptyAppData = (): AppData => ({
   weights: [],
   measurements: [],
   steps: [],
-  checkIns: [],
+  dayNotes: [],
   periodStarts: [],
 })
 

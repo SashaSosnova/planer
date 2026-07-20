@@ -1,16 +1,22 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { App as CapApp } from '@capacitor/app'
+import { Capacitor } from '@capacitor/core'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAppData } from './hooks/useAppData'
 import { useSettings } from './hooks/useSettings'
+import { useSwipeBack } from './hooks/useSwipeBack'
 import {
   hasStepsPermission,
   isHealthStepsSupported,
   syncStepsFromHealth,
 } from './lib/healthSteps'
-import { hasSleepPermission, syncSleepFromHealth } from './lib/healthSleep'
 import { AchievementsScreen } from './screens/AchievementsScreen'
 import { AddMealScreen } from './screens/AddMealScreen'
+import { DiaryScreen } from './screens/DiaryScreen'
+import { HistoryScreen } from './screens/HistoryScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
+import { MeasuresScreen } from './screens/MeasuresScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
+import { TastesScreen } from './screens/TastesScreen'
 import { StepsHistoryScreen } from './screens/StepsHistoryScreen'
 import { TodayScreen } from './screens/TodayScreen'
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen'
@@ -23,6 +29,10 @@ type Overlay =
   | { type: 'weight-history' }
   | { type: 'steps-history' }
   | { type: 'achievements' }
+  | { type: 'diary' }
+  | { type: 'history' }
+  | { type: 'measures' }
+  | { type: 'tastes' }
   | null
 
 export default function App() {
@@ -32,6 +42,8 @@ export default function App() {
     ready,
     mode,
     cloudError,
+    uid,
+    user,
     saveFood,
     deleteFood,
     saveMeal,
@@ -39,7 +51,7 @@ export default function App() {
     saveWeight,
     saveSteps,
     saveMeasurement,
-    saveCheckIn,
+    saveDayNote,
     savePeriodStart,
     removePeriodStart,
   } = useAppData()
@@ -50,6 +62,7 @@ export default function App() {
   }, [data.weights])
 
   const {
+    settings,
     dailyKcalGoal,
     maintainKcalGoal,
     proteinGoal,
@@ -57,19 +70,50 @@ export default function App() {
     targetWeightKg,
     cycleLengthDays,
     periodLengthDays,
+    tastePrefs,
     saveProfile,
     syncGoalFromWeight,
     saveTargets,
-  } = useSettings(latestWeightKg)
+    rateMealIdea,
+    clearTasteVote,
+    addCanCook,
+  } = useSettings(latestWeightKg, uid)
+
+  const latestWeightDate = useMemo(() => {
+    const sorted = [...data.weights].sort((a, b) => b.date.localeCompare(a.date))
+    return sorted[0]?.date
+  }, [data.weights])
 
   const saveStepsRef = useRef(saveSteps)
   saveStepsRef.current = saveSteps
   const stepsRef = useRef(data.steps)
   stepsRef.current = data.steps
-  const saveCheckInRef = useRef(saveCheckIn)
-  saveCheckInRef.current = saveCheckIn
-  const checkInsRef = useRef(data.checkIns)
-  checkInsRef.current = data.checkIns
+  const overlayRef = useRef(overlay)
+  overlayRef.current = overlay
+  const backStackRef = useRef<Array<() => boolean>>([])
+
+  const registerBackHandler = useCallback((fn: () => boolean) => {
+    backStackRef.current.push(fn)
+    return () => {
+      const i = backStackRef.current.lastIndexOf(fn)
+      if (i >= 0) backStackRef.current.splice(i, 1)
+    }
+  }, [])
+
+  const runBackHandlers = useCallback(() => {
+    const stack = backStackRef.current
+    for (let i = stack.length - 1; i >= 0; i--) {
+      if (stack[i]!()) return true
+    }
+    return false
+  }, [])
+
+  const closeOverlay = useCallback(() => setOverlay(null), [])
+
+  const handleOverlayBack = useCallback(() => {
+    if (runBackHandlers()) return
+    closeOverlay()
+  }, [runBackHandlers, closeOverlay])
 
   // Quiet refresh from Health Connect when permission was already granted.
   useEffect(() => {
@@ -96,34 +140,22 @@ export default function App() {
   }, [ready])
 
   useEffect(() => {
-    if (!ready || !isHealthStepsSupported()) return
-    let cancelled = false
-    void (async () => {
-      if (!(await hasSleepPermission())) return
-      if (cancelled) return
-      try {
-        await syncSleepFromHealth(
-          async (date, hours) => {
-            await saveCheckInRef.current({ date, sleepHours: hours })
-          },
-          {
-            daysBack: 7,
-            onlyIfMissing: true,
-            existingByDate: new Map(
-              checkInsRef.current
-                .filter((c) => c.sleepHours != null)
-                .map((c) => [c.date, c.sleepHours!] as const),
-            ),
-          },
-        )
-      } catch {
-        // Ignore background sync failures.
+    if (!Capacitor.isNativePlatform()) return
+    const sub = CapApp.addListener('backButton', () => {
+      if (runBackHandlers()) return
+      if (overlayRef.current != null) {
+        setOverlay(null)
+        return
       }
-    })()
+      void CapApp.minimizeApp()
+    })
     return () => {
-      cancelled = true
+      void sub.then((h) => h.remove())
     }
-  }, [ready])
+  }, [runBackHandlers])
+
+  const showOverlay = overlay != null
+  useSwipeBack(showOverlay, handleOverlayBack)
 
   const editMeal =
     overlay?.type === 'edit-meal'
@@ -139,9 +171,6 @@ export default function App() {
       </div>
     )
   }
-
-  const showOverlay = overlay != null
-  const closeOverlay = () => setOverlay(null)
 
   return (
     <div className="app-shell">
@@ -169,13 +198,23 @@ export default function App() {
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
             onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
             onOpenAchievements={() => setOverlay({ type: 'achievements' })}
+            onOpenDiary={() => setOverlay({ type: 'diary' })}
+            onOpenHistory={() => setOverlay({ type: 'history' })}
+            onOpenMeasures={() => setOverlay({ type: 'measures' })}
+            onOpenTastes={() => setOverlay({ type: 'tastes' })}
+            registerBackHandler={registerBackHandler}
+            backEnabled={!showOverlay}
+            tastePrefs={tastePrefs}
+            onRateMealIdea={rateMealIdea}
             onSaveWeight={async (date, kg) => {
               const entry = await saveWeight(date, kg)
-              syncGoalFromWeight(kg)
+              if (!latestWeightDate || date >= latestWeightDate) {
+                syncGoalFromWeight(kg)
+              }
               return entry
             }}
             onSaveSteps={saveSteps}
-            onSaveCheckIn={saveCheckIn}
+            onSaveDayNote={saveDayNote}
           />
         </div>
 
@@ -186,6 +225,7 @@ export default function App() {
             onSaveMeal={saveMeal}
             onSaveFood={saveFood}
             onDeleteFood={deleteFood}
+            registerBackHandler={registerBackHandler}
           />
         )}
 
@@ -211,13 +251,33 @@ export default function App() {
 
         {overlay?.type === 'profile' && (
           <ProfileScreen
+            key={uid ?? 'local'}
             data={data}
+            user={user}
+            settings={settings}
             onBack={closeOverlay}
             onSaveProfile={saveProfile}
             onSaveTargets={saveTargets}
-            onSaveMeasurement={saveMeasurement}
             onSavePeriodStart={savePeriodStart}
             onRemovePeriodStart={removePeriodStart}
+            registerBackHandler={registerBackHandler}
+          />
+        )}
+
+        {overlay?.type === 'measures' && (
+          <MeasuresScreen
+            data={data}
+            onBack={closeOverlay}
+            onSave={saveMeasurement}
+          />
+        )}
+
+        {overlay?.type === 'tastes' && (
+          <TastesScreen
+            tastePrefs={tastePrefs}
+            onBack={closeOverlay}
+            onClearTasteVote={clearTasteVote}
+            onAddCanCook={addCanCook}
           />
         )}
 
@@ -231,7 +291,9 @@ export default function App() {
             onBack={closeOverlay}
             onSave={async (date, kg) => {
               const entry = await saveWeight(date, kg)
-              syncGoalFromWeight(kg)
+              if (!latestWeightDate || date >= latestWeightDate) {
+                syncGoalFromWeight(kg)
+              }
               return entry
             }}
           />
@@ -246,9 +308,26 @@ export default function App() {
             data={data}
             targetWeightKg={targetWeightKg}
             onBack={closeOverlay}
+            registerBackHandler={registerBackHandler}
           />
         )}
 
+        {overlay?.type === 'diary' && (
+          <DiaryScreen
+            data={data}
+            onBack={closeOverlay}
+            onSaveDayNote={saveDayNote}
+          />
+        )}
+
+        {overlay?.type === 'history' && (
+          <HistoryScreen
+            data={data}
+            dailyKcalGoal={dailyKcalGoal}
+            maintainKcalGoal={maintainKcalGoal}
+            onBack={closeOverlay}
+          />
+        )}
       </main>
     </div>
   )

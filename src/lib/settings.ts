@@ -9,7 +9,15 @@ import {
 import { clampCycleLength, clampPeriodLength, DEFAULT_CYCLE_LENGTH, DEFAULT_PERIOD_LENGTH } from './cycle'
 
 const KEY = 'planer-settings-v1'
+/** Which auth uid currently owns local settings (prevents cross-account seed). */
+const OWNER_KEY = 'planer-settings-uid-v1'
 const FALLBACK_GOAL = 1800
+
+export type TastePrefs = {
+  likes: string[]
+  dislikes: string[]
+  canCook: string[]
+}
 
 export type AppSettings = {
   profile: BodyProfile | null
@@ -21,6 +29,8 @@ export type AppSettings = {
   periodLengthDays: number
   /** True after the user explicitly saved cycle lengths in profile */
   cycleConfigured: boolean
+  /** Scaffold for future meal suggestions */
+  tastePrefs: TastePrefs
 }
 
 const DEFAULT_PROFILE: BodyProfile = {
@@ -58,37 +68,93 @@ function parseTargetWeight(raw: unknown): number | null {
   return Math.round(n * 10) / 10
 }
 
-const DEFAULT_SETTINGS = (): AppSettings => ({
-  profile: null,
-  dailyKcalGoal: FALLBACK_GOAL,
-  targetWeightKg: null,
-  cycleLengthDays: DEFAULT_CYCLE_LENGTH,
-  periodLengthDays: DEFAULT_PERIOD_LENGTH,
-  cycleConfigured: false,
+const emptyTastePrefs = (): TastePrefs => ({
+  likes: [],
+  dislikes: [],
+  canCook: [],
 })
+
+function parseTastePrefs(raw: unknown): TastePrefs {
+  if (!raw || typeof raw !== 'object') return emptyTastePrefs()
+  const t = raw as Partial<TastePrefs>
+  const list = (v: unknown) =>
+    Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
+  return {
+    likes: list(t.likes),
+    dislikes: list(t.dislikes),
+    canCook: list(t.canCook),
+  }
+}
+
+export function defaultSettings(): AppSettings {
+  return {
+    profile: null,
+    dailyKcalGoal: FALLBACK_GOAL,
+    targetWeightKg: null,
+    cycleLengthDays: DEFAULT_CYCLE_LENGTH,
+    periodLengthDays: DEFAULT_PERIOD_LENGTH,
+    cycleConfigured: false,
+    tastePrefs: emptyTastePrefs(),
+  }
+}
+
+export function getSettingsOwnerUid(): string | null {
+  try {
+    return localStorage.getItem(OWNER_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setSettingsOwnerUid(uid: string | null): void {
+  try {
+    if (uid == null) localStorage.removeItem(OWNER_KEY)
+    else localStorage.setItem(OWNER_KEY, uid)
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+/** Wipe local settings to defaults (used on account switch). */
+export function resetSettings(): AppSettings {
+  return replaceSettings(defaultSettings())
+}
+
+/** Parse settings from localStorage JSON or Firestore doc. */
+export function parseSettingsBlob(raw: unknown): AppSettings {
+  if (!raw || typeof raw !== 'object') return defaultSettings()
+  const parsed = raw as Partial<AppSettings> & { dailyKcalGoal?: number }
+  const profile = parseProfile(parsed.profile)
+  const goal = Number(parsed.dailyKcalGoal)
+  return {
+    profile,
+    dailyKcalGoal: Number.isFinite(goal) && goal > 0 ? Math.round(goal) : FALLBACK_GOAL,
+    targetWeightKg: parseTargetWeight(parsed.targetWeightKg),
+    cycleLengthDays: clampCycleLength(
+      Number(parsed.cycleLengthDays) || DEFAULT_CYCLE_LENGTH,
+    ),
+    periodLengthDays: clampPeriodLength(
+      Number(parsed.periodLengthDays) || DEFAULT_PERIOD_LENGTH,
+    ),
+    cycleConfigured: Boolean(parsed.cycleConfigured),
+    tastePrefs: parseTastePrefs(parsed.tastePrefs),
+  }
+}
 
 export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(KEY)
-    if (!raw) return DEFAULT_SETTINGS()
-    const parsed = JSON.parse(raw) as Partial<AppSettings> & { dailyKcalGoal?: number }
-    const profile = parseProfile(parsed.profile)
-    const goal = Number(parsed.dailyKcalGoal)
-    return {
-      profile,
-      dailyKcalGoal: Number.isFinite(goal) && goal > 0 ? Math.round(goal) : FALLBACK_GOAL,
-      targetWeightKg: parseTargetWeight(parsed.targetWeightKg),
-      cycleLengthDays: clampCycleLength(
-        Number(parsed.cycleLengthDays) || DEFAULT_CYCLE_LENGTH,
-      ),
-      periodLengthDays: clampPeriodLength(
-        Number(parsed.periodLengthDays) || DEFAULT_PERIOD_LENGTH,
-      ),
-      cycleConfigured: Boolean(parsed.cycleConfigured),
-    }
+    if (!raw) return defaultSettings()
+    return parseSettingsBlob(JSON.parse(raw))
   } catch {
-    return DEFAULT_SETTINGS()
+    return defaultSettings()
   }
+}
+
+export function replaceSettings(next: AppSettings): AppSettings {
+  const normalized = parseSettingsBlob(next)
+  localStorage.setItem(KEY, JSON.stringify(normalized))
+  return normalized
 }
 
 export function saveSettings(patch: Partial<AppSettings>): AppSettings {
@@ -108,14 +174,15 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
         : prev.periodLengthDays,
     cycleConfigured:
       patch.cycleConfigured !== undefined ? patch.cycleConfigured : prev.cycleConfigured,
+    tastePrefs:
+      patch.tastePrefs !== undefined ? parseTastePrefs(patch.tastePrefs) : prev.tastePrefs,
   }
   if (next.dailyKcalGoal <= 0) next.dailyKcalGoal = FALLBACK_GOAL
   next.dailyKcalGoal = Math.round(next.dailyKcalGoal)
   if (next.targetWeightKg != null) {
     next.targetWeightKg = parseTargetWeight(next.targetWeightKg)
   }
-  localStorage.setItem(KEY, JSON.stringify(next))
-  return next
+  return replaceSettings(next)
 }
 
 /** Persist profile and recompute daily goal from weight (kg). */

@@ -37,6 +37,86 @@
   gap: 12px;
 }
 
+.text-btn {
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.text-btn.active,
+.text-btn:active {
+  background: var(--accent-soft);
+}
+
+.more-anchor {
+  position: relative;
+}
+
+.more-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  min-width: 200px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 28px rgba(20, 38, 44, 0.14);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: more-popover-in 140ms ease-out;
+}
+
+@keyframes more-popover-in {
+  from {
+    transform: translateY(-4px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.more-sheet-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.more-sheet-item:active {
+  background: var(--accent-soft);
+}
+
+.more-sheet-item.quiet {
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--muted);
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 .icon-btn {
   width: 44px;
   height: 44px;
@@ -121,103 +201,33 @@
   color: var(--danger);
 }
 
-.today-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.today-hero-top,
+.today-hero,
 .week-card-top,
 .day-summary-top {
-  --meta-ring-size: 112px;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: minmax(var(--meta-ring-size), auto);
-  gap: 10px;
-  align-items: stretch;
+  gap: 12px;
+  align-items: center;
 }
 
-.today-hero-top .calorie-ring,
-.week-card-top .calorie-ring,
-.day-summary-top .calorie-ring {
-  align-self: center;
-}
-
-.today-hero-macros,
-.week-card-macros,
-.day-summary-macros {
-  display: block;
-  min-width: 0;
-  font-size: 0.78rem;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.today-meta-stack {
+.today-hero-side {
   display: flex;
   flex-direction: column;
-  justify-content: space-evenly;
-  min-width: 0;
-  height: 100%;
-  box-sizing: border-box;
-  padding: 2px 4px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface);
-}
-
-.meta-metric {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  justify-content: center;
   gap: 8px;
-  width: 100%;
-  margin: 0;
-  padding: 3px 6px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  border-radius: 8px;
-  min-height: 0;
-  cursor: pointer;
-}
-
-.meta-metric span {
-  color: var(--muted);
-  font-size: 0.7rem;
-  flex: 0 1 auto;
-  line-height: 1.2;
-}
-
-.meta-metric strong {
-  font-family: Fraunces, Georgia, serif;
-  font-size: 0.92rem;
-  font-weight: 600;
-  text-align: right;
   min-width: 0;
-  max-width: 55%;
-  line-height: 1.15;
 }
 
-.meta-metric--mood strong {
-  font-size: 0.85rem;
-  white-space: normal;
+.today-hero-side .bju-line {
+  display: block;
+  font-size: 0.88rem;
+  line-height: 1.35;
 }
 
-.meta-metric:active {
-  background: var(--accent-soft);
-}
-
-.meta-metric.static {
-  cursor: default;
-  pointer-events: none;
-}
-
-.meta-metric.static:active {
-  background: transparent;
+.today-meta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .stat-chip.compact {
@@ -595,6 +605,15 @@
   gap: 12px;
 }
 
+.day-summary-note {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+}
+
 .week-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -629,26 +648,14 @@
 }
 
 @media (max-width: 420px) {
-  .today-hero {
-    gap: 6px;
+  .today-hero,
+  .week-card-top,
+  .day-summary-top {
+    gap: 10px;
   }
 
-  .meta-metric {
-    padding: 2px 5px;
-  }
-
-  .meta-metric strong {
-    font-size: 0.88rem;
-  }
-
-  .meta-metric--mood strong {
+  .today-hero-side .bju-line {
     font-size: 0.8rem;
-  }
-
-  .today-hero-macros,
-  .week-card-macros,
-  .day-summary-macros {
-    font-size: 0.74rem;
   }
 
   .stat-chip.compact {
@@ -1395,89 +1402,296 @@
   color: var(--warm) !important;
 }
 
-.wellness-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  overflow: hidden;
-}
-
-.wellness-teaser {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  width: 100%;
-  padding: 14px;
-  border: none;
-  background: transparent;
-  color: inherit;
-  text-align: left;
-}
-
-.wellness-teaser-text {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  min-width: 0;
-}
-
-.wellness-teaser-text span {
-  line-height: 1.35;
-}
-
-.wellness-body {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 0 14px 14px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-}
-
-.wellness-label {
-  margin: 0;
-}
-
 .section-cta {
   padding: 8px 12px;
   font-size: 0.9rem;
 }
 
-.mood-row {
-  display: flex;
+.meal-actions {
+  justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 6px;
+  margin-top: 10px;
 }
 
-.mood-chip {
-  border: 1px solid var(--line);
-  background: var(--bg);
-  color: var(--ink);
-  border-radius: 999px;
-  padding: 7px 10px;
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.mood-chip.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #fff;
-}
-
-.wellness-meta-row {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
+.meal-advice {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.wellness-actions {
-  margin-top: 2px;
+.day-note-block {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.day-note-question {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+
+.day-note-input {
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 3.2em;
+  box-sizing: border-box;
+}
+
+.day-note-input.fixed {
+  height: 4.6em;
+  min-height: 4.6em;
+  max-height: 4.6em;
+  resize: none;
+  overflow-y: auto;
+}
+
+.day-note-input::placeholder {
+  color: var(--muted);
+}
+
+.day-note-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.day-note-actions .primary-btn {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  border-radius: 10px;
+}
+
+.chat-diary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.chat-day {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-day-label {
+  margin: 0;
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.chat-row {
+  display: flex;
+  width: 100%;
+}
+
+.chat-row.friend {
+  justify-content: flex-start;
+}
+
+.chat-row.me {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: min(92%, 340px);
+  margin: 0;
+  padding: 10px 14px;
+  border: none;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.4;
+  text-align: left;
+  word-break: break-word;
+}
+
+.chat-bubble.friend {
+  border-radius: 18px 18px 18px 6px;
+  background: var(--warm-soft);
+  color: var(--ink);
+}
+
+.chat-bubble.me {
+  border-radius: 18px 18px 6px 18px;
+  background: var(--accent);
+  color: #fff;
+}
+
+.chat-bubble-btn {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.chat-bubble-btn:active {
+  filter: brightness(0.96);
+}
+
+.chat-bubble-edit {
+  width: min(92%, 340px);
+  min-height: 4.5em;
+  resize: vertical;
+  box-sizing: border-box;
+  outline: 2px solid rgba(255, 255, 255, 0.35);
+  outline-offset: 0;
+}
+
+.meal-ideas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meal-idea-row {
+  margin: 0;
+  padding: 4px 6px 4px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 0.9rem;
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.meal-idea-main {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 8px 8px 10px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  cursor: pointer;
+}
+
+.meal-idea-main:active {
+  background: var(--accent-soft);
+}
+
+.meal-idea-title {
+  min-width: 0;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.meal-idea-macros {
+  line-height: 1.25;
+}
+
+.meal-idea-votes {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.meal-idea-detail-block {
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+.vote-btn {
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.vote-btn:active,
+.vote-btn.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.day-brief {
+  margin: 8px 0 0;
+}
+
+.day-note-preview {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.taste-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.taste-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.82rem;
+}
+
+.taste-chip button {
+  margin: 0;
+  padding: 0 2px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .ghost-btn.active-soft {

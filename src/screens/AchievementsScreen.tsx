@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ACHIEVEMENT_GROUP_LABELS,
   evaluateAchievements,
@@ -13,6 +13,7 @@ type Props = {
   data: AppData
   targetWeightKg: number | null
   onBack: () => void
+  registerBackHandler?: (fn: () => boolean) => () => void
 }
 
 const GROUP_ORDER: AchievementDef['group'][] = ['habits', 'body', 'wellness']
@@ -86,13 +87,29 @@ function GroupGrid({
   )
 }
 
-export function AchievementsScreen({ data, targetWeightKg, onBack }: Props) {
+export function AchievementsScreen({
+  data,
+  targetWeightKg,
+  onBack,
+  registerBackHandler,
+}: Props) {
   const statuses = useMemo(
     () => evaluateAchievements(data, { targetWeightKg }),
     [data, targetWeightKg],
   )
   const { unlocked, total } = unlockedCount(statuses)
   const [info, setInfo] = useState<AchievementStatus | null>(null)
+  const infoRef = useRef(info)
+  infoRef.current = info
+
+  useEffect(() => {
+    if (!registerBackHandler) return
+    return registerBackHandler(() => {
+      if (!infoRef.current) return false
+      setInfo(null)
+      return true
+    })
+  }, [registerBackHandler])
 
   return (
     <section className="screen">

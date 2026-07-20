@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   setDoc,
   deleteDoc,
@@ -9,7 +10,7 @@ import {
 import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
 import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../firebase'
 import {
-  sanitizeCheckIn,
+  sanitizeDayNote,
   sanitizeFood,
   sanitizeMeal,
   sanitizeMeasurement,
@@ -17,9 +18,10 @@ import {
   sanitizeSteps,
   sanitizeWeight,
 } from '../lib/sanitize'
+import type { AppSettings } from '../lib/settings'
 import type {
   AppData,
-  DayCheckIn,
+  DayNote,
   FoodItem,
   Meal,
   MeasurementEntry,
@@ -27,6 +29,8 @@ import type {
   StepsEntry,
   WeightEntry,
 } from '../types'
+
+const SETTINGS_DOC = 'settings'
 
 export async function ensureAuth(): Promise<User | null> {
   if (!isFirebaseConfigured()) return null
@@ -90,7 +94,7 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
     sanitizeMeasurement({ ...data, id }),
   )
   watch<StepsEntry>('steps', 'steps', (id, data) => sanitizeSteps({ ...data, id }))
-  watch<DayCheckIn>('checkIns', 'checkIns', (id, data) => sanitizeCheckIn({ ...data, id }))
+  watch<DayNote>('dayNotes', 'dayNotes', (id, data) => sanitizeDayNote({ ...data, id }))
   watch<PeriodStart>('periodStarts', 'periodStarts', (id, data) =>
     sanitizePeriodStart({ ...data, id }),
   )
@@ -128,4 +132,40 @@ export async function upsertDoc(
 
 export async function removeDoc(uid: string, colName: string, id: string): Promise<void> {
   await deleteDoc(doc(planerCol(uid, colName), id))
+}
+
+function settingsDocRef(uid: string) {
+  return doc(getFirebaseDb(), PLANER_COLLECTION, uid, 'meta', SETTINGS_DOC)
+}
+
+export async function upsertSettings(uid: string, settings: AppSettings): Promise<void> {
+  const clean = stripUndefined({ ...settings, updatedAt: Date.now() }) as Record<string, unknown>
+  await setDoc(settingsDocRef(uid), clean, { merge: true })
+}
+
+export async function fetchSettings(uid: string): Promise<AppSettings | null> {
+  const snap = await getDoc(settingsDocRef(uid))
+  if (!snap.exists()) return null
+  return snap.data() as AppSettings
+}
+
+/** Live settings doc; seed cloud from local once if empty. */
+export function subscribeSettings(
+  uid: string,
+  handlers: {
+    onSettings: (raw: Record<string, unknown> | null, meta: { fromCloud: boolean }) => void
+    onError?: (err: unknown) => void
+  },
+): Unsubscribe {
+  return onSnapshot(
+    settingsDocRef(uid),
+    (snap) => {
+      if (!snap.exists()) {
+        handlers.onSettings(null, { fromCloud: true })
+        return
+      }
+      handlers.onSettings(snap.data() as Record<string, unknown>, { fromCloud: true })
+    },
+    (err) => handlers.onError?.(err),
+  )
 }

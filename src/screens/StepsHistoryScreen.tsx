@@ -23,9 +23,10 @@ function num(v: string): number | undefined {
 }
 
 export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
-  const date = todayIso()
-  const today = data.steps.find((s) => s.date === date)
-  const [count, setCount] = useState(today?.count?.toString() ?? '')
+  const today = todayIso()
+  const [logDate, setLogDate] = useState(today)
+  const entry = data.steps.find((s) => s.date === logDate)
+  const [count, setCount] = useState(entry?.count?.toString() ?? '')
   const [busy, setBusy] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
   const [showSync, setShowSync] = useState(false)
@@ -34,8 +35,8 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
   const healthSupported = isHealthStepsSupported()
 
   useEffect(() => {
-    setCount(today?.count?.toString() ?? '')
-  }, [today?.count])
+    setCount(entry?.count?.toString() ?? '')
+  }, [entry?.count, logDate])
 
   const history = useMemo(
     () =>
@@ -51,7 +52,11 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
     return [{ id: 'steps', label: 'Шаги', color: '#2f7d4c', points }]
   }, [history])
 
-  const saveToday = async () => {
+  const saveEntry = async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(logDate) || logDate > today) {
+      setError('Дата не может быть в будущем')
+      return
+    }
     const stepsVal = num(count)
     if (stepsVal == null || stepsVal < 0) {
       setError('Укажите шаги')
@@ -61,7 +66,7 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
     setError(null)
     setSyncMsg(null)
     try {
-      await onSave(date, Math.round(stepsVal))
+      await onSave(logDate, Math.round(stepsVal))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
     } finally {
@@ -107,7 +112,7 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
       <div className="panel">
         <div className="section-head" style={{ marginBottom: 4 }}>
           <h2 className="subhead" style={{ marginTop: 0 }}>
-            Сегодня · {formatRuDate(date)}
+            Запись · {formatRuDate(logDate)}
           </h2>
           {healthSupported && (
             <button
@@ -120,6 +125,15 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
             </button>
           )}
         </div>
+        <label className="field">
+          <span>Дата</span>
+          <input
+            type="date"
+            max={today}
+            value={logDate}
+            onChange={(e) => setLogDate(e.target.value > today ? today : e.target.value)}
+          />
+        </label>
         <div className="day-log-edit">
           <input
             className="day-log-input"
@@ -132,7 +146,7 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
             type="button"
             className="primary-btn day-log-ok"
             disabled={busy || syncBusy}
-            onClick={() => void saveToday()}
+            onClick={() => void saveEntry()}
           >
             {busy ? '…' : 'OK'}
           </button>
@@ -191,10 +205,15 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
         <ul className="simple-list metric-history">
           {history.map((entry) => (
             <li key={entry.id}>
-              <div>
+              <button
+                type="button"
+                className="link-btn"
+                style={{ textAlign: 'left' }}
+                onClick={() => setLogDate(entry.date)}
+              >
                 <strong>{formatRuDate(entry.date)}</strong>
-                {entry.date === date && <span className="badge ok">сегодня</span>}
-              </div>
+                {entry.date === today && <span className="badge ok">сегодня</span>}
+              </button>
               <strong className="metric-history-value">
                 {entry.count.toLocaleString('ru-RU')}
               </strong>

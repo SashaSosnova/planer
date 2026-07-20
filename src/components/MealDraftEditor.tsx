@@ -64,6 +64,17 @@ export function applyItemPatch(
       }
     }
 
+    // Renaming breaks the library link — otherwise old КБЖУ stick to a new name.
+    if (safe.name != null && safe.name.trim() !== item.name.trim()) {
+      return {
+        ...item,
+        ...safe,
+        name: safe.name,
+        foodId: undefined,
+        source: 'estimate' as const,
+      }
+    }
+
     const next = { ...item, ...safe }
     const foodId = safe.foodId ?? item.foodId
     if (safe.grams != null && foodId) {

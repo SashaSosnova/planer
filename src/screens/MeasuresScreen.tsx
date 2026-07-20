@@ -21,7 +21,27 @@ function num(v: string): number | undefined {
   return n
 }
 
-/** Body measurements block — used inside Profile. */
+type ScreenProps = Props & {
+  onBack: () => void
+}
+
+/** Full-screen measurements — opened from «Ещё». */
+export function MeasuresScreen({ data, onSave, onBack }: ScreenProps) {
+  return (
+    <section className="screen">
+      <header className="screen-header">
+        <button type="button" className="link-btn" onClick={onBack}>
+          ← Назад
+        </button>
+        <h1>Обмеры</h1>
+        <p className="muted">Раз в неделю или реже</p>
+      </header>
+      <MeasuresPanel data={data} onSave={onSave} />
+    </section>
+  )
+}
+
+/** Body measurements content (screen chrome is outside). */
 export function MeasuresPanel({ data, onSave }: Props) {
   const date = todayIso()
   const measure = data.measurements.find((m) => m.date === date)
@@ -88,10 +108,7 @@ export function MeasuresPanel({ data, onSave }: Props) {
 
   return (
     <div className="panel-stack">
-      <div className="section-head">
-        <h2 className="subhead" style={{ margin: 0 }}>
-          Обмеры
-        </h2>
+      <div className="section-head" style={{ justifyContent: 'flex-end' }}>
         <button
           type="button"
           className={`icon-btn${showChart ? ' active' : ''}`}
@@ -101,9 +118,6 @@ export function MeasuresPanel({ data, onSave }: Props) {
           <ChartIcon />
         </button>
       </div>
-      <p className="muted small" style={{ margin: '-4px 0 0' }}>
-        Раз в неделю или реже
-      </p>
 
       {showChart && (
         <div className="panel chart-panel">

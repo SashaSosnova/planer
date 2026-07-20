@@ -102,17 +102,15 @@ export type StepsEntry = {
   createdAt: number
 }
 
-/** 1 — тяжело … 5 — отлично */
-export type MoodLevel = 1 | 2 | 3 | 4 | 5
-
-/** Mood + sleep for one calendar day */
-export type DayCheckIn = {
+/** One-sentence day note («twitter diary») */
+export type DayNote = {
   id: string
   date: string
-  mood?: MoodLevel
-  /** Hours slept the night before this date */
-  sleepHours?: number
+  text: string
+  /** Question shown when the note was saved (frozen for diary) */
+  question?: string
   createdAt: number
+  updatedAt: number
 }
 
 /** First day of a menstrual period */
@@ -149,6 +147,6 @@ export type AppData = {
   weights: WeightEntry[]
   measurements: MeasurementEntry[]
   steps: StepsEntry[]
-  checkIns: DayCheckIn[]
+  dayNotes: DayNote[]
   periodStarts: PeriodStart[]
 }

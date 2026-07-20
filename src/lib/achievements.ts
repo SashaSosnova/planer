@@ -21,10 +21,6 @@ export type AchievementId =
   | 'measure_progress'
   | 'own_food'
   | 'own_recipe'
-  | 'mood_3'
-  | 'mood_7'
-  | 'sleep_3'
-  | 'sleep_good'
   | 'cycle_start'
   | 'target_set'
   | 'lost_1kg'
@@ -173,34 +169,6 @@ export const ACHIEVEMENT_CATALOG: AchievementDef[] = [
     sticker: { character: 'Алиса', universe: 'pandorahearts', artKey: 'alice' },
   },
   {
-    id: 'mood_3',
-    title: 'Как я сегодня',
-    description: 'Настроение отмечено 3 дня',
-    group: 'wellness',
-    sticker: { character: 'C.C.', universe: 'codegeass', artKey: 'cc' },
-  },
-  {
-    id: 'mood_7',
-    title: 'Неделя чувств',
-    description: 'Настроение 7 дней подряд',
-    group: 'wellness',
-    sticker: { character: 'Усаги', universe: 'sailormoon', artKey: 'usagi' },
-  },
-  {
-    id: 'sleep_3',
-    title: 'Сон в фокусе',
-    description: 'Сон записан 3 дня',
-    group: 'wellness',
-    sticker: { character: 'Ниа', universe: 'deathnote', artKey: 'near' },
-  },
-  {
-    id: 'sleep_good',
-    title: 'Выспалась',
-    description: '≥7 часов сна три дня подряд',
-    group: 'wellness',
-    sticker: { character: 'Сейлор Меркурий', universe: 'sailormoon', artKey: 'mercury' },
-  },
-  {
     id: 'cycle_start',
     title: 'Цикл учтён',
     description: 'Отметили начало месячных',
@@ -242,7 +210,7 @@ const GROUP_ORDER: AchievementDef['group'][] = ['habits', 'body', 'wellness']
 export const ACHIEVEMENT_GROUP_LABELS: Record<AchievementDef['group'], string> = {
   habits: 'Привычки',
   body: 'Вес и тело',
-  wellness: 'Сон и настроение',
+  wellness: 'Цикл',
 }
 
 function uniqueSortedDates(dates: string[]): string[] {
@@ -314,18 +282,6 @@ export function evaluateAchievements(
   const mealDates = uniqueSortedDates(data.meals.map((m) => m.date))
   const weightDates = uniqueSortedDates(data.weights.map((w) => w.date))
   const stepDates = uniqueSortedDates(data.steps.filter((s) => s.count > 0).map((s) => s.date))
-  const moodDates = uniqueSortedDates(
-    data.checkIns.filter((c) => c.mood != null).map((c) => c.date),
-  )
-  const sleepDates = uniqueSortedDates(
-    data.checkIns.filter((c) => c.sleepHours != null).map((c) => c.date),
-  )
-  const goodSleepDates = uniqueSortedDates(
-    data.checkIns
-      .filter((c) => c.sleepHours != null && c.sleepHours >= 7)
-      .map((c) => c.date),
-  )
-
   const byDate = mealsByDate(data)
   const vegDays: string[] = []
   const proteinDays: string[] = []
@@ -410,10 +366,6 @@ export function evaluateAchievements(
   if (measureProgress) unlocked.add('measure_progress')
   if (data.foods.some((f) => !f.recipe)) unlocked.add('own_food')
   if (data.foods.some((f) => f.kind === 'dish' || f.recipe)) unlocked.add('own_recipe')
-  if (moodDates.length >= 3) unlocked.add('mood_3')
-  if (hasStreak(moodDates, 7, today)) unlocked.add('mood_7')
-  if (sleepDates.length >= 3) unlocked.add('sleep_3')
-  if (hasStreak(goodSleepDates, 3, today)) unlocked.add('sleep_good')
   if (data.periodStarts.length > 0) unlocked.add('cycle_start')
   if (target != null && target >= 30) unlocked.add('target_set')
   if (lost1) unlocked.add('lost_1kg')

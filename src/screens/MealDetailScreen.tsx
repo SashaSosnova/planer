@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { MealDraftEditor, applyItemPatch } from '../components/MealDraftEditor'
 import { MacroBar } from '../components/MacroBar'
-import { MEAL_TYPE_LABELS } from '../lib/labels'
+import { todayIso } from '../lib/date'
+import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER } from '../lib/labels'
 import { scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, Meal, MealItem, MealType } from '../types'
 
@@ -24,6 +25,8 @@ type Props = {
 
 export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveFood }: Props) {
   const [items, setItems] = useState(meal.items)
+  const [date, setDate] = useState(meal.date)
+  const [mealType, setMealType] = useState(meal.mealType)
   const [eatingOut, setEatingOut] = useState(meal.eatingOut)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +34,8 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
 
   useEffect(() => {
     setItems(meal.items)
+    setDate(meal.date)
+    setMealType(meal.mealType)
     setEatingOut(meal.eatingOut)
   }, [meal])
 
@@ -38,14 +43,18 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
   const isApproximate = eatingOut || items.some((i) => i.source === 'estimate')
 
   const save = async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > todayIso()) {
+      setError('Дата не может быть в будущем')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
       await onSave({
         id: meal.id,
-        date: meal.date,
-        mealType: meal.mealType,
-        rawText: meal.rawText.trim() || MEAL_TYPE_LABELS[meal.mealType],
+        date,
+        mealType,
+        rawText: meal.rawText.trim() || MEAL_TYPE_LABELS[mealType],
         items,
         isApproximate,
         eatingOut,
@@ -113,9 +122,40 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
         <button type="button" className="link-btn" onClick={onBack}>
           ← Назад
         </button>
-        <h1>{MEAL_TYPE_LABELS[meal.mealType]}</h1>
-        <p className="muted small">{meal.date}</p>
+        <h1>{MEAL_TYPE_LABELS[mealType]}</h1>
       </header>
+
+      <div className="panel">
+        <div className="meal-type-chips" role="group" aria-label="Тип приёма">
+          {MEAL_TYPE_ORDER.map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`meal-type-chip${mealType === key ? ' active' : ''}`}
+              onClick={() => setMealType(key)}
+            >
+              {MEAL_TYPE_LABELS[key]}
+            </button>
+          ))}
+        </div>
+        <label className="field">
+          <span>Дата</span>
+          <input
+            type="date"
+            max={todayIso()}
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </label>
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={eatingOut}
+            onChange={(e) => setEatingOut(e.target.checked)}
+          />
+          <span>Вне дома</span>
+        </label>
+      </div>
 
       <MacroBar totals={totals} />
 

@@ -1,4 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { User } from 'firebase/auth'
+import { AccountPanel } from '../components/AccountPanel'
 import { PromptDialog } from '../components/PromptDialog'
 import {
   ACTIVITY_LABELS,
@@ -18,9 +20,8 @@ import {
 } from '../lib/cycle'
 import { addDaysIso, formatRuDate, todayIso } from '../lib/date'
 import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
-import { loadSettings } from '../lib/settings'
-import type { AppData, MeasurementEntry } from '../types'
-import { MeasuresPanel } from './MeasuresScreen'
+import type { AppSettings } from '../lib/settings'
+import type { AppData } from '../types'
 
 const SEX_LABELS: Record<Sex, string> = {
   female: 'Женский',
@@ -29,6 +30,8 @@ const SEX_LABELS: Record<Sex, string> = {
 
 type Props = {
   data: AppData
+  user: User | null
+  settings: AppSettings
   onBack: () => void
   onSaveProfile: (profile: BodyProfile, weightKg: number) => { dailyKcalGoal: number }
   onSaveTargets: (input: {
@@ -36,11 +39,10 @@ type Props = {
     cycleLengthDays?: number
     periodLengthDays?: number
   }) => unknown
-  onSaveMeasurement: (
-    input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string },
-  ) => Promise<unknown>
   onSavePeriodStart: (date: string) => Promise<unknown>
   onRemovePeriodStart: (id: string) => Promise<unknown>
+  /** Register nested back handler; return unregister. */
+  registerBackHandler?: (fn: () => boolean) => () => void
 }
 
 function latestWeight(data: AppData): number | undefined {
@@ -50,15 +52,16 @@ function latestWeight(data: AppData): number | undefined {
 
 export function ProfileScreen({
   data,
+  user,
+  settings,
   onBack,
   onSaveProfile,
   onSaveTargets,
-  onSaveMeasurement,
   onSavePeriodStart,
   onRemovePeriodStart,
+  registerBackHandler,
 }: Props) {
-  const saved = loadSettings()
-  const savedProfile = saved.profile
+  const savedProfile = settings.profile
   const weightKg = latestWeight(data)
   const today = todayIso()
   const lastPeriod = latestPeriodStart(data.periodStarts)
@@ -72,28 +75,61 @@ export function ProfileScreen({
   const [error, setError] = useState<string | null>(null)
 
   const [targetKg, setTargetKg] = useState(
-    saved.targetWeightKg != null ? String(saved.targetWeightKg) : '',
+    settings.targetWeightKg != null ? String(settings.targetWeightKg) : '',
   )
-  const [savedTargetKg, setSavedTargetKg] = useState<number | null>(saved.targetWeightKg)
-  const [editingTarget, setEditingTarget] = useState(saved.targetWeightKg == null)
+  const [savedTargetKg, setSavedTargetKg] = useState<number | null>(settings.targetWeightKg)
+  const [editingTarget, setEditingTarget] = useState(settings.targetWeightKg == null)
   const [targetError, setTargetError] = useState<string | null>(null)
 
-  const [cycleLen, setCycleLen] = useState(String(saved.cycleLengthDays || DEFAULT_CYCLE_LENGTH))
+  const [cycleLen, setCycleLen] = useState(String(settings.cycleLengthDays || DEFAULT_CYCLE_LENGTH))
   const [periodLen, setPeriodLen] = useState(
-    String(saved.periodLengthDays || DEFAULT_PERIOD_LENGTH),
+    String(settings.periodLengthDays || DEFAULT_PERIOD_LENGTH),
   )
   const [savedCycleLen, setSavedCycleLen] = useState(
-    saved.cycleLengthDays || DEFAULT_CYCLE_LENGTH,
+    settings.cycleLengthDays || DEFAULT_CYCLE_LENGTH,
   )
   const [savedPeriodLen, setSavedPeriodLen] = useState(
-    saved.periodLengthDays || DEFAULT_PERIOD_LENGTH,
+    settings.periodLengthDays || DEFAULT_PERIOD_LENGTH,
   )
-  const [cycleConfigured, setCycleConfigured] = useState(Boolean(saved.cycleConfigured))
-  const [editingCycle, setEditingCycle] = useState(!saved.cycleConfigured)
+  const [cycleConfigured, setCycleConfigured] = useState(Boolean(settings.cycleConfigured))
+  const [editingCycle, setEditingCycle] = useState(!settings.cycleConfigured)
   const [cycleError, setCycleError] = useState<string | null>(null)
   const [periodPromptOpen, setPeriodPromptOpen] = useState(false)
   const [periodBusy, setPeriodBusy] = useState(false)
   const [periodError, setPeriodError] = useState<string | null>(null)
+  const periodPromptOpenRef = useRef(periodPromptOpen)
+  periodPromptOpenRef.current = periodPromptOpen
+
+  useEffect(() => {
+    const p = settings.profile
+    setEditing(!p)
+    setSex(p?.sex ?? 'female')
+    setAge(p?.age?.toString() ?? '')
+    setHeightCm(p?.heightCm?.toString() ?? '')
+    setActivity(p?.activity ?? 'light')
+    setGoalMode(p?.goalMode ?? 'mild')
+    setError(null)
+    setTargetKg(settings.targetWeightKg != null ? String(settings.targetWeightKg) : '')
+    setSavedTargetKg(settings.targetWeightKg)
+    setEditingTarget(settings.targetWeightKg == null)
+    setTargetError(null)
+    setCycleLen(String(settings.cycleLengthDays || DEFAULT_CYCLE_LENGTH))
+    setPeriodLen(String(settings.periodLengthDays || DEFAULT_PERIOD_LENGTH))
+    setSavedCycleLen(settings.cycleLengthDays || DEFAULT_CYCLE_LENGTH)
+    setSavedPeriodLen(settings.periodLengthDays || DEFAULT_PERIOD_LENGTH)
+    setCycleConfigured(Boolean(settings.cycleConfigured))
+    setEditingCycle(!settings.cycleConfigured)
+    setCycleError(null)
+  }, [settings])
+
+  useEffect(() => {
+    if (!registerBackHandler) return
+    return registerBackHandler(() => {
+      if (!periodPromptOpenRef.current) return false
+      setPeriodPromptOpen(false)
+      return true
+    })
+  }, [registerBackHandler])
 
   const cycle = useMemo(
     () => getCycleInfo(data.periodStarts, today, savedCycleLen, savedPeriodLen),
@@ -119,7 +155,7 @@ export function ProfileScreen({
   const liveGoal =
     savedProfile && weightKg != null
       ? calcDailyKcalGoal(savedProfile, weightKg)
-      : saved.dailyKcalGoal
+      : settings.dailyKcalGoal
 
   const proteinGoal = weightKg != null ? calcProteinGoal(weightKg) : null
 
@@ -151,10 +187,10 @@ export function ProfileScreen({
     setPeriodError(null)
     try {
       const prev = latestPeriodStart(data.periodStarts)
+      await onSavePeriodStart(startDate)
       if (prev && prev.date !== startDate) {
         await onRemovePeriodStart(prev.id)
       }
-      await onSavePeriodStart(startDate)
       setPeriodPromptOpen(false)
     } catch (err) {
       setPeriodError(err instanceof Error ? err.message : 'Ошибка')
@@ -210,8 +246,10 @@ export function ProfileScreen({
           ← Назад
         </button>
         <h1>Профиль</h1>
-        <p className="muted">Норма калорий, параметры и обмеры</p>
+        <p className="muted">Аккаунт, норма и параметры</p>
       </header>
+
+      <AccountPanel user={user} />
 
       {savedTargetKg != null && !editingTarget ? (
         <div className="panel">
@@ -531,8 +569,6 @@ export function ProfileScreen({
           {error && <p className="form-msg error">{error}</p>}
         </div>
       )}
-
-      <MeasuresPanel data={data} onSave={onSaveMeasurement} />
 
       {periodPromptOpen && (
         <PromptDialog

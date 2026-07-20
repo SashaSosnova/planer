@@ -6,7 +6,7 @@
 
 - React + Vite + TypeScript
 - Capacitor (Android)
-- Firebase Auth (anonymous) + Firestore
+- Firebase Auth (anonymous → email/password) + Firestore
 - DeepSeek `deepseek-v4-flash` для разбора еды и рецептов
 
 ## Логика еды
@@ -16,7 +16,11 @@
 3. Неизвестные/кафе-блюда оцениваются приблизительно (DeepSeek или локальный fallback).
 4. Перед сохранением можно поправить граммы и добавить оценку в справочник.
 
-Данные в Firestore: коллекция `planer/{uid}/…` (рядом с `families` и `tomSawyerFamilies` в проекте `kid-sheduler`).
+Данные в Firestore: `planer/{uid}/…` (еда, вес, шаги, обмеры, дневник, цикл) и `planer/{uid}/meta/settings` (профиль, цель, вкусы).
+
+По умолчанию — анонимный uid на устройстве. В **Профиле → Аккаунт** можно создать email/пароль (данные остаются на том же uid) или войти в существующий аккаунт на другом телефоне.
+
+В Firebase Console включите **Authentication → Email/Password**.
 
 Без Firebase приложение работает в **локальном режиме** (localStorage + локальный парсер).
 

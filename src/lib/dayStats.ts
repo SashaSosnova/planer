@@ -1,4 +1,4 @@
-import type { AppData, MacroSet, Meal, MoodLevel } from '../types'
+import type { AppData, MacroSet, Meal } from '../types'
 import { emptyMacros, sumMacros } from './nutrition'
 import { todayIso } from './date'
 import { vegGramsFromMeals } from './vegetables'
@@ -20,8 +20,7 @@ export type DayStats = {
   approximate: boolean
   weightKg?: number
   steps?: number
-  mood?: MoodLevel
-  sleepHours?: number
+  noteText?: string
   hasData: boolean
 }
 
@@ -36,16 +35,7 @@ export type WeekStats = {
   weightEnd?: number
   weightDelta?: number
   avgSteps?: number
-  /** Average mood 1–5 over days with a check-in */
-  avgMood?: number
-  /** Average sleep hours over days with a check-in */
-  avgSleepHours?: number
   mealSnippets: string[]
-}
-
-function avgOf(values: number[]): number | undefined {
-  if (values.length === 0) return undefined
-  return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * 10) / 10
 }
 
 export function statsForDate(data: AppData, date: string): DayStats {
@@ -55,7 +45,8 @@ export function statsForDate(data: AppData, date: string): DayStats {
   const totals = meals.length ? sumMacros(meals.map((m) => m.totals)) : emptyMacros()
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
-  const checkIn = data.checkIns.find((c) => c.date === date)
+  const note = (data.dayNotes ?? []).find((n) => n.date === date)
+  const noteText = note?.text.trim() ? note.text.trim() : undefined
   return {
     date,
     label: shortRuWeekday(date),
@@ -65,14 +56,9 @@ export function statsForDate(data: AppData, date: string): DayStats {
     approximate: meals.some((m) => m.isApproximate || m.eatingOut),
     weightKg: weight?.kg,
     steps: steps?.count,
-    mood: checkIn?.mood,
-    sleepHours: checkIn?.sleepHours,
+    noteText,
     hasData:
-      meals.length > 0 ||
-      weight != null ||
-      steps != null ||
-      checkIn?.mood != null ||
-      checkIn?.sleepHours != null,
+      meals.length > 0 || weight != null || steps != null || noteText != null,
   }
 }
 
@@ -85,8 +71,16 @@ function weightNear(data: AppData, dates: string[], fromStart: boolean): number 
   return undefined
 }
 
-export function buildWeekStats(data: AppData, weekStart: string, dailyKcalGoal: number): WeekStats {
-  const dates = isoDatesInWeek(weekStart)
+export function buildWeekStats(
+  data: AppData,
+  weekStart: string,
+  dailyKcalGoal: number,
+  /** If set, only days strictly before this ISO date (for the in-progress week). */
+  untilDate?: string,
+): WeekStats {
+  const allDates = isoDatesInWeek(weekStart)
+  const dates =
+    untilDate != null ? allDates.filter((d) => d < untilDate) : allDates
   const days = dates.map((d) => statsForDate(data, d))
   const totals = sumMacros(days.map((d) => d.totals))
   const stepDays = days.filter((d) => d.steps != null && d.steps > 0)
@@ -94,10 +88,6 @@ export function buildWeekStats(data: AppData, weekStart: string, dailyKcalGoal: 
     stepDays.length > 0
       ? Math.round(stepDays.reduce((s, d) => s + (d.steps ?? 0), 0) / stepDays.length)
       : undefined
-  const avgMood = avgOf(days.filter((d) => d.mood != null).map((d) => d.mood!))
-  const avgSleepHours = avgOf(
-    days.filter((d) => d.sleepHours != null).map((d) => d.sleepHours!),
-  )
   const weightStart = weightNear(data, dates, true)
   const weightEnd = weightNear(data, dates, false)
   const weightDelta =
@@ -109,24 +99,27 @@ export function buildWeekStats(data: AppData, weekStart: string, dailyKcalGoal: 
     d.meals.map((m) => `${d.date} ${m.mealType}: ${m.rawText} (${Math.round(m.totals.kcal)} ккал)`),
   )
 
+  const dayCount = Math.max(dates.length, 1)
   return {
     weekStart,
-    weekEnd: dates[6]!,
+    weekEnd: allDates[6]!,
     label: formatWeekRange(weekStart),
     days,
     totals,
-    kcalGoal: dailyKcalGoal * 7,
+    kcalGoal: dailyKcalGoal * dayCount,
     weightStart,
     weightEnd,
     weightDelta,
     avgSteps,
-    avgMood,
-    avgSleepHours,
     mealSnippets,
   }
 }
 
-/** Current week days before today (newest first), then completed weeks (newest first). */
+/**
+ * Timeline for History / Today:
+ * - recentDays: past days of the in-progress week (newest first), shown as days
+ * - historyWeeks: finished weeks only (newest first), collapsed into week cards
+ */
 export function buildTodayTimeline(
   data: AppData,
   dailyKcalGoal: number,
@@ -134,7 +127,9 @@ export function buildTodayTimeline(
 ): {
   today: DayStats
   recentDays: DayStats[]
+  /** @deprecated alias of historyWeeks */
   completedWeeks: WeekStats[]
+  historyWeeks: WeekStats[]
 } {
   const todayStats = statsForDate(data, today)
   const currentWeekStart = weekStartIso(today)
@@ -149,13 +144,18 @@ export function buildTodayTimeline(
   for (const m of data.meals) weekStarts.add(weekStartIso(m.date))
   for (const w of data.weights) weekStarts.add(weekStartIso(w.date))
   for (const s of data.steps) weekStarts.add(weekStartIso(s.date))
-  for (const c of data.checkIns) weekStarts.add(weekStartIso(c.date))
+  for (const n of data.dayNotes ?? []) weekStarts.add(weekStartIso(n.date))
 
-  const completedWeeks = [...weekStarts]
+  const historyWeeks = [...weekStarts]
     .filter((ws) => isWeekComplete(ws, today))
     .sort((a, b) => (a < b ? 1 : -1))
     .map((ws) => buildWeekStats(data, ws, dailyKcalGoal))
     .filter((w) => w.days.some((d) => d.hasData))
 
-  return { today: todayStats, recentDays, completedWeeks }
+  return {
+    today: todayStats,
+    recentDays,
+    completedWeeks: historyWeeks,
+    historyWeeks,
+  }
 }

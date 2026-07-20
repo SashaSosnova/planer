@@ -1,6 +1,5 @@
 import type {
   AppData,
-  DayCheckIn,
   MeasurementEntry,
   Meal,
   PeriodStart,
@@ -42,7 +41,6 @@ export type ForecastInput = {
   weights: WeightEntry[]
   meals?: Meal[]
   steps?: StepsEntry[]
-  checkIns?: DayCheckIn[]
   periodStarts?: PeriodStart[]
   measurements?: MeasurementEntry[]
   targetKg?: number | null
@@ -52,8 +50,6 @@ export type ForecastInput = {
   periodLengthDays?: number
   today?: string
 }
-
-type CheckInLike = Pick<DayCheckIn, 'date' | 'sleepHours'>
 
 function parseIsoMs(iso: string): number {
   const [y, m, d] = iso.split('-').map(Number)
@@ -164,15 +160,6 @@ export function energyWeeklyRate(
   return { rate, mealDays, avgKcal: Math.round(avgKcal) }
 }
 
-function avgSleepHours(checkIns: CheckInLike[], today: string, daysBack = 14): number | null {
-  const from = addDaysIso(today, -(daysBack - 1))
-  const vals = checkIns
-    .filter((c) => c.date >= from && c.date <= today && c.sleepHours != null)
-    .map((c) => c.sleepHours!)
-  if (vals.length < 3) return null
-  return vals.reduce((s, v) => s + v, 0) / vals.length
-}
-
 function waistTrendCm(measurements: MeasurementEntry[]): number | null {
   const withWaist = [...measurements]
     .filter((m) => m.waist != null && m.waist > 0)
@@ -185,20 +172,11 @@ function waistTrendCm(measurements: MeasurementEntry[]): number | null {
   return round1((last.waist ?? 0) - (first.waist ?? 0))
 }
 
-function blendRates(
-  scaleRate: number | null,
-  energyRate: number | null,
-  sleepDamp: boolean,
-): number | null {
-  let energy = energyRate
-  if (energy != null && sleepDamp && energy < 0) {
-    // Short sleep → expected fat loss often overstated
-    energy = round1(energy * 0.85)
+function blendRates(scaleRate: number | null, energyRate: number | null): number | null {
+  if (scaleRate != null && energyRate != null) {
+    return round1(0.55 * scaleRate + 0.45 * energyRate)
   }
-  if (scaleRate != null && energy != null) {
-    return round1(0.55 * scaleRate + 0.45 * energy)
-  }
-  return scaleRate ?? energy
+  return scaleRate ?? energyRate
 }
 
 function formatDelta(kg: number): string {
@@ -207,7 +185,7 @@ function formatDelta(kg: number): string {
 }
 
 /**
- * Forecast from scale trend + energy balance, with soft notes from sleep, cycle, measures.
+ * Forecast from scale trend + energy balance, with soft notes from cycle and measures.
  */
 export function computeWeightForecast(input: ForecastInput): WeightForecast | null
 /** @deprecated Prefer ForecastInput object */
@@ -243,10 +221,7 @@ export function computeWeightForecast(
     today,
   )
 
-  const sleepAvg = avgSleepHours(input.checkIns ?? [], today)
-  const sleepDamp = sleepAvg != null && sleepAvg < 6.5
-
-  const weeklyRateKg = blendRates(scale.rate, energy.rate, sleepDamp)
+  const weeklyRateKg = blendRates(scale.rate, energy.rate)
 
   const cycle = getCycleInfo(
     input.periodStarts ?? [],
@@ -260,8 +235,7 @@ export function computeWeightForecast(
   let confidence: 'low' | 'ok' = 'low'
   if (
     weeklyRateKg != null &&
-    ((scale.sampleCount >= 4 && scale.sampleDays >= 14) || energy.mealDays >= 10) &&
-    !sleepDamp
+    ((scale.sampleCount >= 4 && scale.sampleDays >= 14) || energy.mealDays >= 10)
   ) {
     confidence = 'ok'
   }
@@ -283,11 +257,6 @@ export function computeWeightForecast(
 
   const notes: string[] = []
   if (cycle.weightNote) notes.push(cycle.weightNote)
-  if (sleepDamp && sleepAvg != null) {
-    notes.push(
-      `Сон в среднем ${sleepAvg.toFixed(1).replace('.', ',')} ч — прогноз менее точный, вес может гулять.`,
-    )
-  }
   if (waistDelta != null && waistDelta <= -1) {
     notes.push(
       `Талия −${Math.abs(waistDelta).toFixed(1).replace('.', ',')} см — объёмы уходят, даже если весы капризничают.`,
@@ -349,7 +318,6 @@ export function forecastFromAppData(
     weights: data.weights,
     meals: data.meals,
     steps: data.steps,
-    checkIns: data.checkIns,
     periodStarts: data.periodStarts,
     measurements: data.measurements,
     ...opts,
@@ -371,10 +339,10 @@ function buildSummary(f: {
       const left = round1(f.currentKg - f.targetKg)
       if (Math.abs(left) < 0.15) return 'Вы уже около целевого веса.'
       return left > 0
-        ? `До цели ${left.toFixed(1).replace('.', ',')} кг. Нужно ещё взвешивания и дни с едой в дневнике.`
-        : `Цель выше текущего веса на ${Math.abs(left).toFixed(1).replace('.', ',')} кг.`
+        ? `До цели ${left.toFixed(1).replace('.', ',')} кг`
+        : `Цель выше текущего на ${Math.abs(left).toFixed(1).replace('.', ',')} кг`
     }
-    return 'Отмечайте вес и еду несколько дней — появится прогноз.'
+    return 'Появится темп, когда накопится несколько дней веса и еды'
   }
 
   const rate = f.weeklyRateKg
@@ -400,7 +368,7 @@ function buildSummary(f: {
     const toward = f.targetKg < f.currentKg ? rate < 0 : rate > 0
     if (!toward) parts.push('сейчас тренд не к цели')
   }
-  if (f.confidence === 'low') parts.push('оценка пока грубая')
+  if (f.confidence === 'low') parts.push('пока ориентир')
 
   return parts.join(' · ')
 }

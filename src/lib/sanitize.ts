@@ -2,17 +2,18 @@ import { coerceMealType } from './labels'
 import { round1, sumMacros } from './nutrition'
 import type {
   AppData,
-  DayCheckIn,
+  DayNote,
   FoodItem,
   MacroSet,
   Meal,
   MealItem,
   MeasurementEntry,
-  MoodLevel,
   PeriodStart,
   StepsEntry,
   WeightEntry,
 } from '../types'
+
+export const DAY_NOTE_MAX = 280
 
 /** Finite number ≥ 0, otherwise fallback. */
 export function nonNeg(n: unknown, fallback = 0): number {
@@ -166,29 +167,24 @@ export function sanitizeMeasurement(raw: unknown): MeasurementEntry | null {
   return hasAny ? entry : null
 }
 
-export function sanitizeCheckIn(raw: unknown): DayCheckIn | null {
+export function sanitizeDayNote(raw: unknown): DayNote | null {
   if (!raw || typeof raw !== 'object') return null
-  const c = raw as Record<string, unknown>
-  const id = String(c.id ?? '')
-  const date = String(c.date ?? '')
+  const n = raw as Record<string, unknown>
+  const id = String(n.id ?? '')
+  const date = String(n.date ?? '')
   if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
-  let mood: MoodLevel | undefined
-  const moodN = Number(c.mood)
-  if (moodN === 1 || moodN === 2 || moodN === 3 || moodN === 4 || moodN === 5) {
-    mood = moodN
-  }
-  let sleepHours: number | undefined
-  if (c.sleepHours != null) {
-    const h = Number(c.sleepHours)
-    if (Number.isFinite(h) && h >= 0 && h <= 16) sleepHours = Math.round(h * 2) / 2
-  }
-  if (mood == null && sleepHours == null) return null
+  const text = String(n.text ?? '').trim().slice(0, DAY_NOTE_MAX)
+  if (!text) return null
+  const createdAt = Number(n.createdAt) || Date.now()
+  const updatedAt = Number(n.updatedAt) || createdAt
+  const question = String(n.question ?? '').trim()
   return {
     id,
     date,
-    ...(mood != null ? { mood } : {}),
-    ...(sleepHours != null ? { sleepHours } : {}),
-    createdAt: Number(c.createdAt) || Date.now(),
+    text,
+    createdAt,
+    updatedAt,
+    ...(question ? { question: question.slice(0, 200) } : {}),
   }
 }
 
@@ -214,7 +210,7 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
       weights: [],
       measurements: [],
       steps: [],
-      checkIns: [],
+      dayNotes: [],
       periodStarts: [],
     }
   }
@@ -226,9 +222,9 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
       .map(sanitizeMeasurement)
       .filter((m): m is MeasurementEntry => m != null),
     steps: asArray(parsed.steps).map(sanitizeSteps).filter((s): s is StepsEntry => s != null),
-    checkIns: asArray(parsed.checkIns)
-      .map(sanitizeCheckIn)
-      .filter((c): c is DayCheckIn => c != null),
+    dayNotes: asArray(parsed.dayNotes)
+      .map(sanitizeDayNote)
+      .filter((n): n is DayNote => n != null),
     periodStarts: asArray(parsed.periodStarts)
       .map(sanitizePeriodStart)
       .filter((p): p is PeriodStart => p != null),

@@ -8,7 +8,7 @@ const empty = (): AppData => ({
   weights: [],
   measurements: [],
   steps: [],
-  checkIns: [],
+  dayNotes: [],
   periodStarts: [],
 })
 

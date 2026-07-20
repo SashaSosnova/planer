@@ -28,15 +28,16 @@ export function WeightHistoryScreen({
   onBack,
   onSave,
 }: Props) {
-  const date = todayIso()
-  const today = data.weights.find((w) => w.date === date)
-  const [kg, setKg] = useState(today?.kg?.toString() ?? '')
+  const today = todayIso()
+  const [logDate, setLogDate] = useState(today)
+  const entry = data.weights.find((w) => w.date === logDate)
+  const [kg, setKg] = useState(entry?.kg?.toString() ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    setKg(today?.kg?.toString() ?? '')
-  }, [today?.kg])
+    setKg(entry?.kg?.toString() ?? '')
+  }, [entry?.kg, logDate])
 
   const history = useMemo(
     () => [...data.weights].filter((w) => w.kg > 0).sort((a, b) => b.date.localeCompare(a.date)),
@@ -50,9 +51,9 @@ export function WeightHistoryScreen({
         maintainKcal: maintainKcalGoal,
         cycleLengthDays,
         periodLengthDays,
-        today: date,
+        today,
       }),
-    [data, targetWeightKg, maintainKcalGoal, cycleLengthDays, periodLengthDays, date],
+    [data, targetWeightKg, maintainKcalGoal, cycleLengthDays, periodLengthDays, today],
   )
 
   const series = useMemo((): ChartSeries[] => {
@@ -62,7 +63,11 @@ export function WeightHistoryScreen({
     return [{ id: 'weight', label: 'Вес', color: '#0f4c5c', points }]
   }, [history])
 
-  const saveToday = async () => {
+  const saveEntry = async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(logDate) || logDate > today) {
+      setError('Дата не может быть в будущем')
+      return
+    }
     const kgVal = num(kg)
     if (kgVal == null || kgVal < 30) {
       setError('Укажите вес от 30 кг')
@@ -71,7 +76,7 @@ export function WeightHistoryScreen({
     setBusy(true)
     setError(null)
     try {
-      await onSave(date, kgVal)
+      await onSave(logDate, kgVal)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка')
     } finally {
@@ -90,8 +95,17 @@ export function WeightHistoryScreen({
 
       <div className="panel">
         <h2 className="subhead" style={{ marginTop: 0 }}>
-          Сегодня · {formatRuDate(date)}
+          Запись · {formatRuDate(logDate)}
         </h2>
+        <label className="field">
+          <span>Дата</span>
+          <input
+            type="date"
+            max={today}
+            value={logDate}
+            onChange={(e) => setLogDate(e.target.value > today ? today : e.target.value)}
+          />
+        </label>
         <div className="day-log-edit">
           <input
             className="day-log-input"
@@ -104,7 +118,7 @@ export function WeightHistoryScreen({
             type="button"
             className="primary-btn day-log-ok"
             disabled={busy}
-            onClick={() => void saveToday()}
+            onClick={() => void saveEntry()}
           >
             {busy ? '…' : 'OK'}
           </button>
@@ -153,10 +167,15 @@ export function WeightHistoryScreen({
         <ul className="simple-list metric-history">
           {history.map((entry) => (
             <li key={entry.id}>
-              <div>
+              <button
+                type="button"
+                className="link-btn"
+                style={{ textAlign: 'left' }}
+                onClick={() => setLogDate(entry.date)}
+              >
                 <strong>{formatRuDate(entry.date)}</strong>
-                {entry.date === date && <span className="badge ok">сегодня</span>}
-              </div>
+                {entry.date === today && <span className="badge ok">сегодня</span>}
+              </button>
               <strong className="metric-history-value">{entry.kg} кг</strong>
             </li>
           ))}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { MacroBar } from '../components/MacroBar'
 import { MealDraftEditor, patchDraft } from '../components/MealDraftEditor'
 import { todayIso } from '../lib/date'
@@ -45,6 +45,7 @@ type Props = {
   }) => Promise<unknown>
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
   onDeleteFood: (id: string) => Promise<void>
+  registerBackHandler?: (fn: () => boolean) => () => void
 }
 
 export function AddMealScreen({
@@ -53,6 +54,7 @@ export function AddMealScreen({
   onSaveMeal,
   onSaveFood,
   onDeleteFood,
+  registerBackHandler,
 }: Props) {
   const [view, setView] = useState<View>('meal')
   const [libraryTab, setLibraryTab] = useState<LibraryTab>('products')
@@ -66,6 +68,17 @@ export function AddMealScreen({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
+  const viewRef = useRef(view)
+  viewRef.current = view
+
+  useEffect(() => {
+    if (!registerBackHandler) return
+    return registerBackHandler(() => {
+      if (viewRef.current !== 'library') return false
+      setView('meal')
+      return true
+    })
+  }, [registerBackHandler])
 
   const foodsRef = useMemo(
     () =>
@@ -257,9 +270,11 @@ export function AddMealScreen({
             <span>Дата</span>
             <input
               type="date"
+              max={todayIso()}
               value={date}
               onChange={(e) => {
-                setDate(e.target.value)
+                const next = e.target.value
+                setDate(next > todayIso() ? todayIso() : next)
                 setMealTypeTouched(false)
                 setDraft(null)
                 setInfo(null)

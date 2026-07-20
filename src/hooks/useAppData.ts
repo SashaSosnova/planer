@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { User } from 'firebase/auth'
 import { isFirebaseConfigured } from '../firebase'
+import { watchAuth } from '../lib/accountAuth'
 import { newId } from '../lib/date'
 import { generateAliases } from '../lib/foodAliases'
 import { sumMacros } from '../lib/nutrition'
 import {
   assertNonNegMacros,
+  DAY_NOTE_MAX,
   sanitizeMacros,
   sanitizeMealItems,
 } from '../lib/sanitize'
@@ -12,14 +15,13 @@ import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/
 import { emptyAppData, loadLocalData, saveLocalData } from '../storage/localStore'
 import type {
   AppData,
-  DayCheckIn,
+  DayNote,
   FoodItem,
   MacroSet,
   Meal,
   MealItem,
   MealType,
   MeasurementEntry,
-  MoodLevel,
   PeriodStart,
   StepsEntry,
   WeightEntry,
@@ -31,78 +33,109 @@ const CLOUD_KEYS: (keyof AppData)[] = [
   'weights',
   'measurements',
   'steps',
-  'checkIns',
+  'dayNotes',
   'periodStarts',
 ]
 
 export function useAppData() {
   const [data, setData] = useState<AppData>(() => loadLocalData())
   const [uid, setUid] = useState<string | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [ready, setReady] = useState(!isFirebaseConfigured())
   const [cloudError, setCloudError] = useState<string | null>(null)
   const useCloud = Boolean(uid)
   /** Collections already accepted from cloud (prevents empty first snapshot wiping local). */
   const cloudHydrated = useRef(new Set<keyof AppData>())
+  const prevUidRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
       setReady(true)
       return
     }
-    let unsub: (() => void) | undefined
+    let unsubData: (() => void) | undefined
     let cancelled = false
-    cloudHydrated.current = new Set()
-    ;(async () => {
-      try {
-        const user = await ensureAuth()
-        if (cancelled || !user) {
-          setReady(true)
-          return
-        }
-        setUid(user.uid)
-        unsub = subscribeUserData(user.uid, {
-          onData: (partial) => {
-            setData((prev) => {
-              const next: AppData = { ...prev }
-              for (const key of CLOUD_KEYS) {
-                if (!(key in partial)) continue
-                const cloudItems = partial[key]
-                if (!Array.isArray(cloudItems)) continue
-                const localItems = prev[key] as Array<{ id: string }>
-                // Empty cloud on first snapshot: seed cloud from local, keep local data.
-                if (
-                  cloudItems.length === 0 &&
-                  localItems.length > 0 &&
-                  !cloudHydrated.current.has(key)
-                ) {
-                  cloudHydrated.current.add(key)
-                  void Promise.all(
-                    localItems.map((item) =>
-                      upsertDoc(user.uid, key, item.id, { ...item } as Record<string, unknown>),
-                    ),
-                  )
-                  continue
-                }
-                cloudHydrated.current.add(key)
-                Object.assign(next, { [key]: cloudItems })
-              }
-              saveLocalData(next)
-              return next
-            })
-          },
-          onError: (err) => {
-            setCloudError(err instanceof Error ? err.message : 'Ошибка синхронизации')
-          },
-        })
-        setReady(true)
-      } catch (err) {
-        setCloudError(err instanceof Error ? err.message : 'Не удалось войти')
-        setReady(true)
+
+    const attachUser = (authUser: User) => {
+      const switched =
+        prevUidRef.current != null && prevUidRef.current !== authUser.uid
+      prevUidRef.current = authUser.uid
+      setUser(authUser)
+      setUid(authUser.uid)
+      setCloudError(null)
+      if (switched) {
+        // Different account: do not seed previous device data into the new uid
+        const empty = emptyAppData()
+        saveLocalData(empty)
+        setData(empty)
+        cloudHydrated.current = new Set(CLOUD_KEYS)
+      } else {
+        cloudHydrated.current = new Set()
       }
-    })()
+      unsubData?.()
+      unsubData = subscribeUserData(authUser.uid, {
+        onData: (partial) => {
+          setData((prev) => {
+            const next: AppData = { ...prev }
+            for (const key of CLOUD_KEYS) {
+              if (!(key in partial)) continue
+              const cloudItems = partial[key]
+              if (!Array.isArray(cloudItems)) continue
+              const localItems = prev[key] as Array<{ id: string }>
+              if (
+                cloudItems.length === 0 &&
+                localItems.length > 0 &&
+                !cloudHydrated.current.has(key)
+              ) {
+                cloudHydrated.current.add(key)
+                void Promise.all(
+                  localItems.map((item) =>
+                    upsertDoc(authUser.uid, key, item.id, {
+                      ...item,
+                    } as Record<string, unknown>),
+                  ),
+                )
+                continue
+              }
+              cloudHydrated.current.add(key)
+              Object.assign(next, { [key]: cloudItems })
+            }
+            saveLocalData(next)
+            return next
+          })
+        },
+        onError: (err) => {
+          setCloudError(err instanceof Error ? err.message : 'Ошибка синхронизации')
+        },
+      })
+      setReady(true)
+    }
+
+    const unsubAuth = watchAuth((authUser) => {
+      void (async () => {
+        try {
+          let u = authUser
+          if (!u) {
+            u = await ensureAuth()
+          }
+          if (cancelled || !u) {
+            setReady(true)
+            return
+          }
+          attachUser(u)
+        } catch (err) {
+          if (!cancelled) {
+            setCloudError(err instanceof Error ? err.message : 'Не удалось войти')
+            setReady(true)
+          }
+        }
+      })()
+    })
+
     return () => {
       cancelled = true
-      unsub?.()
+      unsubAuth()
+      unsubData?.()
     }
   }, [])
 
@@ -276,53 +309,39 @@ export function useAppData() {
     [data.measurements, persistLocal, uid, useCloud],
   )
 
-  const saveCheckIn = useCallback(
-    async (input: { date: string; mood?: MoodLevel | null; sleepHours?: number | null }) => {
-      const existing = data.checkIns.find((c) => c.date === input.date)
-      let mood: MoodLevel | undefined =
-        input.mood === undefined
-          ? existing?.mood
-          : input.mood === null
-            ? undefined
-            : input.mood
-      let sleepHours: number | undefined =
-        input.sleepHours === undefined
-          ? existing?.sleepHours
-          : input.sleepHours === null
-            ? undefined
-            : Math.round(input.sleepHours * 2) / 2
+  const saveDayNote = useCallback(
+    async (input: { date: string; text: string; question?: string }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Некорректная дата')
+      const text = input.text.trim().slice(0, DAY_NOTE_MAX)
+      const existing = (data.dayNotes ?? []).find((n) => n.date === input.date)
 
-      if (mood != null && (mood < 1 || mood > 5)) {
-        throw new Error('Настроение от 1 до 5')
-      }
-      if (sleepHours != null && (!Number.isFinite(sleepHours) || sleepHours < 0 || sleepHours > 16)) {
-        throw new Error('Сон от 0 до 16 часов')
-      }
-
-      if (mood == null && sleepHours == null) {
-        if (existing && useCloud && uid) await removeDoc(uid, 'checkIns', existing.id)
+      if (!text) {
+        if (existing && useCloud && uid) await removeDoc(uid, 'dayNotes', existing.id)
         persistLocal((prev) => ({
           ...prev,
-          checkIns: prev.checkIns.filter((c) => c.date !== input.date),
+          dayNotes: (prev.dayNotes ?? []).filter((n) => n.date !== input.date),
         }))
         return null
       }
 
-      const entry: DayCheckIn = {
+      const question = (input.question ?? existing?.question ?? '').trim().slice(0, 200)
+      const now = Date.now()
+      const entry: DayNote = {
         id: existing?.id ?? newId(),
         date: input.date,
-        ...(mood != null ? { mood } : {}),
-        ...(sleepHours != null ? { sleepHours } : {}),
-        createdAt: existing?.createdAt ?? Date.now(),
+        text,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        ...(question ? { question } : {}),
       }
-      if (useCloud && uid) await upsertDoc(uid, 'checkIns', entry.id, { ...entry })
+      if (useCloud && uid) await upsertDoc(uid, 'dayNotes', entry.id, { ...entry })
       persistLocal((prev) => ({
         ...prev,
-        checkIns: [...prev.checkIns.filter((c) => c.date !== entry.date), entry],
+        dayNotes: [...(prev.dayNotes ?? []).filter((n) => n.date !== entry.date), entry],
       }))
       return entry
     },
-    [data.checkIns, persistLocal, uid, useCloud],
+    [data.dayNotes, persistLocal, uid, useCloud],
   )
 
   const savePeriodStart = useCallback(
@@ -372,6 +391,8 @@ export function useAppData() {
     ready,
     mode,
     cloudError,
+    uid,
+    user,
     saveFood,
     deleteFood,
     saveMeal,
@@ -379,7 +400,7 @@ export function useAppData() {
     saveWeight,
     saveSteps,
     saveMeasurement,
-    saveCheckIn,
+    saveDayNote,
     savePeriodStart,
     removePeriodStart,
     resetLocal,

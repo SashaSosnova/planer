@@ -19,6 +19,16 @@ export function formatRuDate(iso: string): string {
   })
 }
 
+/** e.g. «19 июля» — for chat day separators */
+export function formatRuDayMonth(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Date(y, m - 1, d).toLocaleDateString('ru-RU', {
+    day: 'numeric',
+    month: 'long',
+  })
+}
+
 /** Shift an ISO date by `delta` calendar days. */
 export function addDaysIso(iso: string, delta: number): string {
   const [y, m, d] = iso.split('-').map(Number)

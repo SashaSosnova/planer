@@ -8,11 +8,25 @@ export function isDeepseekConfigured(): boolean {
   return Boolean(import.meta.env.VITE_DEEPSEEK_API_KEY)
 }
 
-export async function deepseekChat(prompt: string): Promise<string> {
+export type DeepseekChatOptions = {
+  /** Default 0.2 — keep low for parsing; raise a bit for creative lists. */
+  temperature?: number
+  system?: string
+}
+
+export async function deepseekChat(
+  prompt: string,
+  options: DeepseekChatOptions = {},
+): Promise<string> {
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined
   if (!apiKey) {
     throw new Error('VITE_DEEPSEEK_API_KEY не задан')
   }
+
+  const temperature = options.temperature ?? 0.2
+  const system =
+    options.system ??
+    'Ты помощник трекера калорий. Отвечай только валидным JSON без markdown и без пояснений вне JSON.'
 
   const res = await fetch(DEEPSEEK_URL, {
     method: 'POST',
@@ -22,13 +36,9 @@ export async function deepseekChat(prompt: string): Promise<string> {
     },
     body: JSON.stringify({
       model: DEEPSEEK_MODEL,
-      temperature: 0.2,
+      temperature,
       messages: [
-        {
-          role: 'system',
-          content:
-            'Ты помощник трекера калорий. Отвечай только валидным JSON без markdown и без пояснений вне JSON.',
-        },
+        { role: 'system', content: system },
         { role: 'user', content: prompt },
       ],
       // Non-thinking mode for speed (flash)
@@ -49,7 +59,10 @@ export async function deepseekChat(prompt: string): Promise<string> {
   return text
 }
 
-export async function deepseekJson<T>(prompt: string): Promise<T> {
-  const text = await deepseekChat(prompt)
+export async function deepseekJson<T>(
+  prompt: string,
+  options?: DeepseekChatOptions,
+): Promise<T> {
+  const text = await deepseekChat(prompt, options)
   return extractJsonObject(text) as T
 }

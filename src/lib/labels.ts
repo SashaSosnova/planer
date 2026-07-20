@@ -82,3 +82,9 @@ export function extractMealTypeFromText(text: string): {
 
   return { mealType, cleaned: cleaned || text.trim() }
 }
+
+/** Text without a leading meal label — for previews (type is shown separately). */
+export function mealBodyText(rawText: string): string {
+  const { cleaned } = extractMealTypeFromText(rawText)
+  return cleaned.trim() || rawText.trim()
+}

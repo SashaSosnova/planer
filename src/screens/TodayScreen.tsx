@@ -6,7 +6,7 @@ import { dayPromptForDate } from '../lib/dayPrompts'
 import { formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
-import { MEAL_TYPE_LABELS } from '../lib/labels'
+import { MEAL_TYPE_LABELS, mealBodyText } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { LikeIcon, DislikeIcon } from '../components/VoteIcons'
 import {
@@ -535,7 +535,7 @@ export function TodayScreen({
         >
           {adviceOpen ? 'Скрыть совет' : 'Нужен совет'}
         </button>
-        <button type="button" className="primary-btn section-cta" onClick={onAddMeal}>
+        <button type="button" className="primary-btn section-cta" onClick={() => onAddMeal()}>
           Добавить приём
         </button>
       </div>
@@ -661,7 +661,7 @@ export function TodayScreen({
                   </strong>
                   <span>{Math.round(meal.totals.kcal)} ккал</span>
                 </div>
-                <p className="meal-preview">{meal.rawText}</p>
+                <p className="meal-preview">{mealBodyText(meal.rawText)}</p>
                 <p className="meal-bju">
                   Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
                   {Math.round(meal.totals.carbs)}

@@ -121,6 +121,8 @@ export function AddMealScreen({
       const result = await parseMeal(text, foodsRef, mealType)
       setDraft(result)
       setMealType(result.mealType)
+      const cleaned = extractMealTypeFromText(text).cleaned
+      if (cleaned && cleaned !== text.trim()) setText(cleaned)
       if (result.notes) setInfo(result.notes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось разобрать')
@@ -134,10 +136,11 @@ export function AddMealScreen({
     setBusy(true)
     setError(null)
     try {
+      const body = extractMealTypeFromText(text).cleaned.trim() || text.trim()
       await onSaveMeal({
         date,
         mealType,
-        rawText: text.trim(),
+        rawText: body,
         items: draft.items,
         isApproximate: draft.isApproximate,
         eatingOut: draft.eatingOut,

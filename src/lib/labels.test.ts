@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { coerceMealType, extractMealTypeFromText, nextMealType } from './labels'
+import {
+  coerceMealType,
+  extractMealTypeFromText,
+  mealBodyText,
+  nextMealType,
+} from './labels'
 
 describe('extractMealTypeFromText', () => {
   it('strips leading meal label', () => {
@@ -19,6 +24,13 @@ describe('extractMealTypeFromText', () => {
     const r = extractMealTypeFromText('на завтрак тост 30 г')
     expect(r.mealType).toBe('breakfast')
     expect(r.cleaned.toLowerCase()).toContain('тост')
+  })
+
+  it('strips bare Завтрак on its own line', () => {
+    const r = extractMealTypeFromText('Завтрак\nомлет 2 шт')
+    expect(r.mealType).toBe('breakfast')
+    expect(r.cleaned).toBe('омлет 2 шт')
+    expect(mealBodyText('Завтрак\nомлет 2 шт')).toBe('омлет 2 шт')
   })
 })
 

@@ -423,26 +423,23 @@ export function useAppData() {
     async (date: string) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Некорректная дата')
 
-      // Local-first + dedupe by date/id — cloud snapshot must not append a second copy.
-      let entry: PeriodStart | null = null
-      let created = false
+      // Local-first + dedupe by date — cloud snapshot must not append a second copy.
+      const existing = data.periodStarts.find((p) => p.date === date)
+      if (existing) return existing
+
+      const entry: PeriodStart = { id: newId(), date, createdAt: Date.now() }
+      const wrote = { ok: false }
       persistLocal((prev) => {
-        const existing = prev.periodStarts.find((p) => p.date === date)
-        if (existing) {
-          entry = existing
-          return prev
-        }
-        entry = { id: newId(), date, createdAt: Date.now() }
-        created = true
+        if (prev.periodStarts.some((p) => p.date === date)) return prev
+        wrote.ok = true
         return { ...prev, periodStarts: [...prev.periodStarts, entry] }
       })
-      if (!entry) throw new Error('Не удалось сохранить дату')
-      if (created && useCloud && uid) {
+      if (wrote.ok && useCloud && uid) {
         await upsertDoc(uid, 'periodStarts', entry.id, { ...entry })
       }
       return entry
     },
-    [persistLocal, uid, useCloud],
+    [data.periodStarts, persistLocal, uid, useCloud],
   )
 
   const removePeriodStart = useCallback(

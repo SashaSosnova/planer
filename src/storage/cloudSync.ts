@@ -56,28 +56,29 @@ export async function ensureAuth(): Promise<User | null> {
       }
       try {
         const cred = await signInAnonymously(auth)
-        const current = auth.currentUser
+        // Cast: after earlier `if (auth.currentUser)` CFA keeps currentUser as null in this branch.
+        const current = (auth.currentUser ?? cred.user) as User
         // Email login won while we were signing in anonymously.
-        if (current && !current.isAnonymous) {
+        if (!current.isAnonymous) {
           resolve(current)
           return
         }
         // Login started during anonymous sign-in — drop the guest so email can stick.
         if (isAnonymousSuppressed()) {
-          if (current?.isAnonymous) {
-            try {
-              await signOut(auth)
-            } catch {
-              // ignore
-            }
+          try {
+            await signOut(auth)
+          } catch {
+            // ignore
           }
-          resolve(auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null)
+          const again = auth.currentUser as User | null
+          resolve(again && !again.isAnonymous ? again : null)
           return
         }
-        resolve(current ?? cred.user)
+        resolve(current)
       } catch (err) {
-        if (auth.currentUser) {
-          resolve(auth.currentUser)
+        const fallback = auth.currentUser as User | null
+        if (fallback) {
+          resolve(fallback)
           return
         }
         reject(err)

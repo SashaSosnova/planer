@@ -83,6 +83,12 @@ describe('canonicalMealKey', () => {
     expect(canonicalMealKey('Бефстроганов с пюре')).toBe(canonicalMealKey('бефстроганов + пюре'))
     expect(canonicalMealKey('пюре + бефстроганов')).toBe(canonicalMealKey('Бефстроганов с пюре'))
   })
+
+  it('treats с тостом / на тосте as the same plate', () => {
+    expect(canonicalMealKey('творожный сыр с тостом')).toBe(
+      canonicalMealKey('творожный сыр на тосте'),
+    )
+  })
 })
 
 describe('rankMealIdeas / mixMealIdeas', () => {

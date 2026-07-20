@@ -10,10 +10,10 @@ import { MEAL_TYPE_LABELS } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { LikeIcon, DislikeIcon } from '../components/VoteIcons'
 import {
+  applyTasteFeedback,
+  canonicalMealKey,
   formatIdeaMacros,
   mealSlotForHour,
-  mealSuggestions,
-  slotKcalBudget,
   type MealSlot,
   type MealSuggestion,
 } from '../lib/mealSuggestions'
@@ -21,11 +21,24 @@ import { getMealIdeas } from '../lib/mealSuggestionsLlm'
 import { DAY_NOTE_MAX } from '../lib/sanitize'
 import type { TastePrefs } from '../lib/settings'
 import { forecastFromAppData } from '../lib/weightForecast'
-import type { AppData, DayNote } from '../types'
+import type { AppData, DayNote, MealType } from '../types'
 
 const ADVICE_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack']
 
 type PromptKind = 'weight' | 'steps' | null
+
+function dedupeAdviceIdeas(list: MealSuggestion[]): MealSuggestion[] {
+  const seen = new Set<string>()
+  const out: MealSuggestion[] = []
+  for (const item of list) {
+    const key = canonicalMealKey(item.title)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(item)
+  }
+  return out
+}
+
 
 type Props = {
   data: AppData
@@ -36,7 +49,7 @@ type Props = {
   targetWeightKg: number | null
   cycleLengthDays: number
   periodLengthDays: number
-  onAddMeal: () => void
+  onAddMeal: (opts?: { text?: string; mealType?: MealType }) => void
   onOpenMeal: (mealId: string) => void
   onOpenProfile: () => void
   onOpenWeightHistory: () => void
@@ -120,6 +133,18 @@ export function TodayScreen({
   const promptRef = useRef(prompt)
   promptRef.current = prompt
   const moreRef = useRef<HTMLDivElement | null>(null)
+  /** Session for which a full list was successfully applied (reopen keeps it). */
+  const adviceReadySessionRef = useRef<string | null>(null)
+  /** Bumps to ignore stale getMealIdeas results (load vs dislike race). */
+  const adviceReqRef = useRef(0)
+  const dataRef = useRef(data)
+  dataRef.current = data
+  const tastePrefsRef = useRef(tastePrefs)
+  tastePrefsRef.current = tastePrefs
+  const dailyKcalGoalRef = useRef(dailyKcalGoal)
+  dailyKcalGoalRef.current = dailyKcalGoal
+  const suggestionsRef = useRef(suggestions)
+  suggestionsRef.current = suggestions
 
   useEffect(() => {
     setNoteDraft(savedNote)
@@ -178,34 +203,79 @@ export function TodayScreen({
   )
 
   const likedSet = useMemo(
-    () => new Set(tastePrefs.likes.map((x) => x.trim().toLowerCase())),
+    () => new Set(tastePrefs.likes.map((x) => canonicalMealKey(x))),
     [tastePrefs.likes],
   )
 
   useEffect(() => {
     if (!adviceOpen) return
+    const session = `${date}|${adviceSlot}`
+    if (
+      adviceReadySessionRef.current === session &&
+      suggestionsRef.current.length > 0
+    ) {
+      return
+    }
+    const req = ++adviceReqRef.current
     let cancelled = false
-    const eaten = today.totals.kcal
-    const budget = slotKcalBudget(dailyKcalGoal, eaten, adviceSlot)
-    const local = mealSuggestions(new Date(), tastePrefs, 3, adviceSlot, budget?.maxKcal)
-    setSuggestions(local)
+    const prefs = tastePrefsRef.current
+    // Wait for getMealIdeas (LLM or local fallback) — no flash of a temporary list.
+    setSuggestions([])
     setIdeasLoading(true)
     void getMealIdeas({
-      data,
-      prefs: tastePrefs,
+      data: dataRef.current,
+      prefs,
       slot: adviceSlot,
-      kcalGoal: dailyKcalGoal,
+      kcalGoal: dailyKcalGoalRef.current,
+      limit: 3,
     })
       .then((list) => {
-        if (!cancelled) setSuggestions(list)
+        if (cancelled || req !== adviceReqRef.current) return
+        setSuggestions(dedupeAdviceIdeas(list).slice(0, 3))
+        adviceReadySessionRef.current = session
       })
       .finally(() => {
-        if (!cancelled) setIdeasLoading(false)
+        if (!cancelled && req === adviceReqRef.current) setIdeasLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [adviceOpen, adviceSlot, data, tastePrefs, dailyKcalGoal, today.totals.kcal])
+  }, [adviceOpen, adviceSlot, date])
+
+  const handleDislikeIdea = (idea: MealSuggestion) => {
+    const key = canonicalMealKey(idea.title)
+    onRateMealIdea(idea.title, 'dislike')
+    // Invalidate in-flight initial load so it cannot overwrite / append later.
+    const req = ++adviceReqRef.current
+    setIdeasLoading(false)
+    const excludeTitles = suggestionsRef.current.map((x) => x.title)
+    setSuggestions((prev) =>
+      dedupeAdviceIdeas(prev.filter((x) => canonicalMealKey(x.title) !== key)).slice(0, 3),
+    )
+    const prefs = applyTasteFeedback(tastePrefsRef.current, idea.title, 'dislike')
+    void getMealIdeas({
+      data: dataRef.current,
+      prefs,
+      slot: adviceSlot,
+      kcalGoal: dailyKcalGoalRef.current,
+      limit: 1,
+      excludeTitles,
+      skipCache: true,
+    }).then((list) => {
+      if (req !== adviceReqRef.current) return
+      const one = list[0]
+      if (!one) return
+      const oneKey = canonicalMealKey(one.title)
+      setSuggestions((cur) => {
+        if (cur.length >= 3) return cur.slice(0, 3)
+        if (cur.some((x) => canonicalMealKey(x.title) === oneKey)) return cur.slice(0, 3)
+        return dedupeAdviceIdeas([
+          ...cur,
+          { ...one, id: `${one.id}-r${Date.now()}` },
+        ]).slice(0, 3)
+      })
+    })
+  }
 
   const todayBrief = useMemo(() => dayBrief(today, dailyKcalGoal), [today, dailyKcalGoal])
   const dayPrompt = useMemo(() => dayPromptForDate(date), [date])
@@ -489,7 +559,7 @@ export function TodayScreen({
           ) : (
             <ul className="meal-ideas">
               {suggestions.map((s) => {
-                const liked = likedSet.has(s.title.trim().toLowerCase())
+                const liked = likedSet.has(canonicalMealKey(s.title))
                 return (
                   <li key={s.id} className="meal-idea-row">
                     <button
@@ -515,7 +585,7 @@ export function TodayScreen({
                         className="vote-btn"
                         aria-label="Не предлагать"
                         title="Не предлагать"
-                        onClick={() => onRateMealIdea(s.title, 'dislike')}
+                        onClick={() => handleDislikeIdea(s)}
                       >
                         <DislikeIcon size={17} />
                       </button>
@@ -556,8 +626,19 @@ export function TodayScreen({
               </p>
             ) : null}
             <div className="btn-row">
-              <button type="button" className="primary-btn" onClick={() => setOpenIdea(null)}>
-                Понятно
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => {
+                  const composition = openIdea.ingredients.trim() || openIdea.title
+                  setOpenIdea(null)
+                  onAddMeal({ text: composition, mealType: adviceSlot })
+                }}
+              >
+                В расчёт
+              </button>
+              <button type="button" className="ghost-btn" onClick={() => setOpenIdea(null)}>
+                Закрыть
               </button>
             </div>
           </div>

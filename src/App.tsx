@@ -20,10 +20,11 @@ import { TastesScreen } from './screens/TastesScreen'
 import { StepsHistoryScreen } from './screens/StepsHistoryScreen'
 import { TodayScreen } from './screens/TodayScreen'
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen'
+import type { MealType } from './types'
 import './App.css'
 
 type Overlay =
-  | { type: 'add-meal' }
+  | { type: 'add-meal'; prefillText?: string; mealType?: MealType }
   | { type: 'edit-meal'; mealId: string }
   | { type: 'profile' }
   | { type: 'weight-history' }
@@ -192,7 +193,13 @@ export default function App() {
             targetWeightKg={targetWeightKg}
             cycleLengthDays={cycleLengthDays}
             periodLengthDays={periodLengthDays}
-            onAddMeal={() => setOverlay({ type: 'add-meal' })}
+            onAddMeal={(opts) =>
+              setOverlay({
+                type: 'add-meal',
+                prefillText: opts?.text,
+                mealType: opts?.mealType,
+              })
+            }
             onOpenMeal={(mealId) => setOverlay({ type: 'edit-meal', mealId })}
             onOpenProfile={() => setOverlay({ type: 'profile' })}
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
@@ -221,6 +228,8 @@ export default function App() {
         {overlay?.type === 'add-meal' && (
           <AddMealScreen
             data={data}
+            prefillText={overlay.prefillText}
+            initialMealType={overlay.mealType}
             onBack={closeOverlay}
             onSaveMeal={saveMeal}
             onSaveFood={saveFood}

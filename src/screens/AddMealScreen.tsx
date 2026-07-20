@@ -34,6 +34,9 @@ type View = 'meal' | 'library'
 
 type Props = {
   data: AppData
+  /** Prefill parse field (e.g. from meal advice composition). */
+  prefillText?: string
+  initialMealType?: MealType
   onBack: () => void
   onSaveMeal: (input: {
     date: string
@@ -50,6 +53,8 @@ type Props = {
 
 export function AddMealScreen({
   data,
+  prefillText,
+  initialMealType,
   onBack,
   onSaveMeal,
   onSaveFood,
@@ -60,9 +65,9 @@ export function AddMealScreen({
   const [libraryTab, setLibraryTab] = useState<LibraryTab>('products')
   const [date, setDate] = useState(todayIso())
   const [showDate, setShowDate] = useState(false)
-  const [mealType, setMealType] = useState<MealType>('breakfast')
-  const [mealTypeTouched, setMealTypeTouched] = useState(false)
-  const [text, setText] = useState('')
+  const [mealType, setMealType] = useState<MealType>(initialMealType ?? 'breakfast')
+  const [mealTypeTouched, setMealTypeTouched] = useState(Boolean(initialMealType))
+  const [text, setText] = useState(prefillText?.trim() ?? '')
   const [draft, setDraft] = useState<ParsedMealDraft | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)

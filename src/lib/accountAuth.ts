@@ -91,5 +91,8 @@ export function mapAuthError(err: unknown): string {
   }
   if (code.includes('requires-recent-login')) return 'Войдите ещё раз и повторите'
   if (code.includes('network-request-failed')) return 'Нет сети'
+  if (code.includes('operation-not-allowed')) {
+    return 'В Firebase не включён вход по email/паролю: Console → Authentication → Sign-in method → Email/Password'
+  }
   return err instanceof Error ? err.message : 'Ошибка входа'
 }

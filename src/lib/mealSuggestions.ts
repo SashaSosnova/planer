@@ -309,9 +309,62 @@ export function normMealTitle(s: string): string {
   return s.trim().toLowerCase()
 }
 
+/** Light Russian stem so «тостом» / «тосте» / «тост» match. */
+function stemRuFoodToken(word: string): string {
+  let w = word
+  if (w.length < 4) return w
+  const endings = [
+    'ями',
+    'ами',
+    'ого',
+    'ему',
+    'ому',
+    'ыми',
+    'ими',
+    'ая',
+    'ое',
+    'ые',
+    'ие',
+    'ой',
+    'ый',
+    'ий',
+    'ом',
+    'ем',
+    'ам',
+    'ям',
+    'ах',
+    'ях',
+    'ов',
+    'ев',
+    'ей',
+    'у',
+    'ю',
+    'а',
+    'я',
+    'ы',
+    'и',
+    'е',
+    'о',
+  ]
+  for (const end of endings) {
+    if (w.length - end.length >= 3 && w.endsWith(end)) {
+      return w.slice(0, -end.length)
+    }
+  }
+  return w
+}
+
+function stemRuFoodPhrase(phrase: string): string {
+  return phrase
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(stemRuFoodToken)
+    .join(' ')
+}
+
 /**
- * Dedupe key: «Бефстроганов с пюре» ≈ «бефстроганов + пюре».
- * Combo parts are sorted so order does not matter.
+ * Dedupe key: «Бефстроганов с пюре» ≈ «бефстроганов + пюре»,
+ * «творожный сыр с тостом» ≈ «творожный сыр на тосте».
  */
 export function canonicalMealKey(s: string): string {
   let t = s
@@ -320,18 +373,17 @@ export function canonicalMealKey(s: string): string {
     .replace(/ё/g, 'е')
     .replace(/[«»"'„“.,!?;:()]/g, ' ')
   t = t.replace(/\s*[+/,&]\s*/g, ' + ')
-  t = t.replace(/\s+с\s+/g, ' + ')
-  t = t.replace(/\s+и\s+/g, ' + ')
+  // Combo glue words → same separator
+  t = t.replace(/\s+(с|со|на|под|и)\s+/g, ' + ')
   t = t.replace(/\s+/g, ' ').trim()
-  if (t.includes(' + ')) {
-    const parts = t
-      .split(' + ')
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .sort((a, b) => a.localeCompare(b, 'ru'))
-    return parts.join(' + ')
-  }
-  return t
+  const parts = t.includes(' + ')
+    ? t
+        .split(' + ')
+        .map((p) => stemRuFoodPhrase(p.trim()))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, 'ru'))
+    : [stemRuFoodPhrase(t)]
+  return parts.join(' + ')
 }
 
 function slotForHour(hour: number): Slot {

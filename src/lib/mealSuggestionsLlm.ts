@@ -49,6 +49,10 @@ export type MealIdeaContext = {
   now?: Date
   kcalGoal?: number
   limit?: number
+  /** Titles already shown — skip when picking replacements. */
+  excludeTitles?: string[]
+  /** Bypass day+slot cache (e.g. fetch one replacement after dislike). */
+  skipCache?: boolean
 }
 
 /** A repeating plate from the journal (combo, not a single ingredient). */
@@ -542,11 +546,25 @@ function mergeIdeas(
  * Meal ideas for an explicit slot.
  * Uses DeepSeek when configured; caches per day+slot+fingerprint; falls back locally.
  */
+function applyExcludes(ideas: MealSuggestion[], excludeTitles?: string[]): MealSuggestion[] {
+  if (!excludeTitles?.length) return ideas
+  const ban = new Set(excludeTitles.map((t) => canonicalMealKey(t)).filter(Boolean))
+  return ideas.filter((i) => !ban.has(canonicalMealKey(i.title)))
+}
+
 export async function getMealIdeas(ctx: MealIdeaContext): Promise<MealSuggestion[]> {
   const now = ctx.now ?? new Date()
   const limit = ctx.limit ?? 3
   const date = toIsoDate(now)
   const slot = ctx.slot || mealSlotForHour(now.getHours())
+  const excludeTitles = ctx.excludeTitles ?? []
+  /** Treat excluded titles like soft-dislikes for ranking. */
+  const prefs: TastePrefs = excludeTitles.length
+    ? {
+        ...ctx.prefs,
+        dislikes: [...ctx.prefs.dislikes, ...excludeTitles],
+      }
+    : ctx.prefs
 
   const todayMeals = ctx.data.meals.filter((m) => m.date === date)
   const eaten = todayMeals.reduce((s, m) => s + m.totals.kcal, 0)
@@ -556,14 +574,18 @@ export async function getMealIdeas(ctx: MealIdeaContext): Promise<MealSuggestion
   const patterns = frequentMealPatterns(ctx.data, date, slot)
   const habitualFoods = frequentFoodsForSlot(ctx.data, date, slot)
   const habitualSeeds = habitualPatternsAsIdeas(patterns, slot, maxKcal)
-  const local = mergeIdeas(
-    habitualSeeds,
-    mealSuggestions(now, ctx.prefs, limit, slot, maxKcal),
-    ctx.prefs,
-    limit,
-    maxKcal,
-    slot,
-    habitualFoods,
+  const poolLimit = Math.max(limit, 8)
+  const local = applyExcludes(
+    mergeIdeas(
+      habitualSeeds,
+      mealSuggestions(now, prefs, poolLimit, slot, maxKcal),
+      prefs,
+      limit,
+      maxKcal,
+      slot,
+      habitualFoods,
+    ),
+    excludeTitles,
   )
 
   const todayLines = todayMeals.map((m) => {
@@ -589,7 +611,7 @@ export async function getMealIdeas(ctx: MealIdeaContext): Promise<MealSuggestion
   const habitualKey = patterns.map((p) => `${normMealTitle(p.title)}:${p.kcal}`)
   const fingerprint = buildMealIdeasFingerprint(
     slot,
-    ctx.prefs,
+    prefs,
     todayLines,
     recentInSlot,
     habitualKey,
@@ -597,23 +619,28 @@ export async function getMealIdeas(ctx: MealIdeaContext): Promise<MealSuggestion
   )
   const cacheId = `${date}|${slot}`
 
-  const cache = loadCache()
-  const hit = cache[cacheId]
-  if (hit?.fingerprint === fingerprint && hit.ideas?.length) {
-    // Cache already mixed; only re-apply budget / taste / slot fit
-    return rankMealIdeas(
-      filterIdeasByBudget(
-        filterIdeasBySlotFit(
-          hit.ideas,
-          slot,
-          hit.ideas.map((i) => i.title),
-          habitualFoods,
+  if (!ctx.skipCache) {
+    const cache = loadCache()
+    const hit = cache[cacheId]
+    if (hit?.fingerprint === fingerprint && hit.ideas?.length) {
+      // Cache already mixed; only re-apply budget / taste / slot fit
+      return applyExcludes(
+        rankMealIdeas(
+          filterIdeasByBudget(
+            filterIdeasBySlotFit(
+              hit.ideas,
+              slot,
+              hit.ideas.map((i) => i.title),
+              habitualFoods,
+            ),
+            maxKcal,
+          ),
+          prefs,
+          Math.max(limit, excludeTitles.length + limit),
         ),
-        maxKcal,
-      ),
-      ctx.prefs,
-      limit,
-    )
+        excludeTitles,
+      ).slice(0, limit)
+    }
   }
 
   if (!isDeepseekConfigured()) return local
@@ -622,7 +649,7 @@ export async function getMealIdeas(ctx: MealIdeaContext): Promise<MealSuggestion
     const parsed = await deepseekJson<{ ideas?: unknown }>(
       buildMealIdeasPrompt({
         slot,
-        prefs: ctx.prefs,
+        prefs,
         todayLines,
         recentInSlot,
         habitualFoods,
@@ -631,7 +658,7 @@ export async function getMealIdeas(ctx: MealIdeaContext): Promise<MealSuggestion
         remainingKcal: budget?.remaining,
         maxKcal: budget?.maxKcal,
         targetKcal: budget?.targetKcal,
-        limit,
+        limit: Math.max(limit, 3),
       }),
       {
         temperature: 0.55,
@@ -639,19 +666,25 @@ export async function getMealIdeas(ctx: MealIdeaContext): Promise<MealSuggestion
           'Ты мягкая подруга в трекере еды. Строго соблюдай тип приёма пищи. Отвечай только валидным JSON без markdown и без текста вне JSON.',
       },
     )
-    const ideas = parseMealIdeasResponse(
-      parsed,
-      slot,
-      ctx.prefs,
-      limit,
-      maxKcal,
-      habitualSeeds,
-      patterns.map((p) => p.title),
-      habitualFoods,
-    )
+    const ideas = applyExcludes(
+      parseMealIdeasResponse(
+        parsed,
+        slot,
+        prefs,
+        Math.max(limit, 3),
+        maxKcal,
+        habitualSeeds,
+        patterns.map((p) => p.title),
+        habitualFoods,
+      ),
+      excludeTitles,
+    ).slice(0, limit)
     if (ideas.length === 0) return local
-    cache[cacheId] = { fingerprint, ideas }
-    saveCache(cache)
+    if (!ctx.skipCache) {
+      const cache = loadCache()
+      cache[cacheId] = { fingerprint, ideas: ideas.length >= 3 ? ideas : [...ideas, ...local].slice(0, 3) }
+      saveCache(cache)
+    }
     return ideas
   } catch {
     return local

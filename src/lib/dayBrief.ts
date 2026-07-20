@@ -1,6 +1,6 @@
 import type { DayStats } from './dayStats'
 
-/** Soft one-line day snapshot. Empty days return null (nothing to show). */
+/** Soft one-line for history day cards. Empty days return null. */
 export function dayBrief(day: DayStats, dailyKcalGoal: number): string | null {
   if (day.meals.length === 0) return null
 

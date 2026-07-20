@@ -44,3 +44,7 @@ public/stickers-bak/
 .check-alpha-out.txt
 .gojo-meta.txt
 
+# Telegram import dry-run output
+scripts/tg-import-preview.json
+scripts/tg-import-by-month/
+

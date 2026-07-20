@@ -197,6 +197,35 @@ export function sanitizePeriodStart(raw: unknown): PeriodStart | null {
   return { id, date, createdAt: Number(p.createdAt) || Date.now() }
 }
 
+/** One entry per id, then one per date (keep newest). Returns dropped ids for cloud cleanup. */
+export function dedupePeriodStarts(starts: PeriodStart[]): {
+  kept: PeriodStart[]
+  droppedIds: string[]
+} {
+  const byId = new Map<string, PeriodStart>()
+  for (const s of starts) byId.set(s.id, s)
+
+  const byDate = new Map<string, PeriodStart>()
+  const droppedIds: string[] = []
+  for (const s of byId.values()) {
+    const prev = byDate.get(s.date)
+    if (!prev) {
+      byDate.set(s.date, s)
+      continue
+    }
+    if (s.createdAt >= prev.createdAt) {
+      droppedIds.push(prev.id)
+      byDate.set(s.date, s)
+    } else {
+      droppedIds.push(s.id)
+    }
+  }
+  return {
+    kept: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    droppedIds,
+  }
+}
+
 function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : []
 }
@@ -225,8 +254,10 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
     dayNotes: asArray(parsed.dayNotes)
       .map(sanitizeDayNote)
       .filter((n): n is DayNote => n != null),
-    periodStarts: asArray(parsed.periodStarts)
-      .map(sanitizePeriodStart)
-      .filter((p): p is PeriodStart => p != null),
+    periodStarts: dedupePeriodStarts(
+      asArray(parsed.periodStarts)
+        .map(sanitizePeriodStart)
+        .filter((p): p is PeriodStart => p != null),
+    ).kept,
   }
 }

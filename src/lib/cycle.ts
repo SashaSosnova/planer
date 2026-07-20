@@ -28,6 +28,22 @@ export function cyclePhaseLabel(phase: CyclePhase): string {
   return PHASE_LABELS[phase]
 }
 
+/** Short practical tip for Today — no phase name, starts with «Обычно…». */
+export function cyclePhaseTip(phase: CyclePhase): string | null {
+  switch (phase) {
+    case 'menstrual':
+      return 'Обычно энергия ниже; вес может подскакивать — смотрите на тренд.'
+    case 'follicular':
+      return 'Обычно легче держать план и больше двигаться.'
+    case 'ovulation':
+      return 'Обычно больше энергии; голод чаще ровный.'
+    case 'luteal':
+      return 'Обычно аппетит выше, вес +0,5–1,5 кг из‑за воды — это нормально.'
+    default:
+      return null
+  }
+}
+
 function parseIso(iso: string): Date | null {
   const [y, m, d] = iso.split('-').map(Number)
   if (!y || !m || !d) return null
@@ -45,6 +61,16 @@ export function latestPeriodStart(starts: PeriodStart[]): PeriodStart | undefine
   return [...starts].sort((a, b) => b.date.localeCompare(a.date))[0]
 }
 
+/** Most recent period start on or before `dateIso`. */
+export function applicablePeriodStart(
+  starts: PeriodStart[],
+  dateIso: string,
+): PeriodStart | undefined {
+  return [...starts]
+    .filter((s) => s.date <= dateIso)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]
+}
+
 export function clampCycleLength(n: number): number {
   if (!Number.isFinite(n)) return DEFAULT_CYCLE_LENGTH
   return Math.min(45, Math.max(21, Math.round(n)))
@@ -55,9 +81,30 @@ export function clampPeriodLength(n: number): number {
   return Math.min(10, Math.max(2, Math.round(n)))
 }
 
+/** Mean gap between consecutive period starts (needs ≥2 starts). */
+export function averageCycleLength(starts: PeriodStart[]): number | null {
+  const sorted = [...starts].sort((a, b) => a.date.localeCompare(b.date))
+  if (sorted.length < 2) return null
+  const gaps: number[] = []
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = daysBetween(sorted[i - 1]!.date, sorted[i]!.date)
+    if (gap != null && gap >= 18 && gap <= 45) gaps.push(gap)
+  }
+  if (!gaps.length) return null
+  return clampCycleLength(gaps.reduce((s, g) => s + g, 0) / gaps.length)
+}
+
+function phaseForDay(dayInCycle: number, cycleLen: number, periodLen: number): CyclePhase {
+  const ovulationDay = Math.max(periodLen + 1, cycleLen - 14)
+  if (dayInCycle <= periodLen) return 'menstrual'
+  if (dayInCycle >= ovulationDay - 1 && dayInCycle <= ovulationDay + 1) return 'ovulation'
+  if (dayInCycle < ovulationDay - 1) return 'follicular'
+  return 'luteal'
+}
+
 /**
- * Estimate cycle phase from last period start.
- * Ovulation window ≈ cycleLength − 14 ± 1 day.
+ * Estimate cycle phase from period starts on/before the given day.
+ * Uses the applicable start (not modulo from the latest only).
  */
 export function getCycleInfo(
   periodStarts: PeriodStart[],
@@ -67,37 +114,33 @@ export function getCycleInfo(
 ): CycleInfo {
   const cycleLen = clampCycleLength(cycleLengthDays)
   const periodLen = clampPeriodLength(periodLengthDays)
-  const last = latestPeriodStart(periodStarts)
-  if (!last) {
+  const start = applicablePeriodStart(periodStarts, todayIso)
+  if (!start) {
     return {
       phase: 'unknown',
       dayInCycle: null,
       daysUntilPeriod: null,
-      lastPeriodStart: null,
+      lastPeriodStart: latestPeriodStart(periodStarts)?.date ?? null,
       weightNote: null,
     }
   }
 
-  const elapsed = daysBetween(last.date, todayIso)
+  const elapsed = daysBetween(start.date, todayIso)
   if (elapsed == null || elapsed < 0) {
     return {
       phase: 'unknown',
       dayInCycle: null,
       daysUntilPeriod: null,
-      lastPeriodStart: last.date,
+      lastPeriodStart: start.date,
       weightNote: null,
     }
   }
 
-  const dayInCycle = (elapsed % cycleLen) + 1
-  const daysUntilPeriod = dayInCycle === 1 ? 0 : cycleLen - dayInCycle + 1
-  const ovulationDay = Math.max(periodLen + 1, cycleLen - 14)
-
-  let phase: CyclePhase
-  if (dayInCycle <= periodLen) phase = 'menstrual'
-  else if (dayInCycle >= ovulationDay - 1 && dayInCycle <= ovulationDay + 1) phase = 'ovulation'
-  else if (dayInCycle < ovulationDay - 1) phase = 'follicular'
-  else phase = 'luteal'
+  const dayInCycle = elapsed + 1
+  const daysUntilPeriod =
+    dayInCycle <= 1 ? 0 : dayInCycle > cycleLen ? 0 : cycleLen - dayInCycle + 1
+  const phaseDay = Math.min(dayInCycle, cycleLen)
+  const phase = phaseForDay(phaseDay, cycleLen, periodLen)
 
   let weightNote: string | null = null
   if (phase === 'luteal') {
@@ -109,8 +152,8 @@ export function getCycleInfo(
   return {
     phase,
     dayInCycle,
-    daysUntilPeriod: daysUntilPeriod === 0 ? 0 : daysUntilPeriod,
-    lastPeriodStart: last.date,
+    daysUntilPeriod,
+    lastPeriodStart: start.date,
     weightNote,
   }
 }

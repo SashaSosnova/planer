@@ -44,13 +44,22 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
     week.weightDelta == null
       ? '—'
       : `${week.weightDelta > 0 ? '+' : ''}${String(week.weightDelta).replace('.', ',')} кг`
+  const weightTone =
+    week.weightDelta == null
+      ? undefined
+      : week.weightDelta < 0
+        ? 'down'
+        : week.weightDelta > 0
+          ? 'up'
+          : 'flat'
 
-  const dayCount = Math.max(week.days.length, 1)
-  const avgKcal = week.totals.kcal / dayCount
-  const avgProtein = week.totals.protein / dayCount
-  const avgFat = week.totals.fat / dayCount
-  const avgCarbs = week.totals.carbs / dayCount
-  const dailyGoal = week.kcalGoal / dayCount
+  // Empty days (no meals) don't pull the average down — they "dropped out".
+  const loggedDays = Math.max(week.days.filter((d) => d.meals.length > 0).length, 1)
+  const avgKcal = week.totals.kcal / loggedDays
+  const avgProtein = week.totals.protein / loggedDays
+  const avgFat = week.totals.fat / loggedDays
+  const avgCarbs = week.totals.carbs / loggedDays
+  const dailyGoal = week.days.length > 0 ? week.kcalGoal / week.days.length : week.kcalGoal
 
   return (
     <article className="week-card">
@@ -66,7 +75,9 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
           <div className="today-meta-row">
             <div className="stat-chip compact static">
               <span>Вес</span>
-              <strong>{weightLabel}</strong>
+              <strong className={weightTone ? `weight-delta ${weightTone}` : undefined}>
+                {weightLabel}
+              </strong>
             </div>
             <div className="stat-chip compact static">
               <span>Шаги</span>

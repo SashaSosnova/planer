@@ -14,11 +14,12 @@ import {
 import {
   DEFAULT_CYCLE_LENGTH,
   DEFAULT_PERIOD_LENGTH,
+  averageCycleLength,
   cyclePhaseLabel,
   getCycleInfo,
   latestPeriodStart,
 } from '../lib/cycle'
-import { addDaysIso, formatRuDate, todayIso } from '../lib/date'
+import { formatRuDate, todayIso } from '../lib/date'
 import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
 import type { AppSettings } from '../lib/settings'
 import type { AppData } from '../types'
@@ -41,6 +42,10 @@ type Props = {
   }) => unknown
   onSavePeriodStart: (date: string) => Promise<unknown>
   onRemovePeriodStart: (id: string) => Promise<unknown>
+  onImportDiary?: (
+    raw: unknown,
+    onProgress?: (msg: string) => void,
+  ) => Promise<{ meals: number; weights: number }>
   /** Register nested back handler; return unregister. */
   registerBackHandler?: (fn: () => boolean) => () => void
 }
@@ -59,6 +64,7 @@ export function ProfileScreen({
   onSaveTargets,
   onSavePeriodStart,
   onRemovePeriodStart,
+  onImportDiary,
   registerBackHandler,
 }: Props) {
   const savedProfile = settings.profile
@@ -97,8 +103,24 @@ export function ProfileScreen({
   const [periodPromptOpen, setPeriodPromptOpen] = useState(false)
   const [periodBusy, setPeriodBusy] = useState(false)
   const [periodError, setPeriodError] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [historyDate, setHistoryDate] = useState('')
+  const [historyError, setHistoryError] = useState<string | null>(null)
+  const [historyMsg, setHistoryMsg] = useState<string | null>(null)
   const periodPromptOpenRef = useRef(periodPromptOpen)
   periodPromptOpenRef.current = periodPromptOpen
+  const historyOpenRef = useRef(historyOpen)
+  historyOpenRef.current = historyOpen
+
+  const historyMin = `${today.slice(0, 4)}-01-01`
+  const periodStartsSorted = useMemo(
+    () => [...data.periodStarts].sort((a, b) => b.date.localeCompare(a.date)),
+    [data.periodStarts],
+  )
+  const suggestedCycleLen = useMemo(
+    () => averageCycleLength(data.periodStarts),
+    [data.periodStarts],
+  )
 
   useEffect(() => {
     const p = settings.profile
@@ -125,9 +147,15 @@ export function ProfileScreen({
   useEffect(() => {
     if (!registerBackHandler) return
     return registerBackHandler(() => {
-      if (!periodPromptOpenRef.current) return false
-      setPeriodPromptOpen(false)
-      return true
+      if (periodPromptOpenRef.current) {
+        setPeriodPromptOpen(false)
+        return true
+      }
+      if (historyOpenRef.current) {
+        setHistoryOpen(false)
+        return true
+      }
+      return false
     })
   }, [registerBackHandler])
 
@@ -159,16 +187,6 @@ export function ProfileScreen({
 
   const proteinGoal = weightKg != null ? calcProteinGoal(weightKg) : null
 
-  const removeLastPeriod = async () => {
-    if (!lastPeriod) return
-    setPeriodBusy(true)
-    try {
-      await onRemovePeriodStart(lastPeriod.id)
-    } finally {
-      setPeriodBusy(false)
-    }
-  }
-
   const confirmPeriodStart = async (raw: string) => {
     const startDate = raw.trim()
     if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
@@ -179,24 +197,56 @@ export function ProfileScreen({
       setPeriodError('Дата не может быть в будущем')
       return
     }
-    if (startDate < addDaysIso(today, -120)) {
-      setPeriodError('Укажите дату за последние 4 месяца')
+    if (startDate < historyMin) {
+      setPeriodError('Для более ранних дат откройте «Прошлые месячные»')
       return
     }
     setPeriodBusy(true)
     setPeriodError(null)
     try {
-      const prev = latestPeriodStart(data.periodStarts)
       await onSavePeriodStart(startDate)
-      if (prev && prev.date !== startDate) {
-        await onRemovePeriodStart(prev.id)
-      }
       setPeriodPromptOpen(false)
     } catch (err) {
       setPeriodError(err instanceof Error ? err.message : 'Ошибка')
     } finally {
       setPeriodBusy(false)
     }
+  }
+
+  const addHistoryStart = async () => {
+    const startDate = historyDate.trim()
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      setHistoryError('Выберите дату начала')
+      return
+    }
+    if (startDate > today) {
+      setHistoryError('Дата не может быть в будущем')
+      return
+    }
+    if (startDate < historyMin) {
+      setHistoryError(`Не раньше ${historyMin}`)
+      return
+    }
+    setPeriodBusy(true)
+    setHistoryError(null)
+    setHistoryMsg(null)
+    try {
+      await onSavePeriodStart(startDate)
+      setHistoryDate('')
+      setHistoryMsg(`Добавлено: ${formatRuDate(startDate)}`)
+    } catch (err) {
+      setHistoryError(err instanceof Error ? err.message : 'Ошибка')
+    } finally {
+      setPeriodBusy(false)
+    }
+  }
+
+  const applySuggestedCycleLen = () => {
+    if (suggestedCycleLen == null) return
+    onSaveTargets({ cycleLengthDays: suggestedCycleLen })
+    setSavedCycleLen(suggestedCycleLen)
+    setCycleLen(String(suggestedCycleLen))
+    setHistoryMsg(`Длина цикла обновлена: ${suggestedCycleLen} дн.`)
   }
 
   const save = () => {
@@ -249,7 +299,7 @@ export function ProfileScreen({
         <p className="muted">Аккаунт, норма и параметры</p>
       </header>
 
-      <AccountPanel user={user} />
+      <AccountPanel user={user} onImportDiary={onImportDiary} />
 
       {savedTargetKg != null && !editingTarget ? (
         <div className="panel">
@@ -364,19 +414,86 @@ export function ProfileScreen({
                 setPeriodPromptOpen(true)
               }}
             >
-              {lastPeriod ? 'Изменить дату начала' : 'Указать начало месячных'}
+              Отметить начало месячных
             </button>
-            {lastPeriod && (
-              <button
-                type="button"
-                className="ghost-btn"
-                disabled={periodBusy}
-                onClick={() => void removeLastPeriod()}
-              >
-                Сбросить
-              </button>
-            )}
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                setHistoryOpen((v) => !v)
+                setHistoryError(null)
+                setHistoryMsg(null)
+              }}
+            >
+              {historyOpen ? 'Скрыть историю' : 'Прошлые месячные'}
+            </button>
           </div>
+
+          {historyOpen && (
+            <div className="cycle-history">
+              <p className="muted small">
+                Добавьте даты начала каждого цикла с января — так статистика по фазам станет
+                точнее. Дальше отмечайте новые прямо здесь.
+              </p>
+              <div className="cycle-history-add">
+                <label className="field">
+                  <span>Дата начала</span>
+                  <input
+                    type="date"
+                    min={historyMin}
+                    max={today}
+                    value={historyDate}
+                    onChange={(e) => setHistoryDate(e.target.value)}
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  disabled={periodBusy}
+                  onClick={() => void addHistoryStart()}
+                >
+                  Добавить
+                </button>
+              </div>
+              {historyError && <p className="form-msg error">{historyError}</p>}
+              {historyMsg && <p className="form-msg">{historyMsg}</p>}
+              {suggestedCycleLen != null &&
+                Math.abs(suggestedCycleLen - savedCycleLen) >= 2 && (
+                  <div className="btn-row tight">
+                    <p className="muted small" style={{ margin: 0, flex: 1 }}>
+                      По вашим датам средняя длина ≈ {suggestedCycleLen} дн.
+                    </p>
+                    <button
+                      type="button"
+                      className="ghost-btn"
+                      onClick={applySuggestedCycleLen}
+                    >
+                      Применить
+                    </button>
+                  </div>
+                )}
+              {periodStartsSorted.length === 0 ? (
+                <p className="muted small">Пока нет записей.</p>
+              ) : (
+                <ul className="simple-list cycle-history-list">
+                  {periodStartsSorted.map((entry) => (
+                    <li key={entry.id}>
+                      <span>{formatRuDate(entry.date)}</span>
+                      <button
+                        type="button"
+                        className="ghost-btn danger"
+                        disabled={periodBusy}
+                        onClick={() => void onRemovePeriodStart(entry.id)}
+                      >
+                        Удалить
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
           <button
             type="button"
             className="ghost-btn"
@@ -573,12 +690,12 @@ export function ProfileScreen({
       {periodPromptOpen && (
         <PromptDialog
           title="Начало месячных"
-          label="Когда начались последние?"
+          label="Когда начались?"
           type="date"
-          min={addDaysIso(today, -120)}
+          min={historyMin}
           max={today}
-          initialValue={lastPeriod?.date ?? today}
-          hint="Можно указать прошедшую дату — цикл посчитается сразу."
+          initialValue={today}
+          hint="Дата добавится в историю. Несколько прошлых стартов удобнее внести через «Прошлые месячные»."
           busy={periodBusy}
           error={periodError}
           onCancel={() => setPeriodPromptOpen(false)}

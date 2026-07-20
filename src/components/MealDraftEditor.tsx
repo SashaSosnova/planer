@@ -3,6 +3,19 @@ import { foodVariants } from '../lib/foodVariants'
 import { round1, scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, MealItem, ParsedMealDraft } from '../types'
 import { PencilIcon } from './PencilIcon'
+import { TrashIcon } from './TrashIcon'
+
+export function emptyMealItem(): MealItem {
+  return {
+    name: '',
+    grams: 100,
+    kcal: 0,
+    protein: 0,
+    fat: 0,
+    carbs: 0,
+    source: 'estimate',
+  }
+}
 
 function per100FromPortion(item: MealItem): MacroSet | null {
   if (!(item.grams > 0)) return null
@@ -117,6 +130,8 @@ type Props = {
   data: AppData
   items: MealItem[]
   onChangeItem: (index: number, patch: Partial<MealItem>) => void
+  onRemoveItem?: (index: number) => void
+  onAddItem?: () => void
   onSaveToLibrary?: (index: number) => void
   savingFoodIndex?: number | null
   /** Collapsed rows by default; expand one item with the pencil. */
@@ -127,13 +142,26 @@ export function MealDraftEditor({
   data,
   items,
   onChangeItem,
+  onRemoveItem,
+  onAddItem,
   onSaveToLibrary,
   savingFoodIndex = null,
   collapsible = false,
 }: Props) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
+  const removeAt = (index: number) => {
+    onRemoveItem?.(index)
+    setEditingIndex((cur) => {
+      if (cur == null) return null
+      if (cur === index) return null
+      if (cur > index) return cur - 1
+      return cur
+    })
+  }
+
   return (
+    <div className="draft-editor">
     <ul className="draft-list">
       {items.map((item, index) => {
         const linked = item.foodId ? data.foods.find((f) => f.id === item.foodId) : undefined
@@ -141,45 +169,71 @@ export function MealDraftEditor({
         const per100 = fromLibrary ? linked.per100g : per100FromPortion(item)
         const variants = fromLibrary && linked ? foodVariants(linked, data.foods) : []
         const expanded = !collapsible || editingIndex === index
+        const label = item.name.trim() || 'продукт'
 
         if (!expanded) {
           return (
-            <li key={`${item.name}-${index}`} className="draft-item draft-item-compact">
+            <li key={`item-${index}`} className="draft-item draft-item-compact">
               <div className="draft-compact-main">
                 <div className="draft-compact-text">
-                  <strong className="draft-compact-name">{item.name}</strong>
+                  <strong className="draft-compact-name">{item.name.trim() || 'Без названия'}</strong>
                   <p className="muted small">
                     {item.grams} г · {formatPortion(item)}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="icon-btn sm"
-                  onClick={() => setEditingIndex(index)}
-                  aria-label={`Редактировать ${item.name}`}
-                  title="Редактировать"
-                >
-                  <PencilIcon size={18} />
-                </button>
+                <div className="draft-compact-actions">
+                  <button
+                    type="button"
+                    className="icon-btn sm"
+                    onClick={() => setEditingIndex(index)}
+                    aria-label={`Редактировать ${label}`}
+                    title="Редактировать"
+                  >
+                    <PencilIcon size={18} />
+                  </button>
+                  {onRemoveItem && (
+                    <button
+                      type="button"
+                      className="icon-btn sm danger"
+                      onClick={() => removeAt(index)}
+                      aria-label={`Удалить ${label}`}
+                      title="Удалить"
+                    >
+                      <TrashIcon size={18} />
+                    </button>
+                  )}
+                </div>
               </div>
             </li>
           )
         }
 
         return (
-          <li key={`${item.name}-${index}`} className="draft-item">
+          <li key={`item-${index}`} className="draft-item">
             <div className="draft-item-top">
               <label className="field grow">
                 <span>Название</span>
                 <input
                   value={item.name}
                   onChange={(e) => onChangeItem(index, { name: e.target.value })}
+                  placeholder="Продукт"
                 />
               </label>
               <div className="draft-item-top-actions">
                 <span className={fromLibrary ? 'badge ok' : 'badge'}>
                   {fromLibrary ? 'ваши КБЖУ' : 'примерно'}
                 </span>
+                {onRemoveItem && (
+                  <button
+                    type="button"
+                    className="icon-btn sm danger"
+                    onClick={() => removeAt(index)}
+                    aria-label={`Удалить ${label}`}
+                    title="Удалить"
+                  >
+                    <TrashIcon size={18} />
+                  </button>
+                )}
                 {collapsible && (
                   <button
                     type="button"
@@ -302,5 +356,18 @@ export function MealDraftEditor({
         )
       })}
     </ul>
+    {onAddItem && (
+      <button
+        type="button"
+        className="ghost-btn draft-add-btn"
+        onClick={() => {
+          onAddItem()
+          setEditingIndex(items.length)
+        }}
+      >
+        + Продукт
+      </button>
+    )}
+    </div>
   )
 }

@@ -62,15 +62,6 @@ export function statsForDate(data: AppData, date: string): DayStats {
   }
 }
 
-function weightNear(data: AppData, dates: string[], fromStart: boolean): number | undefined {
-  const ordered = fromStart ? dates : [...dates].reverse()
-  for (const d of ordered) {
-    const w = data.weights.find((x) => x.date === d)
-    if (w) return w.kg
-  }
-  return undefined
-}
-
 export function buildWeekStats(
   data: AppData,
   weekStart: string,
@@ -88,8 +79,11 @@ export function buildWeekStats(
     stepDays.length > 0
       ? Math.round(stepDays.reduce((s, d) => s + (d.steps ?? 0), 0) / stepDays.length)
       : undefined
-  const weightStart = weightNear(data, dates, true)
-  const weightEnd = weightNear(data, dates, false)
+  // Week delta = Sunday − Monday (only when both mornings are logged).
+  const monday = allDates[0]!
+  const sunday = allDates[6]!
+  const weightStart = data.weights.find((w) => w.date === monday)?.kg
+  const weightEnd = data.weights.find((w) => w.date === sunday)?.kg
   const weightDelta =
     weightStart != null && weightEnd != null
       ? Math.round((weightEnd - weightStart) * 10) / 10

@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { calcProteinGoal, VEG_GOAL_G } from './macroGoals'
 
 describe('calcProteinGoal', () => {
-  it('uses 1.6 g per kg', () => {
-    expect(calcProteinGoal(60)).toBe(96)
-    expect(calcProteinGoal(72.5)).toBe(116)
+  it('uses 1.1 g per kg', () => {
+    expect(calcProteinGoal(60)).toBe(66)
+    expect(calcProteinGoal(63.6)).toBe(70)
+    expect(calcProteinGoal(72.5)).toBe(80)
   })
 
   it('returns null without weight', () => {

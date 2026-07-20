@@ -1,8 +1,10 @@
 import {
   EmailAuthProvider,
+  browserLocalPersistence,
   createUserWithEmailAndPassword,
   linkWithCredential,
   onAuthStateChanged,
+  setPersistence,
   signInWithEmailAndPassword,
   signOut,
   type User,
@@ -10,6 +12,19 @@ import {
 } from 'firebase/auth'
 import { getFirebaseAuth, isFirebaseConfigured } from '../firebase'
 import { ensureAuth } from '../storage/cloudSync'
+import { isAnonymousSuppressed, setAnonymousSuppressed } from './authGate'
+
+export { isAnonymousSuppressed }
+
+async function withAuthPersistence<T>(fn: () => Promise<T>): Promise<T> {
+  const auth = getFirebaseAuth()
+  try {
+    await setPersistence(auth, browserLocalPersistence)
+  } catch {
+    // Ignore — default is usually local already.
+  }
+  return fn()
+}
 
 export function watchAuth(onUser: (user: User | null) => void): Unsubscribe {
   if (!isFirebaseConfigured()) {
@@ -32,44 +47,63 @@ export function isLinkedAccount(user: User | null): boolean {
 /** Create account and keep current anonymous uid (data stays). */
 export async function registerWithEmail(email: string, password: string): Promise<User> {
   if (!isFirebaseConfigured()) throw new Error('Firebase не настроен')
-  const auth = getFirebaseAuth()
   const mail = email.trim()
   if (!mail || !mail.includes('@')) throw new Error('Укажите email')
   if (password.length < 6) throw new Error('Пароль от 6 символов')
 
-  const current = auth.currentUser ?? (await ensureAuth())
-  if (current?.isAnonymous) {
-    const cred = EmailAuthProvider.credential(mail, password)
-    const linked = await linkWithCredential(current, cred)
-    return linked.user
-  }
-  if (current && !current.isAnonymous) {
-    throw new Error('Уже вошли в аккаунт')
-  }
-  const created = await createUserWithEmailAndPassword(auth, mail, password)
-  return created.user
+  return withAuthPersistence(async () => {
+    const auth = getFirebaseAuth()
+    const current = auth.currentUser ?? (await ensureAuth())
+    if (current?.isAnonymous) {
+      const cred = EmailAuthProvider.credential(mail, password)
+      const linked = await linkWithCredential(current, cred)
+      return linked.user
+    }
+    if (current && !current.isAnonymous) {
+      throw new Error('Уже вошли в аккаунт')
+    }
+    const created = await createUserWithEmailAndPassword(auth, mail, password)
+    return created.user
+  })
 }
 
-/** Sign in to an existing account (switches uid — cloud data for that account). */
+/**
+ * Sign in to an existing account.
+ * Do not signOut first — that races with ensureAuth() and can leave a fresh guest.
+ */
 export async function loginWithEmail(email: string, password: string): Promise<User> {
   if (!isFirebaseConfigured()) throw new Error('Firebase не настроен')
-  const auth = getFirebaseAuth()
   const mail = email.trim()
   if (!mail || !mail.includes('@')) throw new Error('Укажите email')
   if (!password) throw new Error('Укажите пароль')
 
-  if (auth.currentUser) {
-    await signOut(auth)
-  }
-  const res = await signInWithEmailAndPassword(auth, mail, password)
-  return res.user
+  return withAuthPersistence(async () => {
+    const auth = getFirebaseAuth()
+    setAnonymousSuppressed(true)
+    try {
+      const res = await signInWithEmailAndPassword(auth, mail, password)
+      // A racing anonymous sign-in can overwrite the session — verify and retry once.
+      if (auth.currentUser?.uid !== res.user.uid || auth.currentUser.isAnonymous) {
+        const again = await signInWithEmailAndPassword(auth, mail, password)
+        return again.user
+      }
+      return res.user
+    } finally {
+      setAnonymousSuppressed(false)
+    }
+  })
 }
 
 /** Sign out linked account and return to anonymous guest on this device. */
 export async function logoutToGuest(): Promise<User | null> {
   if (!isFirebaseConfigured()) return null
   const auth = getFirebaseAuth()
-  await signOut(auth)
+  setAnonymousSuppressed(true)
+  try {
+    await signOut(auth)
+  } finally {
+    setAnonymousSuppressed(false)
+  }
   return ensureAuth()
 }
 

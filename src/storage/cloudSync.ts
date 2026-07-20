@@ -7,8 +7,9 @@ import {
   deleteDoc,
   type Unsubscribe,
 } from 'firebase/firestore'
-import { onAuthStateChanged, signInAnonymously, type User } from 'firebase/auth'
+import { onAuthStateChanged, signInAnonymously, signOut, type User } from 'firebase/auth'
 import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../firebase'
+import { isAnonymousSuppressed } from '../lib/authGate'
 import {
   sanitizeDayNote,
   sanitizeFood,
@@ -36,6 +37,7 @@ export async function ensureAuth(): Promise<User | null> {
   if (!isFirebaseConfigured()) return null
   const auth = getFirebaseAuth()
   if (auth.currentUser) return auth.currentUser
+  if (isAnonymousSuppressed()) return null
   return new Promise((resolve, reject) => {
     const unsub = onAuthStateChanged(auth, async (user) => {
       unsub()
@@ -43,10 +45,41 @@ export async function ensureAuth(): Promise<User | null> {
         resolve(user)
         return
       }
+      if (auth.currentUser) {
+        resolve(auth.currentUser)
+        return
+      }
+      // Email login in progress — do not create a guest that can overwrite it.
+      if (isAnonymousSuppressed()) {
+        resolve(null)
+        return
+      }
       try {
         const cred = await signInAnonymously(auth)
-        resolve(cred.user)
+        const current = auth.currentUser
+        // Email login won while we were signing in anonymously.
+        if (current && !current.isAnonymous) {
+          resolve(current)
+          return
+        }
+        // Login started during anonymous sign-in — drop the guest so email can stick.
+        if (isAnonymousSuppressed()) {
+          if (current?.isAnonymous) {
+            try {
+              await signOut(auth)
+            } catch {
+              // ignore
+            }
+          }
+          resolve(auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null)
+          return
+        }
+        resolve(current ?? cred.user)
       } catch (err) {
+        if (auth.currentUser) {
+          resolve(auth.currentUser)
+          return
+        }
         reject(err)
       }
     })

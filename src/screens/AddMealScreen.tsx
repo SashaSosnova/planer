@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MacroBar } from '../components/MacroBar'
-import { MealDraftEditor, patchDraft } from '../components/MealDraftEditor'
+import { MealDraftEditor, emptyMealItem, patchDraft } from '../components/MealDraftEditor'
 import { todayIso } from '../lib/date'
 import { isDeepseekConfigured } from '../lib/deepseek'
 import {
@@ -10,7 +10,7 @@ import {
   nextMealType,
 } from '../lib/labels'
 import { parseMeal } from '../lib/parseMeal'
-import { scalePer100g } from '../lib/nutrition'
+import { scalePer100g, sumMacros } from '../lib/nutrition'
 import type {
   AppData,
   FoodItem,
@@ -133,16 +133,24 @@ export function AddMealScreen({
 
   const confirmMeal = async () => {
     if (!draft) return
+    const kept = draft.items.filter((i) => i.name.trim())
+    if (kept.length === 0) {
+      setError('Добавьте хотя бы один продукт')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
-      const body = extractMealTypeFromText(text).cleaned.trim() || text.trim()
+      const body =
+        extractMealTypeFromText(text).cleaned.trim() ||
+        kept.map((i) => i.name).join(', ') ||
+        text.trim()
       await onSaveMeal({
         date,
         mealType,
         rawText: body,
-        items: draft.items,
-        isApproximate: draft.isApproximate,
+        items: kept,
+        isApproximate: draft.eatingOut || kept.some((i) => i.source === 'estimate'),
         eatingOut: draft.eatingOut,
       })
       onBack()
@@ -378,6 +386,30 @@ export function AddMealScreen({
             collapsible
             onChangeItem={(index, patch) =>
               setDraft((prev) => (prev ? patchDraft(prev, index, patch, data.foods) : prev))
+            }
+            onRemoveItem={(index) =>
+              setDraft((prev) => {
+                if (!prev) return prev
+                const items = prev.items.filter((_, i) => i !== index)
+                return {
+                  ...prev,
+                  items,
+                  totals: sumMacros(items),
+                  isApproximate: prev.eatingOut || items.some((i) => i.source === 'estimate'),
+                }
+              })
+            }
+            onAddItem={() =>
+              setDraft((prev) => {
+                if (!prev) return prev
+                const items = [...prev.items, emptyMealItem()]
+                return {
+                  ...prev,
+                  items,
+                  totals: sumMacros(items),
+                  isApproximate: true,
+                }
+              })
             }
             onSaveToLibrary={(index) => void saveToLibrary(index)}
             savingFoodIndex={savingFoodIndex}

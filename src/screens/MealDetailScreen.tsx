@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MealDraftEditor, applyItemPatch } from '../components/MealDraftEditor'
+import { MealDraftEditor, applyItemPatch, emptyMealItem } from '../components/MealDraftEditor'
 import { MacroBar } from '../components/MacroBar'
 import { todayIso } from '../lib/date'
 import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER } from '../lib/labels'
@@ -47,6 +47,11 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
       setError('Дата не может быть в будущем')
       return
     }
+    const kept = items.filter((i) => i.name.trim())
+    if (kept.length === 0) {
+      setError('Добавьте хотя бы один продукт')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -54,8 +59,8 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
         id: meal.id,
         date,
         mealType,
-        rawText: meal.rawText.trim() || MEAL_TYPE_LABELS[mealType],
-        items,
+        rawText: meal.rawText.trim() || kept.map((i) => i.name).join(', '),
+        items: kept,
         isApproximate,
         eatingOut,
       })
@@ -167,6 +172,8 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
         onChangeItem={(index, patch) =>
           setItems((prev) => applyItemPatch(prev, index, patch, data.foods))
         }
+        onRemoveItem={(index) => setItems((prev) => prev.filter((_, i) => i !== index))}
+        onAddItem={() => setItems((prev) => [...prev, emptyMealItem()])}
         onSaveToLibrary={(index) => void saveToLibrary(index)}
         savingFoodIndex={savingFoodIndex}
       />

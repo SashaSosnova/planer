@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalorieRing } from '../components/CalorieRing'
 import { PromptDialog } from '../components/PromptDialog'
-import { dayBrief } from '../lib/dayBrief'
+import { cyclePhaseLabel, getCycleInfo } from '../lib/cycle'
+import { cycleInsightsFromAppData } from '../lib/cycleCalorieInsights'
 import { dayPromptForDate } from '../lib/dayPrompts'
 import { formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
@@ -195,12 +196,36 @@ export function TodayScreen({
       forecastFromAppData(data, {
         targetKg: targetWeightKg,
         maintainKcal: maintainKcalGoal,
+        dailyKcalGoal,
         cycleLengthDays,
         periodLengthDays,
         today: date,
       }),
-    [data, targetWeightKg, maintainKcalGoal, cycleLengthDays, periodLengthDays, date],
+    [
+      data,
+      targetWeightKg,
+      maintainKcalGoal,
+      dailyKcalGoal,
+      cycleLengthDays,
+      periodLengthDays,
+      date,
+    ],
   )
+
+  const cycle = useMemo(
+    () => getCycleInfo(data.periodStarts, date, cycleLengthDays, periodLengthDays),
+    [data.periodStarts, date, cycleLengthDays, periodLengthDays],
+  )
+  const cycleInsights = useMemo(
+    () =>
+      cycleInsightsFromAppData(data, dailyKcalGoal, {
+        cycleLengthDays,
+        periodLengthDays,
+        today: date,
+      }),
+    [data, dailyKcalGoal, cycleLengthDays, periodLengthDays, date],
+  )
+  const cycleTip = cycleInsights.tip
 
   const likedSet = useMemo(
     () => new Set(tastePrefs.likes.map((x) => canonicalMealKey(x))),
@@ -277,7 +302,6 @@ export function TodayScreen({
     })
   }
 
-  const todayBrief = useMemo(() => dayBrief(today, dailyKcalGoal), [today, dailyKcalGoal])
   const dayPrompt = useMemo(() => dayPromptForDate(date), [date])
   const noteAnswered = Boolean(savedNote.trim())
   const noteDirty = noteDraft.trim() !== savedNote.trim()
@@ -455,7 +479,7 @@ export function TodayScreen({
           <div className="progress-card-top">
             <span>Прогресс</span>
             <strong>
-              {forecast.currentKg.toFixed(1).replace('.', ',')}
+              {forecast.startKg.toFixed(1).replace('.', ',')}
               {forecast.targetKg != null
                 ? ` → ${forecast.targetKg.toFixed(1).replace('.', ',')} кг`
                 : ' кг'}
@@ -465,12 +489,26 @@ export function TodayScreen({
           {forecast.targetKg == null && (
             <p className="muted small">Цель по весу можно задать в профиле.</p>
           )}
-          {forecast.notes.map((note) => (
-            <p key={note} className="muted small cycle-weight-note">
-              {note}
-            </p>
-          ))}
+          {forecast.notes
+            .filter((note) => note !== cycle.weightNote)
+            .map((note) => (
+              <p key={note} className="muted small cycle-weight-note">
+                {note}
+              </p>
+            ))}
         </div>
+      )}
+
+      {cycle.phase !== 'unknown' && cycle.dayInCycle != null && (
+        <button type="button" className="cycle-today-card" onClick={onOpenProfile}>
+          <div className="progress-card-top">
+            <span>Цикл</span>
+            <strong>
+              день {cycle.dayInCycle} из {cycleLengthDays} · {cyclePhaseLabel(cycle.phase)}
+            </strong>
+          </div>
+          {cycleTip && <p className="muted small">{cycleTip}</p>}
+        </button>
       )}
 
       <div className="today-hero">
@@ -524,8 +562,6 @@ export function TodayScreen({
           />
         </div>
       )}
-
-      {todayBrief && <p className="day-brief muted small">{todayBrief}</p>}
 
       <div className="section-head meal-actions">
         <button

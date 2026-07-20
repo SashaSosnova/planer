@@ -8,10 +8,12 @@ type Props = {
   data: AppData
   targetWeightKg: number | null
   maintainKcalGoal: number
+  dailyKcalGoal: number
   cycleLengthDays: number
   periodLengthDays: number
   onBack: () => void
   onSave: (date: string, kg: number) => Promise<unknown>
+  onDelete: (id: string) => Promise<unknown>
 }
 
 function num(v: string): number | undefined {
@@ -23,10 +25,12 @@ export function WeightHistoryScreen({
   data,
   targetWeightKg,
   maintainKcalGoal,
+  dailyKcalGoal,
   cycleLengthDays,
   periodLengthDays,
   onBack,
   onSave,
+  onDelete,
 }: Props) {
   const today = todayIso()
   const [logDate, setLogDate] = useState(today)
@@ -49,11 +53,20 @@ export function WeightHistoryScreen({
       forecastFromAppData(data, {
         targetKg: targetWeightKg,
         maintainKcal: maintainKcalGoal,
+        dailyKcalGoal,
         cycleLengthDays,
         periodLengthDays,
         today,
       }),
-    [data, targetWeightKg, maintainKcalGoal, cycleLengthDays, periodLengthDays, today],
+    [
+      data,
+      targetWeightKg,
+      maintainKcalGoal,
+      dailyKcalGoal,
+      cycleLengthDays,
+      periodLengthDays,
+      today,
+    ],
   )
 
   const series = useMemo((): ChartSeries[] => {
@@ -132,12 +145,6 @@ export function WeightHistoryScreen({
             Прогноз
           </h2>
           <p className="muted small">{forecast.summary}</p>
-          {forecast.inTwoWeeks != null && forecast.inFourWeeks != null && (
-            <p className="muted small">
-              Через 2 нед ≈ {forecast.inTwoWeeks.toFixed(1).replace('.', ',')} кг · через 4 нед ≈{' '}
-              {forecast.inFourWeeks.toFixed(1).replace('.', ',')} кг
-            </p>
-          )}
           {forecast.notes.map((note) => (
             <p key={note} className="muted small cycle-weight-note">
               {note}
@@ -176,7 +183,20 @@ export function WeightHistoryScreen({
                 <strong>{formatRuDate(entry.date)}</strong>
                 {entry.date === today && <span className="badge ok">сегодня</span>}
               </button>
-              <strong className="metric-history-value">{entry.kg} кг</strong>
+              <div className="metric-history-actions">
+                <strong className="metric-history-value">{entry.kg} кг</strong>
+                <button
+                  type="button"
+                  className="ghost-btn danger"
+                  aria-label="Удалить запись веса"
+                  onClick={() => {
+                    void onDelete(entry.id)
+                    if (logDate === entry.date) setKg('')
+                  }}
+                >
+                  Удалить
+                </button>
+              </div>
             </li>
           ))}
         </ul>

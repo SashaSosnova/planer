@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { User } from 'firebase/auth'
 import {
   authAccountLabel,
@@ -12,15 +12,20 @@ import { isFirebaseConfigured } from '../firebase'
 
 type Props = {
   user: User | null
+  onImportDiary?: (
+    raw: unknown,
+    onProgress?: (msg: string) => void,
+  ) => Promise<{ meals: number; weights: number }>
 }
 
-export function AccountPanel({ user }: Props) {
+export function AccountPanel({ user, onImportDiary }: Props) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [mode, setMode] = useState<'register' | 'login'>('register')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [ok, setOk] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement | null>(null)
 
   if (!isFirebaseConfigured()) {
     return (
@@ -69,6 +74,25 @@ export function AccountPanel({ user }: Props) {
     }
   }
 
+  const onPickImport = async (file: File | null) => {
+    if (!file || !onImportDiary) return
+    setBusy(true)
+    setError(null)
+    setOk('Читаю файл…')
+    try {
+      const text = await file.text()
+      const raw = JSON.parse(text) as unknown
+      const result = await onImportDiary(raw, (msg) => setOk(msg))
+      setOk(`Готово: ${result.meals} приёмов, ${result.weights} замеров веса`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось импортировать')
+      setOk(null)
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
   return (
     <div className="panel">
       <h2 className="subhead" style={{ marginTop: 0 }}>
@@ -114,13 +138,13 @@ export function AccountPanel({ user }: Props) {
             />
           </label>
           <label className="field">
-            <span>Пароль для Planer</span>
+            <span>{mode === 'register' ? 'Придумайте пароль' : 'Пароль'}</span>
             <input
               type="password"
               autoComplete={mode === 'register' ? 'new-password' : 'current-password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="придумайте, от 6 символов"
+              placeholder={mode === 'register' ? 'от 6 символов' : 'ваш пароль'}
             />
           </label>
           <button
@@ -132,6 +156,28 @@ export function AccountPanel({ user }: Props) {
             {busy ? '…' : mode === 'register' ? 'Сохранить аккаунт' : 'Войти'}
           </button>
         </>
+      )}
+      {linked && onImportDiary && (
+        <div style={{ marginTop: 14 }}>
+          <p className="muted small" style={{ marginBottom: 8 }}>
+            Импорт дневника из Telegram (JSON)
+          </p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => void onPickImport(e.target.files?.[0] ?? null)}
+          />
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={busy}
+            onClick={() => fileRef.current?.click()}
+          >
+            {busy ? 'Импорт…' : 'Выбрать файл'}
+          </button>
+        </div>
       )}
       {error && <p className="form-msg error">{error}</p>}
       {ok && <p className="form-msg">{ok}</p>}

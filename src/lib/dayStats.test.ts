@@ -106,15 +106,16 @@ describe('buildWeekStats', () => {
         meal({ id: '2', date: '2026-07-15', totals: { kcal: 200, protein: 0, fat: 0, carbs: 0 } }),
       ],
       weights: [
-        { id: 'w1', date: '2026-07-13', kg: 61, createdAt: 1 },
-        { id: 'w2', date: '2026-07-17', kg: 60.5, createdAt: 2 },
+        { id: 'w1', date: '2026-07-13', kg: 61, createdAt: 1 }, // Mon
+        { id: 'w2', date: '2026-07-15', kg: 60.8, createdAt: 2 }, // mid-week ignored
+        { id: 'w3', date: '2026-07-19', kg: 60.5, createdAt: 3 }, // Sun
       ],
       steps: [
         { id: 's1', date: '2026-07-13', count: 4000, createdAt: 1 },
         { id: 's2', date: '2026-07-14', count: 6000, createdAt: 2 },
       ],
     }
-    // 2026-07-13 is Monday
+    // 2026-07-13 is Monday → Sunday 2026-07-19
     const week = buildWeekStats(data, '2026-07-13', 1800)
     expect(week.totals.kcal).toBe(300)
     expect(week.kcalGoal).toBe(1800 * 7)
@@ -122,6 +123,18 @@ describe('buildWeekStats', () => {
     expect(week.weightEnd).toBe(60.5)
     expect(week.weightDelta).toBe(-0.5)
     expect(week.avgSteps).toBe(5000)
+  })
+
+  it('omits weight delta when Monday or Sunday is missing', () => {
+    const data: AppData = {
+      ...empty,
+      weights: [
+        { id: 'w1', date: '2026-07-13', kg: 61, createdAt: 1 },
+        { id: 'w2', date: '2026-07-17', kg: 60.5, createdAt: 2 },
+      ],
+    }
+    const week = buildWeekStats(data, '2026-07-13', 1800)
+    expect(week.weightDelta).toBeUndefined()
   })
 })
 

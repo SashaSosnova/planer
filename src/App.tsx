@@ -50,6 +50,7 @@ export default function App() {
     saveMeal,
     deleteMeal,
     saveWeight,
+    deleteWeight,
     saveSteps,
     saveMeasurement,
     saveDayNote,
@@ -295,6 +296,7 @@ export default function App() {
             data={data}
             targetWeightKg={targetWeightKg}
             maintainKcalGoal={maintainKcalGoal}
+            dailyKcalGoal={dailyKcalGoal}
             cycleLengthDays={cycleLengthDays}
             periodLengthDays={periodLengthDays}
             onBack={closeOverlay}
@@ -305,6 +307,7 @@ export default function App() {
               }
               return entry
             }}
+            onDelete={deleteWeight}
           />
         )}
 

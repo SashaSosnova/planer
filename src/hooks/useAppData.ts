@@ -8,6 +8,7 @@ import { sumMacros } from '../lib/nutrition'
 import {
   assertNonNegMacros,
   DAY_NOTE_MAX,
+  dedupeMeasurements,
   dedupePeriodStarts,
   sanitizeMacros,
   sanitizeMealItems,
@@ -72,6 +73,8 @@ export function useAppData() {
   /** Collections already accepted from cloud (prevents empty first snapshot wiping local). */
   const cloudHydrated = useRef(new Set<keyof AppData>())
   const prevUidRef = useRef<string | null>(null)
+  /** Dates deleted this session — ignore / re-delete if a sync race resurrects them. */
+  const suppressedMeasureDates = useRef(new Set<string>())
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -113,8 +116,14 @@ export function useAppData() {
                 !cloudHydrated.current.has(key)
               ) {
                 cloudHydrated.current.add(key)
+                const toUpload =
+                  key === 'measurements'
+                    ? (localItems as MeasurementEntry[]).filter(
+                        (item) => !suppressedMeasureDates.current.has(item.date),
+                      )
+                    : localItems
                 void Promise.all(
-                  localItems.map((item) =>
+                  toUpload.map((item) =>
                     upsertDoc(authUser.uid, key, item.id, {
                       ...item,
                     } as Record<string, unknown>),
@@ -131,6 +140,23 @@ export function useAppData() {
                 if (droppedIds.length) {
                   void Promise.all(
                     droppedIds.map((id) => removeDoc(authUser.uid, 'periodStarts', id)),
+                  )
+                }
+              } else if (key === 'measurements') {
+                const cloudRaw = cloudItems as MeasurementEntry[]
+                for (const m of cloudRaw) {
+                  if (suppressedMeasureDates.current.has(m.date)) {
+                    void removeDoc(authUser.uid, 'measurements', m.id)
+                  }
+                }
+                const filtered = cloudRaw.filter(
+                  (m) => !suppressedMeasureDates.current.has(m.date),
+                )
+                const { kept, droppedIds } = dedupeMeasurements(filtered)
+                Object.assign(next, { measurements: kept })
+                if (droppedIds.length) {
+                  void Promise.all(
+                    droppedIds.map((id) => removeDoc(authUser.uid, 'measurements', id)),
                   )
                 }
               } else {
@@ -304,13 +330,23 @@ export function useAppData() {
 
   const deleteMeasurement = useCallback(
     async (id: string) => {
-      if (useCloud && uid) await removeDoc(uid, 'measurements', id)
+      const match = data.measurements.find((m) => m.id === id)
+      const date = match?.date
+      if (date) suppressedMeasureDates.current.add(date)
+      const ids = date
+        ? data.measurements.filter((m) => m.date === date).map((m) => m.id)
+        : [id]
+      if (useCloud && uid) {
+        await Promise.all(ids.map((docId) => removeDoc(uid, 'measurements', docId)))
+      }
       persistLocal((prev) => ({
         ...prev,
-        measurements: prev.measurements.filter((m) => m.id !== id),
+        measurements: date
+          ? prev.measurements.filter((m) => m.date !== date)
+          : prev.measurements.filter((m) => m.id !== id),
       }))
     },
-    [persistLocal, uid, useCloud],
+    [data.measurements, persistLocal, uid, useCloud],
   )
 
   // Fix known Telegram typo weights (59.8→65.8, 55.7→65.7) in local + cloud.
@@ -363,7 +399,8 @@ export function useAppData() {
     async (input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string }) => {
       const clamp = (v: number | undefined) =>
         v != null && Number.isFinite(v) && v >= 0 ? Math.round(v * 10) / 10 : undefined
-      const existing = data.measurements.find((m) => m.date === input.date)
+      const sameDate = data.measurements.filter((m) => m.date === input.date)
+      const existing = sameDate[0]
       const entry: MeasurementEntry = {
         id: input.id ?? existing?.id ?? newId(),
         date: input.date,
@@ -385,7 +422,14 @@ export function useAppData() {
       ) {
         throw new Error('Заполните хотя бы один обмер')
       }
-      if (useCloud && uid) await upsertDoc(uid, 'measurements', entry.id, { ...entry })
+      suppressedMeasureDates.current.delete(entry.date)
+      const staleIds = sameDate.map((m) => m.id).filter((id) => id !== entry.id)
+      if (useCloud && uid) {
+        await upsertDoc(uid, 'measurements', entry.id, { ...entry })
+        if (staleIds.length) {
+          await Promise.all(staleIds.map((id) => removeDoc(uid, 'measurements', id)))
+        }
+      }
       persistLocal((prev) => ({
         ...prev,
         measurements: [...prev.measurements.filter((m) => m.date !== entry.date), entry],
@@ -482,6 +526,25 @@ export function useAppData() {
       })
     })()
   }, [ready, data.periodStarts, persistLocal, uid, useCloud])
+
+  // Same for measurements: one entry per date; remove cloud orphans.
+  useEffect(() => {
+    if (!ready) return
+    const { kept, droppedIds } = dedupeMeasurements(data.measurements)
+    if (kept.length === data.measurements.length && droppedIds.length === 0) return
+    void (async () => {
+      if (useCloud && uid) {
+        for (const id of droppedIds) {
+          await removeDoc(uid, 'measurements', id)
+        }
+      }
+      persistLocal((prev) => {
+        const again = dedupeMeasurements(prev.measurements)
+        if (again.kept.length === prev.measurements.length) return prev
+        return { ...prev, measurements: again.kept }
+      })
+    })()
+  }, [ready, data.measurements, persistLocal, uid, useCloud])
 
   const resetLocal = useCallback(() => {
     const empty = emptyAppData()

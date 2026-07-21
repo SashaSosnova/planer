@@ -94,16 +94,3 @@ export function LibraryMenuIcon({ size = 24 }: IconProps) {
     </svg>
   )
 }
-
-export function AchievementsMenuIcon({ size = 24 }: IconProps) {
-  return (
-    <svg {...svgProps(size)}>
-      <path
-        d="M12 4.5l2 4.1 4.5.7-3.2 3.2.8 4.5L12 14.8 7.9 17l.8-4.5-3.2-3.2 4.5-.7L12 4.5z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}

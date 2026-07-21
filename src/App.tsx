@@ -14,7 +14,6 @@ import {
   getCachedWeekSummary,
   getWeekNutritionSummary,
 } from './lib/weekSummaryLlm'
-import { AchievementsScreen } from './screens/AchievementsScreen'
 import { AddMealScreen } from './screens/AddMealScreen'
 import { DiaryScreen } from './screens/DiaryScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
@@ -35,7 +34,6 @@ type Overlay =
   | { type: 'profile'; openCycleCal?: boolean }
   | { type: 'weight-history' }
   | { type: 'steps-history' }
-  | { type: 'achievements' }
   | { type: 'diary' }
   | { type: 'history' }
   | { type: 'measures' }
@@ -222,7 +220,6 @@ export default function App() {
             onOpenCycle={() => setOverlay({ type: 'profile', openCycleCal: true })}
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
             onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
-            onOpenAchievements={() => setOverlay({ type: 'achievements' })}
             onOpenDiary={() => setOverlay({ type: 'diary' })}
             onOpenHistory={() => setOverlay({ type: 'history' })}
             onOpenMeasures={() => setOverlay({ type: 'measures' })}
@@ -342,15 +339,6 @@ export default function App() {
 
         {overlay?.type === 'steps-history' && (
           <StepsHistoryScreen data={data} onBack={closeOverlay} onSave={saveSteps} />
-        )}
-
-        {overlay?.type === 'achievements' && (
-          <AchievementsScreen
-            data={data}
-            targetWeightKg={targetWeightKg}
-            onBack={closeOverlay}
-            registerBackHandler={registerBackHandler}
-          />
         )}
 
         {overlay?.type === 'diary' && (

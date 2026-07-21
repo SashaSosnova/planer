@@ -198,32 +198,45 @@ export function sanitizePeriodStart(raw: unknown): PeriodStart | null {
 }
 
 /** One entry per id, then one per date (keep newest). Returns dropped ids for cloud cleanup. */
-export function dedupePeriodStarts(starts: PeriodStart[]): {
-  kept: PeriodStart[]
-  droppedIds: string[]
-} {
-  const byId = new Map<string, PeriodStart>()
-  for (const s of starts) byId.set(s.id, s)
+function dedupeByDate<T extends { id: string; date: string; createdAt: number }>(
+  entries: T[],
+): { kept: T[]; droppedIds: string[] } {
+  const byId = new Map<string, T>()
+  for (const e of entries) byId.set(e.id, e)
 
-  const byDate = new Map<string, PeriodStart>()
+  const byDate = new Map<string, T>()
   const droppedIds: string[] = []
-  for (const s of byId.values()) {
-    const prev = byDate.get(s.date)
+  for (const e of byId.values()) {
+    const prev = byDate.get(e.date)
     if (!prev) {
-      byDate.set(s.date, s)
+      byDate.set(e.date, e)
       continue
     }
-    if (s.createdAt >= prev.createdAt) {
+    if (e.createdAt >= prev.createdAt) {
       droppedIds.push(prev.id)
-      byDate.set(s.date, s)
+      byDate.set(e.date, e)
     } else {
-      droppedIds.push(s.id)
+      droppedIds.push(e.id)
     }
   }
   return {
     kept: [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)),
     droppedIds,
   }
+}
+
+export function dedupePeriodStarts(starts: PeriodStart[]): {
+  kept: PeriodStart[]
+  droppedIds: string[]
+} {
+  return dedupeByDate(starts)
+}
+
+export function dedupeMeasurements(entries: MeasurementEntry[]): {
+  kept: MeasurementEntry[]
+  droppedIds: string[]
+} {
+  return dedupeByDate(entries)
 }
 
 function asArray(value: unknown): unknown[] {
@@ -247,9 +260,11 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
     foods: asArray(parsed.foods).map(sanitizeFood).filter((f): f is FoodItem => f != null),
     meals: asArray(parsed.meals).map(sanitizeMeal).filter((m): m is Meal => m != null),
     weights: asArray(parsed.weights).map(sanitizeWeight).filter((w): w is WeightEntry => w != null),
-    measurements: asArray(parsed.measurements)
-      .map(sanitizeMeasurement)
-      .filter((m): m is MeasurementEntry => m != null),
+    measurements: dedupeMeasurements(
+      asArray(parsed.measurements)
+        .map(sanitizeMeasurement)
+        .filter((m): m is MeasurementEntry => m != null),
+    ).kept,
     steps: asArray(parsed.steps).map(sanitizeSteps).filter((s): s is StepsEntry => s != null),
     dayNotes: asArray(parsed.dayNotes)
       .map(sanitizeDayNote)

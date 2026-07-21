@@ -695,6 +695,81 @@
   color: var(--muted);
 }
 
+.week-days-toggle {
+  align-self: flex-start;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.week-days-toggle:active {
+  opacity: 0.75;
+}
+
+.week-days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.week-day {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.week-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.week-day-date {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.week-day-meals {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.week-day-meals > li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  align-items: baseline;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.week-day-meal-type {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.82rem;
+}
+
+.week-day-meal-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 420px) {
   .today-hero,
   .week-card-top,
@@ -2011,6 +2086,25 @@ button.food-row-open:focus-visible {
   text-align: right;
 }
 
+.progress-card-delta {
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  text-align: right;
+}
+
+.progress-card-delta.down {
+  color: var(--ok);
+}
+
+.progress-card-delta.up {
+  color: var(--warm);
+}
+
+.progress-card-delta.flat {
+  color: var(--ink);
+}
+
 .cycle-weight-note {
   color: var(--warm) !important;
 }
@@ -2170,17 +2264,115 @@ button.food-row-open:focus-visible {
   flex-shrink: 0;
 }
 
-.meal-actions {
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-.meal-advice {
-  margin-top: 10px;
+.meal-section {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: -8px;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.meal-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 0;
+}
+
+.meal-section .meal-card-top strong {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.meal-ideas-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 6px 4px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 36px;
+}
+
+.meal-ideas-btn svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--warm);
+}
+
+.meal-ideas-btn.active,
+.meal-ideas-btn:active {
+  color: var(--warm);
+}
+
+.meal-ideas-btn.active svg,
+.meal-ideas-btn:active svg {
+  color: var(--warm);
+}
+
+.today-screen {
+  padding-bottom: 72px;
+}
+
+.meal-fab {
+  position: fixed;
+  z-index: 25;
+  right: max(18px, calc((100vw - min(560px, 100vw)) / 2 + 18px));
+  bottom: calc(18px + var(--safe-bottom));
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 16px;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(15, 76, 92, 0.28);
+  cursor: pointer;
+}
+
+.meal-fab:active {
+  transform: scale(0.96);
+}
+
+.meal-fab svg {
+  display: block;
+  width: 26px;
+  height: 26px;
+}
+
+.meal-section-empty {
+  margin: 0;
+  text-align: center;
+  padding: 8px 0 4px;
+}
+
+.meal-section .meal-list {
+  gap: 8px;
+}
+
+.meal-advice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
 }
 
 .day-note-block {
@@ -2467,112 +2659,4 @@ button.food-row-open:focus-visible {
 .cycle-chip strong {
   font-size: 0.92rem;
   line-height: 1.25;
-}
-
-.achievements-group {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.sticker-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-.sticker-cell {
-  display: flex;
-  justify-content: center;
-}
-
-.sticker-cell-inner {
-  position: relative;
-  width: 100%;
-  max-width: 112px;
-}
-
-.sticker-frame {
-  width: 100%;
-  aspect-ratio: 1;
-  display: grid;
-  place-items: center;
-  border-radius: 18px;
-  overflow: hidden;
-  background: transparent;
-  border: none;
-}
-
-.sticker-frame.locked {
-  filter: grayscale(1) brightness(0.88);
-  opacity: 0.5;
-}
-
-.sticker-frame.unlocked {
-  background: transparent;
-}
-
-.sticker-frame.placeholder {
-  background: var(--accent-soft);
-}
-
-.sticker-placeholder-letter {
-  font-family: var(--font-display, inherit);
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: var(--accent);
-}
-
-.sticker-frame.locked .sticker-placeholder-letter {
-  color: var(--muted);
-}
-
-.sticker-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  display: block;
-}
-
-.sticker-info-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--accent);
-  font-size: 0.72rem;
-  font-weight: 700;
-  font-style: italic;
-  font-family: Georgia, 'Times New Roman', serif;
-  line-height: 1;
-  display: grid;
-  place-items: center;
-  padding: 0;
-}
-
-.sticker-info-card {
-  text-align: center;
-  align-items: center;
-}
-
-.sticker-info-visual {
-  width: 96px;
-  margin: 0 auto 4px;
-}
-
-.sticker-info-visual .sticker-frame {
-  max-width: none;
-}
-
-@media (min-width: 420px) {
-  .sticker-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
 }

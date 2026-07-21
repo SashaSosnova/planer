@@ -28,17 +28,20 @@ export function cyclePhaseLabel(phase: CyclePhase): string {
   return PHASE_LABELS[phase]
 }
 
-/** Short practical tip for Today — no phase name, starts with «Обычно…». */
+/**
+ * Supportive tip for Today: what to expect hormonally + water/calories.
+ * No phase jargon in the sentence — the card header already has the phase.
+ */
 export function cyclePhaseTip(phase: CyclePhase): string | null {
   switch (phase) {
     case 'menstrual':
-      return 'Обычно энергия ниже; вес может подскакивать — смотрите на тренд.'
+      return 'Сейчас организму тяжелее: энергия ниже, возможна задержка воды — вес на весах не равен прогрессу. Мягкий план и отдых тоже считаются.'
     case 'follicular':
-      return 'Обычно легче держать план и больше двигаться.'
+      return 'После месячных обычно легче: энергия растёт, голод спокойнее — удобное окно держать план и добавить движение, если хочется.'
     case 'ovulation':
-      return 'Обычно больше энергии; голод чаще ровный.'
+      return 'Часто пик энергии и более ровный аппетит. Можно чуть активнее двигаться; если голод вдруг скачет — это тоже нормально.'
     case 'luteal':
-      return 'Обычно аппетит выше, вес +0,5–1,5 кг из‑за воды — это нормально.'
+      return 'Перед месячными прогестерон выше: аппетит сильнее, возможна задержка воды +0,5–1,5 кг. Можно чуть поднять калории — это не срыв, а гормоны.'
     default:
       return null
   }

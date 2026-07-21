@@ -41,7 +41,7 @@ describe('analyzeCycleCalories', () => {
     expect(insights.sampleDays).toBeGreaterThanOrEqual(12)
     expect(insights.phases.length).toBeGreaterThanOrEqual(2)
     expect(insights.tip).toBeTruthy()
-    expect(insights.tip).toMatch(/Обычно|сладк|ккал/i)
+    expect(insights.tip).toMatch(/сладк|ккал|энерг|воды|аппетит|план/i)
     expect(insights.tip).not.toMatch(/фолликуляр|лютеинов|овуляц/i)
   })
 
@@ -52,7 +52,7 @@ describe('analyzeCycleCalories', () => {
       1350,
       { today: '2026-07-03' },
     )
-    expect(insights.tip).toMatch(/Обычно/)
+    expect(insights.tip).toMatch(/воды|энерг|отдых/i)
     expect(insights.tip).not.toMatch(/фолликуляр|лютеинов/i)
   })
 })

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { formatRuDate } from '../lib/date'
 import type { WeekStats } from '../lib/dayStats'
+import { MEAL_TYPE_LABELS, mealBodyText } from '../lib/labels'
 import {
   getCachedWeekSummary,
   getWeekNutritionSummary,
@@ -16,6 +18,7 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
   const cached = getCachedWeekSummary(week.weekStart)
   const [note, setNote] = useState(() => cached ?? localWeekNutritionNote(week))
   const [loadingNote, setLoadingNote] = useState(() => !cached)
+  const [daysOpen, setDaysOpen] = useState(false)
 
   useEffect(() => {
     const existing = getCachedWeekSummary(week.weekStart)
@@ -59,6 +62,8 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
   const avgCarbs = week.totals.carbs / loggedDays
   const dailyGoal = week.days.length > 0 ? week.kcalGoal / week.days.length : week.kcalGoal
 
+  const daysWithData = week.days.filter((d) => d.hasData)
+
   return (
     <article className="week-card">
       <h3 className="week-card-title">{week.label}</h3>
@@ -91,6 +96,52 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
         </div>
       </div>
       <p className={`week-note${loadingNote ? ' loading' : ''}`}>{note}</p>
+
+      {daysWithData.length > 0 && (
+        <>
+          <button
+            type="button"
+            className="week-days-toggle"
+            aria-expanded={daysOpen}
+            onClick={() => setDaysOpen((v) => !v)}
+          >
+            {daysOpen ? 'Скрыть дни' : 'По дням'}
+          </button>
+          {daysOpen && (
+            <ul className="week-days">
+              {daysWithData.map((day) => (
+                <li key={day.date} className="week-day">
+                  <div className="week-day-head">
+                    <span className="week-day-date">{formatRuDate(day.date)}</span>
+                    <span className="muted small">
+                      {day.meals.length > 0
+                        ? `${Math.round(day.totals.kcal)} ккал`
+                        : 'без приёмов'}
+                    </span>
+                  </div>
+                  {day.meals.length > 0 && (
+                    <ul className="week-day-meals">
+                      {day.meals.map((meal) => (
+                        <li key={meal.id}>
+                          <span className="week-day-meal-type">
+                            {MEAL_TYPE_LABELS[meal.mealType]}
+                          </span>
+                          <span className="week-day-meal-body">
+                            {mealBodyText(meal.rawText) || '—'}
+                          </span>
+                          <span className="muted small">
+                            {Math.round(meal.totals.kcal)} ккал
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
     </article>
   )
 }

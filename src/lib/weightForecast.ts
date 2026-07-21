@@ -444,13 +444,7 @@ function buildSummary(f: {
 
   if (f.targetKg != null) {
     const left = round1(f.currentKg - f.targetKg)
-    if (Math.abs(left) < 0.15) {
-      parts.push('у цели')
-    } else if (left > 0) {
-      parts.push(`ещё ${left.toFixed(1).replace('.', ',')} кг`)
-    } else {
-      parts.push(`ниже цели на ${Math.abs(left).toFixed(1).replace('.', ',')} кг`)
-    }
+    if (Math.abs(left) < 0.15) parts.push('у цели')
   }
 
   if (f.inOneWeek != null) {

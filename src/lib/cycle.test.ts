@@ -31,9 +31,11 @@ describe('getCycleInfo', () => {
 })
 
 describe('cyclePhaseTip', () => {
-  it('gives a tip for known phases', () => {
-    expect(cyclePhaseTip('luteal')).toMatch(/Обычно.*воды|аппетит/i)
-    expect(cyclePhaseTip('follicular')).toBeTruthy()
+  it('gives supportive tips with water/calorie context', () => {
+    expect(cyclePhaseTip('luteal')).toMatch(/воды|калори/i)
+    expect(cyclePhaseTip('menstrual')).toMatch(/воды|энерг/i)
+    expect(cyclePhaseTip('follicular')).toMatch(/энерг|план|движен/i)
+    expect(cyclePhaseTip('ovulation')).toMatch(/энерг|аппетит/i)
     expect(cyclePhaseTip('unknown')).toBeNull()
   })
 })

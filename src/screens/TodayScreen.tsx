@@ -13,7 +13,6 @@ import { AppsGridIcon } from '../components/AppsGridIcon'
 import { CloseIcon } from '../components/CloseIcon'
 import { LightbulbIcon } from '../components/LightbulbIcon'
 import {
-  AchievementsMenuIcon,
   DiaryMenuIcon,
   HistoryMenuIcon,
   LibraryMenuIcon,
@@ -68,7 +67,6 @@ type Props = {
   onOpenCycle: () => void
   onOpenWeightHistory: () => void
   onOpenStepsHistory: () => void
-  onOpenAchievements: () => void
   onOpenDiary: () => void
   onOpenHistory: () => void
   onOpenMeasures: () => void
@@ -109,7 +107,6 @@ export function TodayScreen({
   onOpenCycle,
   onOpenWeightHistory,
   onOpenStepsHistory,
-  onOpenAchievements,
   onOpenDiary,
   onOpenHistory,
   onOpenMeasures,
@@ -227,6 +224,21 @@ export function TodayScreen({
       date,
     ],
   )
+
+  const progressDelta = useMemo(() => {
+    if (!forecast) return null
+    const fmtKg = (n: number) => n.toFixed(1).replace('.', ',')
+    const lostKg = Math.round((forecast.startKg - forecast.currentKg) * 10) / 10
+    return {
+      hero:
+        lostKg > 0
+          ? `−${fmtKg(lostKg)} кг`
+          : lostKg < 0
+            ? `+${fmtKg(-lostKg)} кг`
+            : '0 кг',
+      tone: lostKg > 0 ? 'down' : lostKg < 0 ? 'up' : 'flat',
+    }
+  }, [forecast])
 
   const cycle = useMemo(
     () => getCycleInfo(data.periodStarts, date, cycleLengthDays, periodLengthDays),
@@ -395,7 +407,7 @@ export function TodayScreen({
   }
 
   return (
-    <section className="screen">
+    <section className="screen today-screen">
       <header className="screen-header today-header">
         <div>
           <p className="eyebrow">Сегодня</p>
@@ -462,15 +474,6 @@ export function TodayScreen({
                     <LibraryMenuIcon />
                     <span>Справочник</span>
                   </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
-                    onClick={() => runMore(onOpenAchievements)}
-                  >
-                    <AchievementsMenuIcon />
-                    <span>Достижения</span>
-                  </button>
                 </div>
               </div>
             )}
@@ -508,15 +511,12 @@ export function TodayScreen({
         </p>
       )}
 
-      {forecast && (
+      {forecast && progressDelta && (
         <div className="progress-card">
           <div className="progress-card-top">
             <span>Прогресс</span>
-            <strong>
-              {forecast.startKg.toFixed(1).replace('.', ',')}
-              {forecast.targetKg != null
-                ? ` → ${forecast.targetKg.toFixed(1).replace('.', ',')} кг`
-                : ' кг'}
+            <strong className={`progress-card-delta ${progressDelta.tone}`}>
+              {progressDelta.hero}
             </strong>
           </div>
           <p className="muted small">{forecast.summary}</p>
@@ -597,84 +597,120 @@ export function TodayScreen({
         </div>
       )}
 
-      <div className="section-head meal-actions">
+      <section className="meal-section" aria-label="Приёмы пищи">
+        <div className="meal-toolbar">
+          <button
+            type="button"
+            className={`meal-ideas-btn${adviceOpen ? ' active' : ''}`}
+            onClick={() => setAdviceOpen((v) => !v)}
+            aria-label={adviceOpen ? 'Скрыть идеи' : 'Идеи для приёма'}
+            aria-pressed={adviceOpen}
+          >
+            <LightbulbIcon size={18} />
+            <span>{adviceOpen ? 'Скрыть идеи' : 'Идеи'}</span>
+          </button>
+        </div>
+
+        {adviceOpen && (
+          <div className="meal-advice">
+            <div className="meal-type-chips" role="group" aria-label="На какой приём совет">
+              {ADVICE_SLOTS.map((slot) => (
+                <button
+                  key={slot}
+                  type="button"
+                  className={`meal-type-chip${adviceSlot === slot ? ' active' : ''}`}
+                  onClick={() => setAdviceSlot(slot)}
+                >
+                  {MEAL_TYPE_LABELS[slot]}
+                </button>
+              ))}
+            </div>
+            {ideasLoading && suggestions.length === 0 ? (
+              <p className="muted small">Думаю…</p>
+            ) : (
+              <ul className="meal-ideas">
+                {suggestions.map((s) => {
+                  const liked = likedSet.has(canonicalMealKey(s.title))
+                  return (
+                    <li key={s.id} className="meal-idea-row">
+                      <button
+                        type="button"
+                        className="meal-idea-main"
+                        onClick={() => setOpenIdea(s)}
+                      >
+                        <span className="meal-idea-title">{s.title}</span>
+                        <span className="meal-idea-macros muted small">{formatIdeaMacros(s)}</span>
+                      </button>
+                      <div className="meal-idea-votes">
+                        <button
+                          type="button"
+                          className={`vote-btn${liked ? ' active' : ''}`}
+                          aria-label="Нравится"
+                          title="Нравится"
+                          onClick={() => onRateMealIdea(s.title, 'like')}
+                        >
+                          <LikeIcon size={17} />
+                        </button>
+                        <button
+                          type="button"
+                          className="vote-btn"
+                          aria-label="Не предлагать"
+                          title="Не предлагать"
+                          onClick={() => handleDislikeIdea(s)}
+                        >
+                          <DislikeIcon size={17} />
+                        </button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {today.meals.length > 0 ? (
+          <ul className="meal-list">
+            {today.meals.map((meal) => (
+              <li key={meal.id}>
+                <button
+                  type="button"
+                  className="meal-card meal-card-btn"
+                  onClick={() => onOpenMeal(meal.id)}
+                >
+                  <div className="meal-card-top">
+                    <strong>
+                      {MEAL_TYPE_LABELS[meal.mealType]}
+                      {meal.eatingOut ? ' · вне дома' : ''}
+                    </strong>
+                    <span>{Math.round(meal.totals.kcal)} ккал</span>
+                  </div>
+                  <p className="meal-preview">{mealBodyText(meal.rawText)}</p>
+                  <p className="meal-bju">
+                    Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
+                    {Math.round(meal.totals.carbs)}
+                  </p>
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          !adviceOpen && (
+            <p className="muted small meal-section-empty">Пока пусто — идеи или +</p>
+          )
+        )}
+      </section>
+
+      {!openIdea && !prompt && (
         <button
           type="button"
-          className={`ghost-btn icon-cta${adviceOpen ? ' active-soft' : ''}`}
-          onClick={() => setAdviceOpen((v) => !v)}
-          aria-label={adviceOpen ? 'Скрыть идеи' : 'Идеи для приёма'}
-          title={adviceOpen ? 'Скрыть идеи' : 'Идеи для приёма'}
-          aria-pressed={adviceOpen}
-        >
-          <LightbulbIcon size={20} />
-        </button>
-        <button
-          type="button"
-          className="primary-btn icon-cta"
+          className="meal-fab"
           onClick={() => onAddMeal()}
           aria-label="Добавить приём"
           title="Добавить приём"
         >
-          <PlusIcon size={20} />
+          <PlusIcon size={26} />
         </button>
-      </div>
-
-      {adviceOpen && (
-        <div className="meal-advice">
-          <div className="meal-type-chips" role="group" aria-label="На какой приём совет">
-            {ADVICE_SLOTS.map((slot) => (
-              <button
-                key={slot}
-                type="button"
-                className={`meal-type-chip${adviceSlot === slot ? ' active' : ''}`}
-                onClick={() => setAdviceSlot(slot)}
-              >
-                {MEAL_TYPE_LABELS[slot]}
-              </button>
-            ))}
-          </div>
-          {ideasLoading && suggestions.length === 0 ? (
-            <p className="muted small">Думаю…</p>
-          ) : (
-            <ul className="meal-ideas">
-              {suggestions.map((s) => {
-                const liked = likedSet.has(canonicalMealKey(s.title))
-                return (
-                  <li key={s.id} className="meal-idea-row">
-                    <button
-                      type="button"
-                      className="meal-idea-main"
-                      onClick={() => setOpenIdea(s)}
-                    >
-                      <span className="meal-idea-title">{s.title}</span>
-                      <span className="meal-idea-macros muted small">{formatIdeaMacros(s)}</span>
-                    </button>
-                    <div className="meal-idea-votes">
-                      <button
-                        type="button"
-                        className={`vote-btn${liked ? ' active' : ''}`}
-                        aria-label="Нравится"
-                        title="Нравится"
-                        onClick={() => onRateMealIdea(s.title, 'like')}
-                      >
-                        <LikeIcon size={17} />
-                      </button>
-                      <button
-                        type="button"
-                        className="vote-btn"
-                        aria-label="Не предлагать"
-                        title="Не предлагать"
-                        onClick={() => handleDislikeIdea(s)}
-                      >
-                        <DislikeIcon size={17} />
-                      </button>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </div>
       )}
 
       {openIdea && (
@@ -730,33 +766,6 @@ export function TodayScreen({
             </div>
           </div>
         </div>
-      )}
-
-      {today.meals.length > 0 && (
-        <ul className="meal-list">
-          {today.meals.map((meal) => (
-            <li key={meal.id}>
-              <button
-                type="button"
-                className="meal-card meal-card-btn"
-                onClick={() => onOpenMeal(meal.id)}
-              >
-                <div className="meal-card-top">
-                  <strong>
-                    {MEAL_TYPE_LABELS[meal.mealType]}
-                    {meal.eatingOut ? ' · вне дома' : ''}
-                  </strong>
-                  <span>{Math.round(meal.totals.kcal)} ккал</span>
-                </div>
-                <p className="meal-preview">{mealBodyText(meal.rawText)}</p>
-                <p className="meal-bju">
-                  Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
-                  {Math.round(meal.totals.carbs)}
-                </p>
-              </button>
-            </li>
-          ))}
-        </ul>
       )}
 
       {prompt === 'weight' && (

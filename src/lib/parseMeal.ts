@@ -95,6 +95,16 @@ function resolveLibraryFood(
   return findBestFood(query, foods, 55)
 }
 
+function toLibraryItem(food: FoodRef, grams: number) {
+  return {
+    name: food.name,
+    grams,
+    foodId: food.id,
+    ...scalePer100g(food.per100g, grams),
+    source: 'library' as const,
+  }
+}
+
 /** Visible for tests — applies library foodId checks against the user phrase. */
 export function finalizeDraft(
   mealType: MealType,
@@ -110,32 +120,54 @@ export function finalizeDraft(
 
   const resolved = items.map((item) => {
     const grams = item.grams > 0 ? item.grams : 100
-    if (!eatingOut && item.source === 'library' && item.foodId) {
-      const food = resolveLibraryFood(item, foods, queryName || undefined, singleItem)
-      if (food) {
-        const macros = scalePer100g(food.per100g, grams)
+    const query = singleItem && queryName ? queryName : item.name
+    const userLabel = (singleItem && queryName ? queryName : item.name) || 'Блюдо'
+
+    if (!eatingOut) {
+      // 1) Validate claimed catalog id (even if model marked source=estimate).
+      if (item.foodId) {
+        const viaId = resolveLibraryFood(
+          { ...item, source: 'library' },
+          foods,
+          queryName || undefined,
+          singleItem,
+        )
+        if (viaId) return toLibraryItem(viaId, grams)
+      }
+
+      // 2) LLM often returns the right name without foodId / as estimate — rematch.
+      const viaName = findBestFood(query, foods, 70)
+      if (viaName) return toLibraryItem(viaName, grams)
+
+      // 3) Wrong catalog id / model renamed product («творог» → «Творожный сыр»).
+      // Drop foodId and prefer the user's wording for a single-item phrase.
+      if (item.foodId || (singleItem && queryName)) {
+        const keepModelMacros =
+          item.source !== 'library' &&
+          ((item.kcal ?? 0) > 0 ||
+            (item.protein ?? 0) > 0 ||
+            (item.fat ?? 0) > 0 ||
+            (item.carbs ?? 0) > 0)
+        const macros = keepModelMacros
+          ? {
+              kcal: item.kcal ?? 0,
+              protein: item.protein ?? 0,
+              fat: item.fat ?? 0,
+              carbs: item.carbs ?? 0,
+            }
+          : scalePer100g(guessFallbackCategory(userLabel), grams)
         return {
-          name: food.name,
+          name: userLabel,
           grams,
-          foodId: food.id,
           ...macros,
-          source: 'library' as const,
+          source: 'estimate' as const,
         }
       }
-      // Reject bogus catalog hit — keep user wording + rough estimate
-      const label = (queryName && singleItem ? queryName : item.name) || 'Блюдо'
-      const macros = scalePer100g(guessFallbackCategory(label), grams)
-      return {
-        name: label,
-        grams,
-        ...macros,
-        source: 'estimate' as const,
-      }
     }
+
     return {
       name: item.name,
       grams,
-      foodId: item.foodId ?? undefined,
       kcal: item.kcal ?? 0,
       protein: item.protein ?? 0,
       fat: item.fat ?? 0,
@@ -217,7 +249,15 @@ export async function parseMeal(
   if (isLlmConfigured() && (complex || eatingOut)) {
     try {
       const draft = await parseMealWithLlm(body, foods, resolvedType, eatingOut)
-      return fromText.mealType ? { ...draft, mealType: fromText.mealType } : draft
+      return finalizeDraft(
+        fromText.mealType ?? draft.mealType,
+        draft.items,
+        foods,
+        draft.eatingOut,
+        draft.notes,
+        'deepseek',
+        body,
+      )
     } catch {
       // continue to local
     }
@@ -226,7 +266,15 @@ export async function parseMeal(
   if (isLlmConfigured()) {
     try {
       const draft = await parseMealWithLlm(body, foods, resolvedType, eatingOut)
-      return fromText.mealType ? { ...draft, mealType: fromText.mealType } : draft
+      return finalizeDraft(
+        fromText.mealType ?? draft.mealType,
+        draft.items,
+        foods,
+        draft.eatingOut,
+        draft.notes,
+        'deepseek',
+        body,
+      )
     } catch {
       // continue
     }

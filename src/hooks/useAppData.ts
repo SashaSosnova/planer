@@ -302,6 +302,17 @@ export function useAppData() {
     [persistLocal, uid, useCloud],
   )
 
+  const deleteMeasurement = useCallback(
+    async (id: string) => {
+      if (useCloud && uid) await removeDoc(uid, 'measurements', id)
+      persistLocal((prev) => ({
+        ...prev,
+        measurements: prev.measurements.filter((m) => m.id !== id),
+      }))
+    },
+    [persistLocal, uid, useCloud],
+  )
+
   // Fix known Telegram typo weights (59.8→65.8, 55.7→65.7) in local + cloud.
   useEffect(() => {
     if (!ready) return
@@ -581,6 +592,7 @@ export function useAppData() {
     deleteWeight,
     saveSteps,
     saveMeasurement,
+    deleteMeasurement,
     saveDayNote,
     savePeriodStart,
     removePeriodStart,

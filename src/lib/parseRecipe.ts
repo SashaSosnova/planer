@@ -1,10 +1,12 @@
-import type { FoodRef, RecipeDraft, RecipeIngredientLine } from '../types'
+import type { FoodRef, MacroSet, RecipeDraft, RecipeIngredientLine } from '../types'
 import { guessYieldFactor } from './cookingYield'
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
-import { findBestFood } from './foodMatch'
+import { findBestFood, scoreFoodMatch } from './foodMatch'
 import { guessFallbackCategory } from './nutrition'
 import { computeRecipe } from './recipeCalc'
 import { nonNeg, sanitizeMacros } from './sanitize'
+
+const LIBRARY_MIN = 70
 
 function extractGrams(line: string): { name: string; grams: number | null } {
   const m = line.trim().match(
@@ -19,27 +21,81 @@ function extractGrams(line: string): { name: string; grams: number | null } {
   return { name: line.trim(), grams: null }
 }
 
-function resolveIngredient(name: string, grams: number, foods: FoodRef[]): RecipeIngredientLine {
-  const matched = findBestFood(name, foods)
+/** Ingredient lines with grams from the user's recipe text (skips dish title). */
+export function extractRecipeIngredientHints(
+  text: string,
+): Array<{ name: string; grams: number }> {
+  const lines = text
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  if (lines.length === 0) return []
+
+  let start = 1
+  if (extractGrams(lines[0]!).grams != null) start = 0
+
+  const out: Array<{ name: string; grams: number }> = []
+  for (const line of lines.slice(start)) {
+    const { name, grams } = extractGrams(line)
+    if (!name || grams == null || grams <= 0) continue
+    out.push({ name, grams })
+  }
+  return out
+}
+
+/**
+ * Link an ingredient to the catalog only when the name actually matches.
+ * Rejects LLM foodId mistakes («макароны» → «Паста с кабачком и курицей»).
+ */
+export function resolveRecipeIngredient(
+  name: string,
+  gramsRaw: number,
+  foods: FoodRef[],
+  claimedFoodId?: string | null,
+  yieldFactor?: number,
+  yieldNote?: string,
+  per100gEstimate?: Partial<MacroSet> | null,
+): RecipeIngredientLine {
   const yieldInfo = guessYieldFactor(name)
+  const factor = Number(yieldFactor) > 0 ? Number(yieldFactor) : yieldInfo.factor
+  const note = yieldNote ?? yieldInfo.note
+  const query = name.trim()
+
+  if (claimedFoodId) {
+    const claimed = foods.find((f) => f.id === claimedFoodId)
+    if (claimed && scoreFoodMatch(query, claimed) >= LIBRARY_MIN) {
+      return {
+        name: claimed.name,
+        gramsRaw,
+        foodId: claimed.id,
+        per100g: sanitizeMacros(claimed.per100g),
+        source: 'library',
+        yieldFactor: factor,
+        yieldNote: note,
+      }
+    }
+  }
+
+  const matched = findBestFood(query, foods, LIBRARY_MIN)
   if (matched) {
     return {
       name: matched.name,
-      gramsRaw: grams,
+      gramsRaw,
       foodId: matched.id,
-      per100g: matched.per100g,
+      per100g: sanitizeMacros(matched.per100g),
       source: 'library',
-      yieldFactor: yieldInfo.factor,
-      yieldNote: yieldInfo.note,
+      yieldFactor: factor,
+      yieldNote: note,
     }
   }
+
   return {
-    name,
-    gramsRaw: grams,
-    per100g: guessFallbackCategory(name),
+    name: query || 'Ингредиент',
+    gramsRaw,
+    per100g: sanitizeMacros(per100gEstimate ?? guessFallbackCategory(query)),
     source: 'estimate',
-    yieldFactor: yieldInfo.factor,
-    yieldNote: yieldInfo.note,
+    yieldFactor: factor,
+    yieldNote: note,
   }
 }
 
@@ -54,9 +110,9 @@ export function parseRecipeLocal(text: string, foods: FoodRef[]): RecipeDraft {
     throw new Error('Введите название блюда и ингредиенты')
   }
 
-  let name = lines[0]
+  let name = lines[0]!
   let start = 1
-  const firstAsIng = extractGrams(lines[0])
+  const firstAsIng = extractGrams(lines[0]!)
   if (firstAsIng.grams != null) {
     name = 'Блюдо'
     start = 0
@@ -66,7 +122,7 @@ export function parseRecipeLocal(text: string, foods: FoodRef[]): RecipeDraft {
   for (const line of lines.slice(start)) {
     const { name: ingName, grams } = extractGrams(line)
     if (!ingName || grams == null || grams <= 0) continue
-    ingredients.push(resolveIngredient(ingName, grams, foods))
+    ingredients.push(resolveRecipeIngredient(ingName, grams, foods))
   }
 
   if (ingredients.length === 0) {
@@ -86,6 +142,7 @@ async function parseRecipeWithLlm(text: string, foods: FoodRef[]): Promise<Recip
     name: f.name,
     aliases: f.aliases,
     per100g: f.per100g,
+    kind: f.kind,
   }))
 
   const prompt = `Разбери рецепт / состав блюда на русском. Нужен расчёт КБЖУ готового блюда.
@@ -109,8 +166,10 @@ async function parseRecipeWithLlm(text: string, foods: FoodRef[]): Promise<Recip
 
 Правила:
 - gramsRaw — вес ДО готовки.
-- Если ингредиент есть в каталоге — foodId и per100g из каталога (не выдумывай).
-- Если нет — оцени per100g типичные средние.
+- foodId ставь ТОЛЬКО при точном совпадении с каталогом (тот же продукт).
+  «Макароны сухие» / «паста» ≠ готовое блюдо вроде «Паста с кабачком и курицей».
+  Если сомневаешься — foodId: null и оцени per100g.
+- Не подменяй ингредиент названием другого блюда из каталога.
 - yieldFactor обязателен для каждого.
 - cookedGramsEstimate — суммарный вес готового блюда, если можешь оценить; иначе null.
 
@@ -134,34 +193,30 @@ ${text}`
     }>
   }>(prompt)
 
+  const hints = extractRecipeIngredientHints(text)
   const ingredients: RecipeIngredientLine[] = []
-  for (const ing of parsed.ingredients ?? []) {
+
+  for (let i = 0; i < (parsed.ingredients ?? []).length; i++) {
+    const ing = parsed.ingredients![i]!
     const gramsRaw = nonNeg(ing.gramsRaw)
-    const name = String(ing.name ?? '').trim()
-    if (!name || !(gramsRaw > 0)) continue
-    const lib = ing.foodId ? foods.find((f) => f.id === ing.foodId) : findBestFood(name, foods)
-    const yieldInfo = guessYieldFactor(name)
-    const yieldFactor = Number(ing.yieldFactor) > 0 ? Number(ing.yieldFactor) : yieldInfo.factor
-    if (lib) {
-      ingredients.push({
-        name: lib.name,
-        gramsRaw,
-        foodId: lib.id,
-        per100g: sanitizeMacros(lib.per100g),
-        source: 'library',
-        yieldFactor,
-        yieldNote: ing.yieldNote ?? yieldInfo.note,
-      })
-    } else {
-      ingredients.push({
-        name,
-        gramsRaw,
-        per100g: sanitizeMacros(ing.per100g ?? guessFallbackCategory(name)),
-        source: 'estimate',
-        yieldFactor,
-        yieldNote: ing.yieldNote ?? yieldInfo.note,
-      })
-    }
+    const llmName = String(ing.name ?? '').trim()
+    const hint = hints[i]
+    // Prefer the user's wording for catalog checks — model often renames wrongly.
+    const nameForMatch = hint?.name || llmName
+    const grams = hint?.grams && hint.grams > 0 ? hint.grams : gramsRaw
+    if (!nameForMatch || !(grams > 0)) continue
+
+    ingredients.push(
+      resolveRecipeIngredient(
+        nameForMatch,
+        grams,
+        foods,
+        ing.foodId,
+        ing.yieldFactor,
+        ing.yieldNote,
+        ing.per100g,
+      ),
+    )
   }
 
   if (ingredients.length === 0) throw new Error('DeepSeek не вернул ингредиенты')

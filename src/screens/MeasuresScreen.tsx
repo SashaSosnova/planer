@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { ChartIcon, TrendChart, type ChartSeries } from '../components/TrendChart'
+import { TrashIcon } from '../components/TrashIcon'
 import { formatRuDate, todayIso } from '../lib/date'
 import {
   MEASURE_COLORS,
@@ -13,6 +14,7 @@ import type { AppData, MeasurementEntry } from '../types'
 type Props = {
   data: AppData
   onSave: (input: Omit<MeasurementEntry, 'id' | 'createdAt'> & { id?: string }) => Promise<unknown>
+  onDelete: (id: string) => Promise<unknown>
 }
 
 function num(v: string): number | undefined {
@@ -26,7 +28,7 @@ type ScreenProps = Props & {
 }
 
 /** Full-screen measurements — opened from «Ещё». */
-export function MeasuresScreen({ data, onSave, onBack }: ScreenProps) {
+export function MeasuresScreen({ data, onSave, onDelete, onBack }: ScreenProps) {
   return (
     <section className="screen">
       <header className="screen-header">
@@ -36,13 +38,20 @@ export function MeasuresScreen({ data, onSave, onBack }: ScreenProps) {
         <h1>Обмеры</h1>
         <p className="muted">Раз в неделю или реже</p>
       </header>
-      <MeasuresPanel data={data} onSave={onSave} />
+      <MeasuresPanel data={data} onSave={onSave} onDelete={onDelete} />
     </section>
   )
 }
 
+function emptyDraft(): Record<MeasureKey, string> {
+  return Object.fromEntries(MEASURE_FIELDS.map(({ key }) => [key, ''])) as Record<
+    MeasureKey,
+    string
+  >
+}
+
 /** Body measurements content (screen chrome is outside). */
-export function MeasuresPanel({ data, onSave }: Props) {
+export function MeasuresPanel({ data, onSave, onDelete }: Props) {
   const date = todayIso()
   const measure = data.measurements.find((m) => m.date === date)
   const [editing, setEditing] = useState(!measureFilled(measure))
@@ -106,6 +115,22 @@ export function MeasuresPanel({ data, onSave }: Props) {
     }
   }
 
+  const remove = async (id: string, isToday: boolean) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await onDelete(id)
+      if (isToday) {
+        setDraft(emptyDraft())
+        setEditing(true)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="panel-stack">
       <div className="section-head" style={{ justifyContent: 'flex-end' }}>
@@ -130,9 +155,21 @@ export function MeasuresPanel({ data, onSave }: Props) {
           <p className="measure-line">
             <span className="muted small">{formatMeasure(measure)}</span>
           </p>
-          <button type="button" className="ghost-btn" onClick={() => setEditing(true)}>
-            Изменить
-          </button>
+          <div className="btn-row">
+            <button type="button" className="ghost-btn" onClick={() => setEditing(true)}>
+              Изменить
+            </button>
+            <button
+              type="button"
+              className="icon-btn danger"
+              disabled={busy}
+              onClick={() => void remove(measure.id, true)}
+              aria-label="Удалить обмеры за сегодня"
+              title="Удалить"
+            >
+              <TrashIcon size={18} />
+            </button>
+          </div>
         </div>
       ) : (
         <div className="panel">
@@ -164,9 +201,9 @@ export function MeasuresPanel({ data, onSave }: Props) {
               </button>
             )}
           </div>
-          {error && <p className="form-msg error">{error}</p>}
         </div>
       )}
+      {error && <p className="form-msg error">{error}</p>}
 
       {past.length > 0 && (
         <div className="panel">
@@ -176,8 +213,20 @@ export function MeasuresPanel({ data, onSave }: Props) {
           <ul className="measure-history">
             {past.map((m) => (
               <li key={m.id}>
-                <span className="measure-history-date">{formatRuDate(m.date)}</span>
-                <span className="muted small">{formatMeasure(m)}</span>
+                <div className="measure-history-main">
+                  <span className="measure-history-date">{formatRuDate(m.date)}</span>
+                  <span className="muted small">{formatMeasure(m)}</span>
+                </div>
+                <button
+                  type="button"
+                  className="icon-btn sm danger"
+                  disabled={busy}
+                  aria-label={`Удалить обмеры за ${formatRuDate(m.date)}`}
+                  title="Удалить"
+                  onClick={() => void remove(m.id, false)}
+                >
+                  <TrashIcon size={18} />
+                </button>
               </li>
             ))}
           </ul>

@@ -76,5 +76,12 @@ describe('findBestFood', () => {
   it('does not match Творожный сыр for творог when Творог absent', () => {
     expect(findBestFood('творог', [tvorozhnySyr])).toBeNull()
     expect(findBestFood('творога', [tvorozhnySyr])).toBeNull()
+    expect(findBestFood('200 гр творог', [tvorozhnySyr])).toBeNull()
+    const withBadAlias = {
+      ...tvorozhnySyr,
+      aliases: ['творог', ...tvorozhnySyr.aliases],
+    }
+    expect(scoreFoodMatch('творог', withBadAlias)).toBeLessThan(55)
+    expect(findBestFood('творог', [withBadAlias])).toBeNull()
   })
 })

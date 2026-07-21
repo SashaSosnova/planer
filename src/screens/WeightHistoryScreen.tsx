@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
+import { DateField } from '../components/DateField'
 import { TrendChart, type ChartSeries } from '../components/TrendChart'
+import { TrashIcon } from '../components/TrashIcon'
 import { formatRuDate, todayIso } from '../lib/date'
 import { forecastFromAppData } from '../lib/weightForecast'
 import type { AppData } from '../types'
@@ -112,11 +114,10 @@ export function WeightHistoryScreen({
         </h2>
         <label className="field">
           <span>Дата</span>
-          <input
-            type="date"
-            max={today}
+          <DateField
             value={logDate}
-            onChange={(e) => setLogDate(e.target.value > today ? today : e.target.value)}
+            max={today}
+            onChange={(next) => setLogDate(next > today ? today : next)}
           />
         </label>
         <div className="day-log-edit">
@@ -176,25 +177,25 @@ export function WeightHistoryScreen({
             <li key={entry.id}>
               <button
                 type="button"
-                className="link-btn"
-                style={{ textAlign: 'left' }}
+                className="link-btn metric-history-date"
                 onClick={() => setLogDate(entry.date)}
               >
-                <strong>{formatRuDate(entry.date)}</strong>
+                {formatRuDate(entry.date)}
                 {entry.date === today && <span className="badge ok">сегодня</span>}
               </button>
               <div className="metric-history-actions">
                 <strong className="metric-history-value">{entry.kg} кг</strong>
                 <button
                   type="button"
-                  className="ghost-btn danger"
-                  aria-label="Удалить запись веса"
+                  className="icon-btn sm danger"
+                  aria-label={`Удалить вес за ${formatRuDate(entry.date)}`}
+                  title="Удалить"
                   onClick={() => {
                     void onDelete(entry.id)
                     if (logDate === entry.date) setKg('')
                   }}
                 >
-                  Удалить
+                  <TrashIcon size={18} />
                 </button>
               </div>
             </li>

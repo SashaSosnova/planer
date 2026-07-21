@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { foodVariants } from '../lib/foodVariants'
 import { round1, scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, MealItem, ParsedMealDraft } from '../types'
-import { PencilIcon } from './PencilIcon'
+import { CloseIcon } from './CloseIcon'
+import { DecimalInput } from './DecimalInput'
+import { PlusIcon } from './PlusIcon'
 import { TrashIcon } from './TrashIcon'
 
 export function emptyMealItem(): MealItem {
@@ -17,6 +19,16 @@ export function emptyMealItem(): MealItem {
   }
 }
 
+export function mealItemFromFood(food: FoodItem, grams = 100): MealItem {
+  return {
+    name: food.name,
+    grams,
+    foodId: food.id,
+    ...scalePer100g(food.per100g, grams),
+    source: 'library',
+  }
+}
+
 function per100FromPortion(item: MealItem): MacroSet | null {
   if (!(item.grams > 0)) return null
   const k = 100 / item.grams
@@ -28,19 +40,19 @@ function per100FromPortion(item: MealItem): MacroSet | null {
   }
 }
 
-function formatPer100(m: MacroSet): string {
+function formatMacros(m: Pick<MacroSet, 'kcal' | 'protein' | 'fat' | 'carbs'>): string {
   return `${Math.round(m.kcal)} ккал · Б ${m.protein} · Ж ${m.fat} · У ${m.carbs}`
 }
 
 function formatPortion(item: MealItem): string {
-  return `${Math.round(item.kcal)} ккал · Б ${item.protein} · Ж ${item.fat} · У ${item.carbs}`
+  return formatMacros(item)
 }
 
-function parseNum(value: string): number | null {
-  const n = Number(value.replace(',', '.'))
-  if (!Number.isFinite(n) || n < 0) return null
-  return n
+function portionFromPer100(per100: MacroSet, grams: number): MacroSet {
+  return scalePer100g(per100, grams)
 }
+
+type MacrosBasis = 'per100' | 'portion'
 
 function clampMacroPatch(patch: Partial<MealItem>): Partial<MealItem> {
   const out: Partial<MealItem> = { ...patch }
@@ -131,7 +143,10 @@ type Props = {
   items: MealItem[]
   onChangeItem: (index: number, patch: Partial<MealItem>) => void
   onRemoveItem?: (index: number) => void
-  onAddItem?: () => void
+  onAddItem?: (seed?: Partial<MealItem>) => void
+  onAddFromFood?: (food: FoodItem) => void
+  onEstimateProduct?: (text: string) => Promise<void>
+  estimatingProduct?: boolean
   onSaveToLibrary?: (index: number) => void
   savingFoodIndex?: number | null
   /** Collapsed rows by default; expand one item with the pencil. */
@@ -144,14 +159,69 @@ export function MealDraftEditor({
   onChangeItem,
   onRemoveItem,
   onAddItem,
+  onAddFromFood,
+  onEstimateProduct,
+  estimatingProduct = false,
   onSaveToLibrary,
   savingFoodIndex = null,
   collapsible = false,
 }: Props) {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [macrosEdit, setMacrosEdit] = useState<{ index: number; basis: MacrosBasis } | null>(
+    null,
+  )
+  const [addOpen, setAddOpen] = useState(false)
+  const [addQuery, setAddQuery] = useState('')
+  const [estimateError, setEstimateError] = useState<string | null>(null)
+
+  const collapseItem = () => {
+    setEditingIndex(null)
+    setMacrosEdit(null)
+  }
+
+  const openItem = (index: number) => {
+    setEditingIndex(index)
+    setMacrosEdit(null)
+  }
+
+  const toggleMacrosEdit = (index: number, basis: MacrosBasis) => {
+    setMacrosEdit((cur) =>
+      cur?.index === index && cur.basis === basis ? null : { index, basis },
+    )
+  }
+
+  const commitPer100 = (index: number, item: MealItem, patch: Partial<MacroSet>) => {
+    const base = per100FromPortion(item) ?? {
+      kcal: 0,
+      protein: 0,
+      fat: 0,
+      carbs: 0,
+    }
+    const next = { ...base, ...patch }
+    onChangeItem(index, portionFromPer100(next, item.grams > 0 ? item.grams : 100))
+  }
+
+  const filteredFoods = useMemo(() => {
+    const q = addQuery.trim().toLowerCase()
+    if (!q) return []
+    return [...data.foods]
+      .filter(
+        (f) =>
+          f.name.toLowerCase().includes(q) ||
+          f.aliases.some((a) => a.toLowerCase().includes(q)),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      .slice(0, 36)
+  }, [data.foods, addQuery])
 
   const removeAt = (index: number) => {
     onRemoveItem?.(index)
+    setMacrosEdit((cur) => {
+      if (cur == null) return null
+      if (cur.index === index) return null
+      if (cur.index > index) return { ...cur, index: cur.index - 1 }
+      return cur
+    })
     setEditingIndex((cur) => {
       if (cur == null) return null
       if (cur === index) return null
@@ -160,50 +230,71 @@ export function MealDraftEditor({
     })
   }
 
+  const closeAdd = () => {
+    setAddOpen(false)
+    setAddQuery('')
+    setEstimateError(null)
+  }
+
+  const pickFood = (food: FoodItem) => {
+    onAddFromFood?.(food)
+    openItem(items.length)
+    closeAdd()
+  }
+
+  const addManual = () => {
+    const name = addQuery.trim()
+    onAddItem?.(name ? { name } : undefined)
+    openItem(items.length)
+    closeAdd()
+  }
+
+  const runEstimate = async () => {
+    const q = addQuery.trim()
+    if (!q || !onEstimateProduct || estimatingProduct) return
+    setEstimateError(null)
+    try {
+      await onEstimateProduct(q)
+      openItem(items.length)
+      closeAdd()
+    } catch (err) {
+      setEstimateError(err instanceof Error ? err.message : 'Не удалось рассчитать')
+    }
+  }
+
+  const hasAddPanel = Boolean(onAddItem || onAddFromFood || onEstimateProduct)
+
   return (
     <div className="draft-editor">
     <ul className="draft-list">
       {items.map((item, index) => {
         const linked = item.foodId ? data.foods.find((f) => f.id === item.foodId) : undefined
-        const fromLibrary = item.source === 'library' && linked
-        const per100 = fromLibrary ? linked.per100g : per100FromPortion(item)
-        const variants = fromLibrary && linked ? foodVariants(linked, data.foods) : []
+        // Trust catalog link even if the model left source=estimate.
+        const fromLibrary = Boolean(linked)
+        const per100 = linked ? linked.per100g : per100FromPortion(item)
+        const variants = linked ? foodVariants(linked, data.foods) : []
         const expanded = !collapsible || editingIndex === index
         const label = item.name.trim() || 'продукт'
 
         if (!expanded) {
           return (
             <li key={`item-${index}`} className="draft-item draft-item-compact">
-              <div className="draft-compact-main">
+              <button
+                type="button"
+                className="draft-compact-main draft-compact-open"
+                onClick={() => openItem(index)}
+                aria-label={`Редактировать ${label}`}
+              >
                 <div className="draft-compact-text">
-                  <strong className="draft-compact-name">{item.name.trim() || 'Без названия'}</strong>
+                  <div className="draft-compact-title">
+                    <strong className="draft-compact-name">{item.name.trim() || 'Без названия'}</strong>
+                    {!fromLibrary && <span className="badge">примерно</span>}
+                  </div>
                   <p className="muted small">
                     {item.grams} г · {formatPortion(item)}
                   </p>
                 </div>
-                <div className="draft-compact-actions">
-                  <button
-                    type="button"
-                    className="icon-btn sm"
-                    onClick={() => setEditingIndex(index)}
-                    aria-label={`Редактировать ${label}`}
-                    title="Редактировать"
-                  >
-                    <PencilIcon size={18} />
-                  </button>
-                  {onRemoveItem && (
-                    <button
-                      type="button"
-                      className="icon-btn sm danger"
-                      onClick={() => removeAt(index)}
-                      aria-label={`Удалить ${label}`}
-                      title="Удалить"
-                    >
-                      <TrashIcon size={18} />
-                    </button>
-                  )}
-                </div>
-              </div>
+              </button>
             </li>
           )
         }
@@ -211,109 +302,126 @@ export function MealDraftEditor({
         return (
           <li key={`item-${index}`} className="draft-item">
             <div className="draft-item-top">
-              <label className="field grow">
-                <span>Название</span>
-                <input
-                  value={item.name}
-                  onChange={(e) => onChangeItem(index, { name: e.target.value })}
-                  placeholder="Продукт"
+              {fromLibrary ? (
+                <div className="field grow">
+                  <span>Название</span>
+                  <div className="draft-item-title-name">{item.name}</div>
+                </div>
+              ) : (
+                <label className="field grow">
+                  <span>Название</span>
+                  <input
+                    value={item.name}
+                    onChange={(e) => onChangeItem(index, { name: e.target.value })}
+                    placeholder="Продукт"
+                  />
+                </label>
+              )}
+              <label className="field draft-portion-field">
+                <span>Порция, г</span>
+                <DecimalInput
+                  className="draft-portion-input"
+                  value={item.grams}
+                  onCommit={(grams) => onChangeItem(index, { grams })}
+                  ariaLabel="Порция, г"
                 />
               </label>
-              <div className="draft-item-top-actions">
-                <span className={fromLibrary ? 'badge ok' : 'badge'}>
-                  {fromLibrary ? 'ваши КБЖУ' : 'примерно'}
-                </span>
-                {onRemoveItem && (
-                  <button
-                    type="button"
-                    className="icon-btn sm danger"
-                    onClick={() => removeAt(index)}
-                    aria-label={`Удалить ${label}`}
-                    title="Удалить"
-                  >
-                    <TrashIcon size={18} />
-                  </button>
-                )}
-                {collapsible && (
-                  <button
-                    type="button"
-                    className="ghost-btn draft-collapse-btn"
-                    onClick={() => setEditingIndex(null)}
-                  >
-                    Готово
-                  </button>
-                )}
-              </div>
             </div>
 
-            {per100 && (
-              <p className="draft-per100">
-                <span className="draft-per100-label">На 100 г</span>
-                <span>{formatPer100(per100)}</span>
-              </p>
+            <div className="draft-kbju-rows">
+              {per100 && (
+                <button
+                  type="button"
+                  className={`draft-kbju-row${macrosEdit?.index === index && macrosEdit.basis === 'per100' ? ' active' : ''}`}
+                  onClick={() => toggleMacrosEdit(index, 'per100')}
+                >
+                  <span className="draft-kbju-label">На 100 г</span>
+                  <span>{formatMacros(per100)}</span>
+                </button>
+              )}
+              <button
+                type="button"
+                className={`draft-kbju-row${macrosEdit?.index === index && macrosEdit.basis === 'portion' ? ' active' : ''}`}
+                onClick={() => toggleMacrosEdit(index, 'portion')}
+              >
+                <span className="draft-kbju-label">Порция</span>
+                <span>{formatMacros(item)}</span>
+              </button>
+            </div>
+
+            {macrosEdit?.index === index && (
+              <div className="draft-macros">
+                <p className="muted small">
+                  {macrosEdit.basis === 'per100' ? 'КБЖУ на 100 г' : 'КБЖУ порции'}
+                </p>
+                <div className="form-grid four compact draft-macros-grid">
+                  <label className="field">
+                    <span>Ккал</span>
+                    <DecimalInput
+                      value={
+                        macrosEdit.basis === 'per100'
+                          ? (per100?.kcal ?? 0)
+                          : item.kcal
+                      }
+                      onCommit={(kcal) =>
+                        macrosEdit.basis === 'per100'
+                          ? commitPer100(index, item, { kcal })
+                          : onChangeItem(index, { kcal })
+                      }
+                      ariaLabel="Ккал"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Белки</span>
+                    <DecimalInput
+                      value={
+                        macrosEdit.basis === 'per100'
+                          ? (per100?.protein ?? 0)
+                          : item.protein
+                      }
+                      onCommit={(protein) =>
+                        macrosEdit.basis === 'per100'
+                          ? commitPer100(index, item, { protein })
+                          : onChangeItem(index, { protein })
+                      }
+                      ariaLabel="Белки"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Жиры</span>
+                    <DecimalInput
+                      value={
+                        macrosEdit.basis === 'per100'
+                          ? (per100?.fat ?? 0)
+                          : item.fat
+                      }
+                      onCommit={(fat) =>
+                        macrosEdit.basis === 'per100'
+                          ? commitPer100(index, item, { fat })
+                          : onChangeItem(index, { fat })
+                      }
+                      ariaLabel="Жиры"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Углеводы</span>
+                    <DecimalInput
+                      value={
+                        macrosEdit.basis === 'per100'
+                          ? (per100?.carbs ?? 0)
+                          : item.carbs
+                      }
+                      onCommit={(carbs) =>
+                        macrosEdit.basis === 'per100'
+                          ? commitPer100(index, item, { carbs })
+                          : onChangeItem(index, { carbs })
+                      }
+                      ariaLabel="Углеводы"
+                    />
+                  </label>
+                </div>
+              </div>
             )}
-
-            <label className="field">
-              <span>Сколько съели, г</span>
-              <input
-                inputMode="decimal"
-                value={item.grams}
-                onChange={(e) => {
-                  const grams = parseNum(e.target.value)
-                  if (grams != null) onChangeItem(index, { grams })
-                }}
-              />
-            </label>
-
-            <div className="draft-macros">
-              <p className="muted small">КБЖУ порции</p>
-              <div className="form-grid four">
-                <label className="field">
-                  <span>Ккал</span>
-                  <input
-                    inputMode="decimal"
-                    value={item.kcal}
-                    onChange={(e) => {
-                      const kcal = parseNum(e.target.value)
-                      if (kcal != null) onChangeItem(index, { kcal })
-                    }}
-                  />
-                </label>
-                <label className="field">
-                  <span>Белки</span>
-                  <input
-                    inputMode="decimal"
-                    value={item.protein}
-                    onChange={(e) => {
-                      const protein = parseNum(e.target.value)
-                      if (protein != null) onChangeItem(index, { protein })
-                    }}
-                  />
-                </label>
-                <label className="field">
-                  <span>Жиры</span>
-                  <input
-                    inputMode="decimal"
-                    value={item.fat}
-                    onChange={(e) => {
-                      const fat = parseNum(e.target.value)
-                      if (fat != null) onChangeItem(index, { fat })
-                    }}
-                  />
-                </label>
-                <label className="field">
-                  <span>Углев.</span>
-                  <input
-                    inputMode="decimal"
-                    value={item.carbs}
-                    onChange={(e) => {
-                      const carbs = parseNum(e.target.value)
-                      if (carbs != null) onChangeItem(index, { carbs })
-                    }}
-                  />
-                </label>
-              </div>
-            </div>
 
             {variants.length > 0 && (
               <label className="field">
@@ -342,31 +450,134 @@ export function MealDraftEditor({
               </label>
             )}
 
-            {!fromLibrary && onSaveToLibrary && (
-              <button
-                type="button"
-                className="ghost-btn"
-                disabled={savingFoodIndex != null}
-                onClick={() => onSaveToLibrary(index)}
-              >
-                {savingFoodIndex === index ? 'Сохраняю…' : 'Запомнить в мои продукты'}
-              </button>
-            )}
+            <div className="draft-item-footer">
+              {!fromLibrary && onSaveToLibrary && Boolean(item.name.trim()) && (
+                <button
+                  type="button"
+                  className="link-btn draft-remember-btn"
+                  disabled={savingFoodIndex != null}
+                  onClick={() => onSaveToLibrary(index)}
+                >
+                  {savingFoodIndex === index ? 'Сохраняю…' : 'Запомнить в мои продукты'}
+                </button>
+              )}
+              {(collapsible || onRemoveItem) && (
+                <div className="draft-item-footer-actions">
+                  {collapsible && (
+                    <button
+                      type="button"
+                      className="primary-btn draft-done-btn"
+                      onClick={collapseItem}
+                    >
+                      Готово
+                    </button>
+                  )}
+                  {onRemoveItem && (
+                    <button
+                      type="button"
+                      className="icon-btn danger"
+                      onClick={() => removeAt(index)}
+                      aria-label={`Удалить ${label}`}
+                      title="Удалить"
+                    >
+                      <TrashIcon size={18} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </li>
         )
       })}
     </ul>
-    {onAddItem && (
+
+    {hasAddPanel && !addOpen && (
       <button
         type="button"
-        className="ghost-btn draft-add-btn"
+        className="ghost-btn icon-cta draft-add-btn"
         onClick={() => {
-          onAddItem()
-          setEditingIndex(items.length)
+          if (onAddFromFood || onEstimateProduct) {
+            setAddOpen(true)
+            setEstimateError(null)
+          } else {
+            onAddItem?.()
+            openItem(items.length)
+          }
         }}
+        aria-label="Добавить продукт"
+        title="Добавить продукт"
       >
-        + Продукт
+        <PlusIcon size={20} />
       </button>
+    )}
+
+    {addOpen && (
+      <div className="draft-add-panel">
+        <label className="field">
+          <span>Мои продукты или описание</span>
+          <input
+            value={addQuery}
+            onChange={(e) => {
+              setAddQuery(e.target.value)
+              setEstimateError(null)
+            }}
+            placeholder="Название или «200 г творога»"
+            autoFocus
+          />
+        </label>
+
+        {onAddFromFood && addQuery.trim() && (
+          <div className="draft-food-picker">
+            {filteredFoods.length === 0 ? (
+              <p className="muted small">Ничего не найдено в моих продуктах.</p>
+            ) : (
+              <ul className="draft-food-list">
+                {filteredFoods.map((food) => (
+                  <li key={food.id}>
+                    <button type="button" className="draft-food-option" onClick={() => pickFood(food)}>
+                      <strong>{food.name}</strong>
+                      <span className="muted small">
+                        {Math.round(food.per100g.kcal)} ккал / 100 г
+                        {food.kind === 'dish' ? ' · блюдо' : ''}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {estimateError && <p className="form-msg error">{estimateError}</p>}
+
+        <div className="btn-row draft-add-actions">
+          {onEstimateProduct && (
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={!addQuery.trim() || estimatingProduct}
+              onClick={() => void runEstimate()}
+            >
+              {estimatingProduct ? 'Считаю…' : 'Рассчитать'}
+            </button>
+          )}
+          {onAddItem && (
+            <button type="button" className="ghost-btn" disabled={estimatingProduct} onClick={addManual}>
+              Вручную
+            </button>
+          )}
+          <button
+            type="button"
+            className="icon-btn sm"
+            disabled={estimatingProduct}
+            onClick={closeAdd}
+            aria-label="Закрыть"
+            title="Закрыть"
+          >
+            <CloseIcon size={18} />
+          </button>
+        </div>
+      </div>
     )}
     </div>
   )

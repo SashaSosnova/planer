@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { DateField } from '../components/DateField'
 import { TrendChart, type ChartSeries } from '../components/TrendChart'
 import { formatRuDate, todayIso } from '../lib/date'
 import {
@@ -127,11 +128,10 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
         </div>
         <label className="field">
           <span>Дата</span>
-          <input
-            type="date"
-            max={today}
+          <DateField
             value={logDate}
-            onChange={(e) => setLogDate(e.target.value > today ? today : e.target.value)}
+            max={today}
+            onChange={(next) => setLogDate(next > today ? today : next)}
           />
         </label>
         <div className="day-log-edit">
@@ -207,11 +207,10 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
             <li key={entry.id}>
               <button
                 type="button"
-                className="link-btn"
-                style={{ textAlign: 'left' }}
+                className="link-btn metric-history-date"
                 onClick={() => setLogDate(entry.date)}
               >
-                <strong>{formatRuDate(entry.date)}</strong>
+                {formatRuDate(entry.date)}
                 {entry.date === today && <span className="badge ok">сегодня</span>}
               </button>
               <strong className="metric-history-value">

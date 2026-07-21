@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { CloseIcon } from '../components/CloseIcon'
 import type { TastePrefs } from '../lib/settings'
 
 type Props = {
@@ -43,9 +44,10 @@ export function TastesScreen({
                 <button
                   type="button"
                   aria-label={`Убрать ${title}`}
+                  title="Убрать"
                   onClick={() => onClearTasteVote(title, 'likes')}
                 >
-                  ×
+                  <CloseIcon size={14} />
                 </button>
               </span>
             ))}
@@ -63,9 +65,10 @@ export function TastesScreen({
                 <button
                   type="button"
                   aria-label={`Вернуть ${title}`}
+                  title="Убрать"
                   onClick={() => onClearTasteVote(title, 'dislikes')}
                 >
-                  ×
+                  <CloseIcon size={14} />
                 </button>
               </span>
             ))}
@@ -82,9 +85,10 @@ export function TastesScreen({
               <button
                 type="button"
                 aria-label={`Убрать ${title}`}
+                title="Убрать"
                 onClick={() => onClearTasteVote(title, 'canCook')}
               >
-                ×
+                <CloseIcon size={14} />
               </button>
             </span>
           ))}

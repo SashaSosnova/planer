@@ -2,6 +2,31 @@ import type { FoodItem, MacroSet, RecipeDraft, RecipeIngredientLine } from '../t
 import { guessYieldFactor } from './cookingYield'
 import { emptyMacros, round1, scalePer100g, sumMacros } from './nutrition'
 
+/** КБЖУ ингредиента в пересчёте на 100 г после готовки (сырое / коэффициент выхода). */
+export function ingredientPer100Cooked(ing: RecipeIngredientLine): MacroSet {
+  const y = ing.yieldFactor > 0 ? ing.yieldFactor : 1
+  return {
+    kcal: round1(ing.per100g.kcal / y),
+    protein: round1(ing.per100g.protein / y),
+    fat: round1(ing.per100g.fat / y),
+    carbs: round1(ing.per100g.carbs / y),
+  }
+}
+
+/** Обратно: КБЖУ на 100 г готового → на 100 г сырого. */
+export function ingredientPer100RawFromCooked(
+  per100Cooked: MacroSet,
+  yieldFactor: number,
+): MacroSet {
+  const y = yieldFactor > 0 ? yieldFactor : 1
+  return {
+    kcal: round1(per100Cooked.kcal * y),
+    protein: round1(per100Cooked.protein * y),
+    fat: round1(per100Cooked.fat * y),
+    carbs: round1(per100Cooked.carbs * y),
+  }
+}
+
 export function computeRecipe(draft: {
   name: string
   ingredients: RecipeIngredientLine[]
@@ -70,4 +95,40 @@ export function recipeToFoodItem(
       notes: recipe.notes,
     },
   }
+}
+
+/** Restore an editable draft from a saved dish (or a minimal fallback). */
+export function draftFromFoodItem(food: FoodItem): RecipeDraft {
+  const snap = food.recipe
+  if (snap?.ingredients?.length) {
+    return computeRecipe({
+      name: food.name,
+      ingredients: snap.ingredients,
+      cookedGramsOverride: snap.totalCookedGrams > 0 ? snap.totalCookedGrams : null,
+      notes: snap.notes,
+    })
+  }
+  return computeRecipe({
+    name: food.name,
+    ingredients: [
+      {
+        name: food.name,
+        gramsRaw: 100,
+        per100g: food.per100g,
+        source: 'estimate',
+        yieldFactor: 1,
+      },
+    ],
+    cookedGramsOverride: 100,
+  })
+}
+
+export function recipeTextFromDraft(draft: Pick<RecipeDraft, 'name' | 'ingredients'>): string {
+  const lines = [
+    draft.name.trim(),
+    ...draft.ingredients
+      .filter((i) => i.name.trim() && i.gramsRaw > 0)
+      .map((i) => `${i.name.trim()} ${i.gramsRaw} гр`),
+  ]
+  return lines.filter(Boolean).join('\n')
 }

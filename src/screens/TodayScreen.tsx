@@ -9,6 +9,18 @@ import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS, mealBodyText } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
+import { AppsGridIcon } from '../components/AppsGridIcon'
+import { CloseIcon } from '../components/CloseIcon'
+import { LightbulbIcon } from '../components/LightbulbIcon'
+import {
+  AchievementsMenuIcon,
+  DiaryMenuIcon,
+  HistoryMenuIcon,
+  LibraryMenuIcon,
+  MeasuresMenuIcon,
+  TastesMenuIcon,
+} from '../components/MoreMenuIcons'
+import { PlusIcon } from '../components/PlusIcon'
 import { LikeIcon, DislikeIcon } from '../components/VoteIcons'
 import {
   applyTasteFeedback,
@@ -61,6 +73,7 @@ type Props = {
   onOpenHistory: () => void
   onOpenMeasures: () => void
   onOpenTastes: () => void
+  onOpenLibrary: () => void
   /** Register nested back handler; return unregister. */
   registerBackHandler?: (fn: () => boolean) => () => void
   /** When false (overlay open), Today does not own the back stack. */
@@ -101,6 +114,7 @@ export function TodayScreen({
   onOpenHistory,
   onOpenMeasures,
   onOpenTastes,
+  onOpenLibrary,
   registerBackHandler,
   backEnabled = true,
   tastePrefs,
@@ -391,55 +405,73 @@ export function TodayScreen({
           <div className="more-anchor" ref={moreRef}>
             <button
               type="button"
-              className={`text-btn${moreOpen ? ' active' : ''}`}
+              className={`icon-btn${moreOpen ? ' active' : ''}`}
               onClick={() => setMoreOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={moreOpen}
+              aria-label="Ещё"
+              title="Ещё"
             >
-              Ещё
+              <AppsGridIcon size={24} />
             </button>
             {moreOpen && (
               <div className="more-popover" role="menu" aria-label="Ещё">
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="more-sheet-item"
-                  onClick={() => runMore(onOpenDiary)}
-                >
-                  Дневник
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="more-sheet-item"
-                  onClick={() => runMore(onOpenHistory)}
-                >
-                  История
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="more-sheet-item"
-                  onClick={() => runMore(onOpenMeasures)}
-                >
-                  Обмеры
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="more-sheet-item"
-                  onClick={() => runMore(onOpenTastes)}
-                >
-                  Вкусы
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="more-sheet-item quiet"
-                  onClick={() => runMore(onOpenAchievements)}
-                >
-                  Достижения
-                </button>
+                <div className="more-grid">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenDiary)}
+                  >
+                    <DiaryMenuIcon />
+                    <span>Дневник</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenHistory)}
+                  >
+                    <HistoryMenuIcon />
+                    <span>История</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenMeasures)}
+                  >
+                    <MeasuresMenuIcon />
+                    <span>Обмеры</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenTastes)}
+                  >
+                    <TastesMenuIcon />
+                    <span>Вкусы</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenLibrary)}
+                  >
+                    <LibraryMenuIcon />
+                    <span>Справочник</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenAchievements)}
+                  >
+                    <AchievementsMenuIcon />
+                    <span>Достижения</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -505,9 +537,9 @@ export function TodayScreen({
         <button type="button" className="progress-card progress-card-btn" onClick={onOpenCycle}>
           <div className="progress-card-top">
             <span>Цикл</span>
-            <strong>
+            <span className="progress-card-value">
               день {cycle.dayInCycle} из {cycleLengthDays} · {cyclePhaseLabel(cycle.phase)}
-            </strong>
+            </span>
           </div>
           {cycleTip && <p className="muted small">{cycleTip}</p>}
         </button>
@@ -568,13 +600,22 @@ export function TodayScreen({
       <div className="section-head meal-actions">
         <button
           type="button"
-          className={`ghost-btn section-cta${adviceOpen ? ' active-soft' : ''}`}
+          className={`ghost-btn icon-cta${adviceOpen ? ' active-soft' : ''}`}
           onClick={() => setAdviceOpen((v) => !v)}
+          aria-label={adviceOpen ? 'Скрыть идеи' : 'Идеи для приёма'}
+          title={adviceOpen ? 'Скрыть идеи' : 'Идеи для приёма'}
+          aria-pressed={adviceOpen}
         >
-          {adviceOpen ? 'Скрыть совет' : 'Нужен совет'}
+          <LightbulbIcon size={20} />
         </button>
-        <button type="button" className="primary-btn section-cta" onClick={() => onAddMeal()}>
-          Добавить приём
+        <button
+          type="button"
+          className="primary-btn icon-cta"
+          onClick={() => onAddMeal()}
+          aria-label="Добавить приём"
+          title="Добавить приём"
+        >
+          <PlusIcon size={20} />
         </button>
       </div>
 
@@ -645,9 +686,20 @@ export function TodayScreen({
             aria-labelledby="meal-idea-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 id="meal-idea-title" className="subhead" style={{ marginTop: 0 }}>
-              {openIdea.title}
-            </h2>
+            <div className="modal-card-head">
+              <h2 id="meal-idea-title" className="subhead">
+                {openIdea.title}
+              </h2>
+              <button
+                type="button"
+                className="icon-btn sm"
+                aria-label="Закрыть"
+                title="Закрыть"
+                onClick={() => setOpenIdea(null)}
+              >
+                <CloseIcon size={18} />
+              </button>
+            </div>
             <p className="meal-bju">{formatIdeaMacros(openIdea)}</p>
             {openIdea.ingredients ? (
               <p className="meal-idea-detail-block">
@@ -674,9 +726,6 @@ export function TodayScreen({
                 }}
               >
                 В расчёт
-              </button>
-              <button type="button" className="ghost-btn" onClick={() => setOpenIdea(null)}>
-                Закрыть
               </button>
             </div>
           </div>

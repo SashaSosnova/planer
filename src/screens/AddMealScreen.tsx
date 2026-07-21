@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { MacroBar } from '../components/MacroBar'
-import { MealDraftEditor, emptyMealItem, patchDraft } from '../components/MealDraftEditor'
+import {
+  MealDraftEditor,
+  emptyMealItem,
+  mealItemFromFood,
+  patchDraft,
+} from '../components/MealDraftEditor'
 import { todayIso } from '../lib/date'
 import { isDeepseekConfigured } from '../lib/deepseek'
 import {
@@ -19,17 +24,22 @@ import type {
   MealType,
   ParsedMealDraft,
 } from '../types'
-import { ProductsPanel } from './ProductsPanel'
-import { RecipesPanel } from './RecipesPanel'
+import { CloseIcon } from '../components/CloseIcon'
+import { DateField } from '../components/DateField'
+import { LibraryScreen } from './LibraryScreen'
 
 const PARSE_SOURCE_LABEL: Record<MealParseSource, string> = {
   library: 'справочник',
-  deepseek: 'DeepSeek flash',
-  local: 'локально (без LLM)',
-  cloud: 'облако',
+  deepseek: 'AI',
+  local: 'локально',
+  cloud: 'AI',
 }
 
-type LibraryTab = 'products' | 'recipes'
+/** Hide routine LLM chatter; DeepSeek only sets notes on rare fallbacks. */
+function shouldShowParseNotes(source: MealParseSource): boolean {
+  return source === 'library' || source === 'local' || source === 'deepseek'
+}
+
 type View = 'meal' | 'library'
 
 type Props = {
@@ -62,9 +72,8 @@ export function AddMealScreen({
   registerBackHandler,
 }: Props) {
   const [view, setView] = useState<View>('meal')
-  const [libraryTab, setLibraryTab] = useState<LibraryTab>('products')
   const [date, setDate] = useState(todayIso())
-  const [showDate, setShowDate] = useState(false)
+  const [eatingOut, setEatingOut] = useState(false)
   const [mealType, setMealType] = useState<MealType>(initialMealType ?? 'breakfast')
   const [mealTypeTouched, setMealTypeTouched] = useState(Boolean(initialMealType))
   const [text, setText] = useState(prefillText?.trim() ?? '')
@@ -73,6 +82,7 @@ export function AddMealScreen({
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
+  const [estimatingProduct, setEstimatingProduct] = useState(false)
   const viewRef = useRef(view)
   viewRef.current = view
 
@@ -118,12 +128,13 @@ export function AddMealScreen({
     setError(null)
     setInfo(null)
     try {
-      const result = await parseMeal(text, foodsRef, mealType)
+      const result = await parseMeal(text, foodsRef, mealType, eatingOut)
       setDraft(result)
+      setEatingOut(result.eatingOut)
       setMealType(result.mealType)
       const cleaned = extractMealTypeFromText(text).cleaned
       if (cleaned && cleaned !== text.trim()) setText(cleaned)
-      if (result.notes) setInfo(result.notes)
+      if (result.notes && shouldShowParseNotes(result.parseSource)) setInfo(result.notes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось разобрать')
     } finally {
@@ -210,38 +221,13 @@ export function AddMealScreen({
 
   if (view === 'library') {
     return (
-      <section className="screen">
-        <header className="screen-header">
-          <button type="button" className="link-btn" onClick={() => setView('meal')}>
-            ← К добавлению
-          </button>
-          <h1>Справочник</h1>
-        </header>
-
-        <div className="mode-tabs mode-tabs-2">
-          <button
-            type="button"
-            className={`mode-tab${libraryTab === 'products' ? ' active' : ''}`}
-            onClick={() => setLibraryTab('products')}
-          >
-            Продукты
-          </button>
-          <button
-            type="button"
-            className={`mode-tab${libraryTab === 'recipes' ? ' active' : ''}`}
-            onClick={() => setLibraryTab('recipes')}
-          >
-            Рецепты
-          </button>
-        </div>
-
-        {libraryTab === 'products' && (
-          <ProductsPanel data={data} onSave={onSaveFood} onDelete={onDeleteFood} />
-        )}
-        {libraryTab === 'recipes' && (
-          <RecipesPanel data={data} onSave={onSaveFood} onDelete={onDeleteFood} />
-        )}
-      </section>
+      <LibraryScreen
+        data={data}
+        onBack={() => setView('meal')}
+        onSaveFood={onSaveFood}
+        onDeleteFood={onDeleteFood}
+        backLabel="← К добавлению"
+      />
     )
   }
 
@@ -272,53 +258,53 @@ export function AddMealScreen({
         ))}
       </div>
 
-      {!showDate && isToday ? (
-        <button
-          type="button"
-          className="link-btn add-date-toggle"
-          onClick={() => setShowDate(true)}
-        >
-          Другая дата
-        </button>
-      ) : (
-        <div className="add-date-row">
-          <label className="field grow">
-            <span>Дата</span>
-            <input
-              type="date"
-              max={todayIso()}
-              value={date}
-              onChange={(e) => {
-                const next = e.target.value
-                setDate(next > todayIso() ? todayIso() : next)
-                setMealTypeTouched(false)
-                setDraft(null)
-                setInfo(null)
-              }}
-            />
-          </label>
-          {!isToday && (
-            <button
-              type="button"
-              className="ghost-btn"
-              onClick={() => {
-                setDate(todayIso())
-                setShowDate(false)
-                setMealTypeTouched(false)
-                setDraft(null)
-                setInfo(null)
-              }}
-            >
-              Сегодня
-            </button>
-          )}
-          {isToday && (
-            <button type="button" className="link-btn" onClick={() => setShowDate(false)}>
-              Скрыть
-            </button>
-          )}
-        </div>
-      )}
+      <div className="add-date-row">
+        <DateField
+          className="add-date-field"
+          value={date}
+          max={todayIso()}
+          onChange={(next) => {
+            setDate(next > todayIso() ? todayIso() : next)
+            setMealTypeTouched(false)
+            setDraft(null)
+            setInfo(null)
+          }}
+        />
+        <label className="check-row add-eating-out">
+          <input
+            type="checkbox"
+            checked={eatingOut}
+            onChange={(e) => {
+              const next = e.target.checked
+              setEatingOut(next)
+              setDraft((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      eatingOut: next,
+                      isApproximate: next || prev.items.some((i) => i.source === 'estimate'),
+                    }
+                  : prev,
+              )
+            }}
+          />
+          <span>Вне дома</span>
+        </label>
+        {!isToday && (
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              setDate(todayIso())
+              setMealTypeTouched(false)
+              setDraft(null)
+              setInfo(null)
+            }}
+          >
+            Сегодня
+          </button>
+        )}
+      </div>
 
       <label className="field">
         <textarea
@@ -375,7 +361,6 @@ export function AddMealScreen({
                 {PARSE_SOURCE_LABEL[draft.parseSource]}
               </span>
               {draft.eatingOut && <span className="badge">вне дома</span>}
-              {draft.isApproximate && <span className="badge">примерно</span>}
             </div>
           </div>
           <MacroBar totals={draft.totals} />
@@ -399,10 +384,10 @@ export function AddMealScreen({
                 }
               })
             }
-            onAddItem={() =>
+            onAddItem={(seed) =>
               setDraft((prev) => {
                 if (!prev) return prev
-                const items = [...prev.items, emptyMealItem()]
+                const items = [...prev.items, { ...emptyMealItem(), ...seed }]
                 return {
                   ...prev,
                   items,
@@ -411,6 +396,43 @@ export function AddMealScreen({
                 }
               })
             }
+            onAddFromFood={(food) =>
+              setDraft((prev) => {
+                if (!prev) return prev
+                const items = [...prev.items, mealItemFromFood(food)]
+                return {
+                  ...prev,
+                  items,
+                  totals: sumMacros(items),
+                  isApproximate: prev.eatingOut || items.some((i) => i.source === 'estimate'),
+                }
+              })
+            }
+            estimatingProduct={estimatingProduct}
+            onEstimateProduct={async (line) => {
+              setEstimatingProduct(true)
+              setError(null)
+              try {
+                const result = await parseMeal(line, foodsRef, mealType)
+                setDraft((prev) => {
+                  if (!prev) return prev
+                  const items = [...prev.items, ...result.items]
+                  return {
+                    ...prev,
+                    items,
+                    totals: sumMacros(items),
+                    isApproximate:
+                      prev.eatingOut || items.some((i) => i.source === 'estimate'),
+                    notes: result.notes ?? prev.notes,
+                  }
+                })
+                if (result.notes && shouldShowParseNotes(result.parseSource)) {
+                  setInfo(result.notes)
+                }
+              } finally {
+                setEstimatingProduct(false)
+              }
+            }}
             onSaveToLibrary={(index) => void saveToLibrary(index)}
             savingFoodIndex={savingFoodIndex}
           />
@@ -424,8 +446,14 @@ export function AddMealScreen({
             >
               Сохранить приём
             </button>
-            <button type="button" className="ghost-btn" onClick={() => setDraft(null)}>
-              Отмена
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={() => setDraft(null)}
+              aria-label="Закрыть"
+              title="Закрыть"
+            >
+              <CloseIcon size={20} />
             </button>
           </div>
         </div>

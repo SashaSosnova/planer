@@ -58,6 +58,41 @@ function tokenOverlap(qTok: string[], nTok: string[]): number {
   ).length
 }
 
+/** Query appears as a real word in the food label, not a stem inside a longer word. */
+function queryMatchesAsToken(q: string, qTok: string[], nTok: string[]): boolean {
+  if (nTok.some((t) => t === q || sameLexeme(t, q))) return true
+  if (qTok.length !== 1) {
+    return qTok.every((qt) => nTok.some((t) => t === qt || sameLexeme(t, qt)))
+  }
+  return false
+}
+
+/**
+ * Related but different words sharing a stem: «творог» vs «творожный»,
+ * «сыр» vs «сырники», «рис» vs «рисовая».
+ */
+function isPrefixFalseFriend(query: string, foodName: string): boolean {
+  const q = normalize(query)
+  if (q.length < 3) return false
+  return tokens(foodName).some((t) => {
+    if (t === q || sameLexeme(t, q)) return false
+    if (t.startsWith(q) && t.length >= q.length + 2) return true
+    let i = 0
+    while (i < q.length && i < t.length && q[i] === t[i]) i++
+    // Shared stem but different word: «курица»/«куриный», «творог»/«творожный»
+    return i >= Math.min(4, q.length) && t.length > q.length
+  })
+}
+
+/** Alias is only one word of a compound label («паста» on «Паста с …»). */
+function isPartialCompoundAlias(query: string, foodName: string): boolean {
+  const qTok = tokens(query)
+  const nameTok = tokens(foodName)
+  if (qTok.length !== 1 || nameTok.length < 2) return false
+  const q = qTok[0]!
+  return nameTok.some((t) => t === q || sameLexeme(t, q))
+}
+
 /**
  * Score how well a query matches a food.
  * Short words like «паста» must NOT match a long dish «паста с кабачком и курицей».
@@ -75,8 +110,18 @@ export function scoreFoodMatch(query: string, food: FoodRef): number {
     let score = 0
 
     if (q === n) {
-      // Exact canonical name beats a short alias hit on a long dish title
-      score = n === foodName ? 100 : 94
+      // Exact canonical name beats a short alias hit on a long dish title.
+      if (n === foodName) {
+        score = 100
+      } else if (isPrefixFalseFriend(q, foodName)) {
+        // «творог» / «сыр» poisoned onto a related longer product
+        score = 0
+      } else if (isPartialCompoundAlias(q, foodName)) {
+        // «паста» alias on «Паста с кабачком…», «кофе» on «Кофе с молоком»
+        score = food.kind === 'dish' ? 30 : 45
+      } else {
+        score = 94
+      }
     } else {
       const qTok = tokens(q)
       const nTok = tokens(n)
@@ -102,8 +147,12 @@ export function scoreFoodMatch(query: string, food: FoodRef): number {
           } else {
             score = 92
           }
-        } else if (n.includes(q)) {
-          if (qTok.length >= 3 || q.length >= 12) score = 85
+        } else if (n.includes(q) && queryMatchesAsToken(q, qTok, nTok)) {
+          // Whole-token containment — but one word of a compound is weak
+          // («кофе» ⊂ «кофе с молоком»).
+          if (qTok.length === 1 && nTok.length >= 2) {
+            score = food.kind === 'dish' ? 30 : 45
+          } else if (qTok.length >= 3 || q.length >= 12) score = 85
           else if (nTok.length <= 2 && q.length >= 4) score = 75
           else score = 25
         } else {

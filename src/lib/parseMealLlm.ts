@@ -36,11 +36,27 @@ export async function parseMealWithLlm(
 ): Promise<ParsedMealDraft> {
   const prompt = buildParseMealPrompt({ text, mealType, eatingOut, foods })
   const parsed = await deepseekJson<LlmResult>(prompt)
+  const foodMap = new Map(foods.map((f) => [f.id, f]))
 
   let usedZeroFallback = false
   const mapped = (parsed.items ?? []).map((item) => {
     const grams = Number(item.grams) > 0 ? Number(item.grams) : 300
     const name = String(item.name || 'Блюдо')
+    const food = item.foodId ? foodMap.get(item.foodId) : undefined
+    const useLibrary =
+      Boolean(food) && !eatingOut && item.needsEstimate !== true && item.source !== 'estimate'
+
+    if (useLibrary && food) {
+      const macros = scalePer100g(food.per100g, grams)
+      return {
+        name: food.name,
+        grams,
+        foodId: food.id,
+        ...macros,
+        source: 'library' as const,
+      }
+    }
+
     let kcal = nonNeg(item.kcal)
     let protein = nonNeg(item.protein)
     let fat = nonNeg(item.fat)
@@ -75,18 +91,15 @@ export async function parseMealWithLlm(
   }
 
   const out = Boolean(parsed.eatingOut ?? eatingOut)
-  const baseNote = parsed.notes
-    ? `DeepSeek flash: ${parsed.notes}`
-    : 'Оценка через DeepSeek flash (без поиска в интернете).'
   return {
     mealType: coerceMealType(parsed.mealType ?? mealType, defaultMealTypeForNow()),
     items,
     totals: sumMacros(items),
-    isApproximate: true,
+    isApproximate: out || items.some((i) => i.source === 'estimate'),
     eatingOut: out,
     parseSource: 'deepseek',
     notes: usedZeroFallback
-      ? `${baseNote} КБЖУ модель вернула нулями — подставлена типичная оценка.`
-      : baseNote,
+      ? 'КБЖУ модель вернула нулями — подставлена типичная оценка.'
+      : undefined,
   }
 }

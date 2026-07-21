@@ -10,23 +10,23 @@ export function MacroBar({ totals, hideKcal }: Props) {
   return (
     <div className={`macro-bar${hideKcal ? ' macros-only' : ''}`}>
       {!hideKcal && (
-        <div className="macro-main">
+        <div className="macro-kcal-block">
+          <span className="macro-label">ккал</span>
           <span className="macro-kcal">{Math.round(totals.kcal)}</span>
-          <span className="macro-unit">ккал</span>
         </div>
       )}
-      <div className="macro-grid">
-        <div>
+      <div className="macro-bju-row">
+        <div className="macro-bju-cell">
+          <span className="macro-label">белки</span>
           <strong>{totals.protein}</strong>
-          <span>белки</span>
         </div>
-        <div>
+        <div className="macro-bju-cell">
+          <span className="macro-label">жиры</span>
           <strong>{totals.fat}</strong>
-          <span>жиры</span>
         </div>
-        <div>
+        <div className="macro-bju-cell">
+          <span className="macro-label">углеводы</span>
           <strong>{totals.carbs}</strong>
-          <span>углеводы</span>
         </div>
       </div>
     </div>

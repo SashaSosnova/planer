@@ -18,6 +18,7 @@ import { AchievementsScreen } from './screens/AchievementsScreen'
 import { AddMealScreen } from './screens/AddMealScreen'
 import { DiaryScreen } from './screens/DiaryScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
+import { LibraryScreen } from './screens/LibraryScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
 import { MeasuresScreen } from './screens/MeasuresScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
@@ -39,6 +40,7 @@ type Overlay =
   | { type: 'history' }
   | { type: 'measures' }
   | { type: 'tastes' }
+  | { type: 'library' }
   | null
 
 export default function App() {
@@ -58,6 +60,7 @@ export default function App() {
     deleteWeight,
     saveSteps,
     saveMeasurement,
+    deleteMeasurement,
     saveDayNote,
     savePeriodStart,
     removePeriodStart,
@@ -224,6 +227,7 @@ export default function App() {
             onOpenHistory={() => setOverlay({ type: 'history' })}
             onOpenMeasures={() => setOverlay({ type: 'measures' })}
             onOpenTastes={() => setOverlay({ type: 'tastes' })}
+            onOpenLibrary={() => setOverlay({ type: 'library' })}
             registerBackHandler={registerBackHandler}
             backEnabled={!showOverlay}
             tastePrefs={tastePrefs}
@@ -294,6 +298,7 @@ export default function App() {
             data={data}
             onBack={closeOverlay}
             onSave={saveMeasurement}
+            onDelete={deleteMeasurement}
           />
         )}
 
@@ -303,6 +308,15 @@ export default function App() {
             onBack={closeOverlay}
             onClearTasteVote={clearTasteVote}
             onAddCanCook={addCanCook}
+          />
+        )}
+
+        {overlay?.type === 'library' && (
+          <LibraryScreen
+            data={data}
+            onBack={closeOverlay}
+            onSaveFood={saveFood}
+            onDeleteFood={deleteFood}
           />
         )}
 

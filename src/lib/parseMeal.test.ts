@@ -64,6 +64,83 @@ describe('finalizeDraft (cloud library guard)', () => {
     expect(draft.items[0]!.source).toBe('estimate')
     expect(draft.items[0]!.foodId).toBeUndefined()
   })
+
+  it('drops wrong foodId even when model marked source=estimate', () => {
+    const draft = finalizeDraft(
+      'snack',
+      [
+        {
+          name: 'Творожный сыр',
+          grams: 200,
+          foodId: 't2',
+          kcal: 500,
+          protein: 12,
+          fat: 48,
+          carbs: 6,
+          source: 'estimate',
+        },
+      ],
+      [tvorozhnySyr],
+      false,
+      undefined,
+      'deepseek',
+      '200 гр творог',
+    )
+    expect(draft.items[0]!.name).toBe('творог')
+    expect(draft.items[0]!.source).toBe('estimate')
+    expect(draft.items[0]!.foodId).toBeUndefined()
+  })
+
+  it('keeps user wording when model renames without foodId', () => {
+    const draft = finalizeDraft(
+      'snack',
+      [
+        {
+          name: 'Творожный сыр',
+          grams: 200,
+          kcal: 180,
+          protein: 30,
+          fat: 10,
+          carbs: 6,
+          source: 'estimate',
+        },
+      ],
+      [tvorozhnySyr],
+      false,
+      undefined,
+      'deepseek',
+      '200 гр творог',
+    )
+    expect(draft.items[0]!.name).toBe('творог')
+    expect(draft.items[0]!.foodId).toBeUndefined()
+    expect(draft.items[0]!.kcal).toBe(180)
+  })
+
+  it('promotes estimate item to library when name matches catalog', () => {
+    const draft = finalizeDraft(
+      'breakfast',
+      [
+        {
+          name: 'Творожный сыр',
+          grams: 30,
+          kcal: 80,
+          protein: 2,
+          fat: 7,
+          carbs: 1,
+          source: 'estimate',
+        },
+      ],
+      [tvorog, tvorozhnySyr],
+      false,
+      undefined,
+      'deepseek',
+      'творожный сыр 30 г',
+    )
+    expect(draft.items[0]!.name).toBe('Творожный сыр')
+    expect(draft.items[0]!.foodId).toBe('t2')
+    expect(draft.items[0]!.source).toBe('library')
+    expect(draft.items[0]!.kcal).toBe(75) // 250 * 0.3
+  })
 })
 
 describe('parseMeal', () => {

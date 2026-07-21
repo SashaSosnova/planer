@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react'
-import { MealDraftEditor, applyItemPatch, emptyMealItem } from '../components/MealDraftEditor'
+import { useEffect, useRef, useState } from 'react'
+import {
+  MealDraftEditor,
+  applyItemPatch,
+  emptyMealItem,
+  mealItemFromFood,
+} from '../components/MealDraftEditor'
+import { DateField } from '../components/DateField'
 import { MacroBar } from '../components/MacroBar'
+import { TrashIcon } from '../components/TrashIcon'
 import { todayIso } from '../lib/date'
 import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER } from '../lib/labels'
+import { parseMeal } from '../lib/parseMeal'
 import { scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, Meal, MealItem, MealType } from '../types'
 
@@ -31,49 +39,95 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
+  const [estimatingProduct, setEstimatingProduct] = useState(false)
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
+  const skipAutosave = useRef(true)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const latestRef = useRef({ items, date, mealType, eatingOut, meal })
+  latestRef.current = { items, date, mealType, eatingOut, meal }
+
+  // Reset local draft only when opening another meal.
   useEffect(() => {
     setItems(meal.items)
     setDate(meal.date)
     setMealType(meal.mealType)
     setEatingOut(meal.eatingOut)
-  }, [meal])
+    setError(null)
+    setSaveState('idle')
+    skipAutosave.current = true
+  }, [meal.id])
 
-  const totals = sumMacros(items)
-  const isApproximate = eatingOut || items.some((i) => i.source === 'estimate')
-
-  const save = async () => {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date > todayIso()) {
+  const persist = async () => {
+    const snap = latestRef.current
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(snap.date) || snap.date > todayIso()) {
       setError('Дата не может быть в будущем')
-      return
+      setSaveState('error')
+      return false
     }
-    const kept = items.filter((i) => i.name.trim())
+    const kept = snap.items.filter((i) => i.name.trim())
     if (kept.length === 0) {
       setError('Добавьте хотя бы один продукт')
-      return
+      setSaveState('error')
+      return false
     }
-    setBusy(true)
+    const isApproximate = snap.eatingOut || kept.some((i) => i.source === 'estimate')
+    setSaveState('saving')
     setError(null)
     try {
       await onSave({
-        id: meal.id,
-        date,
-        mealType,
-        rawText: meal.rawText.trim() || kept.map((i) => i.name).join(', '),
+        id: snap.meal.id,
+        date: snap.date,
+        mealType: snap.mealType,
+        rawText: snap.meal.rawText.trim() || kept.map((i) => i.name).join(', '),
         items: kept,
         isApproximate,
-        eatingOut,
+        eatingOut: snap.eatingOut,
       })
-      onBack()
+      setSaveState('saved')
+      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения')
-    } finally {
-      setBusy(false)
+      setSaveState('error')
+      return false
     }
+  }
+
+  const scheduleSave = () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      saveTimer.current = null
+      void persist()
+    }, 450)
+  }
+
+  useEffect(() => {
+    if (skipAutosave.current) {
+      skipAutosave.current = false
+      return
+    }
+    scheduleSave()
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current)
+    }
+  }, [items, date, mealType, eatingOut])
+
+  const goBack = async () => {
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+      await persist()
+    }
+    onBack()
   }
 
   const remove = async () => {
     if (!confirm('Удалить этот приём пищи?')) return
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current)
+      saveTimer.current = null
+    }
+    skipAutosave.current = true
     setBusy(true)
     try {
       await onDelete(meal.id)
@@ -121,46 +175,60 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
     }
   }
 
+  const totals = sumMacros(items)
+
   return (
     <section className="screen">
-      <header className="screen-header">
-        <button type="button" className="link-btn" onClick={onBack}>
-          ← Назад
-        </button>
-        <h1>{MEAL_TYPE_LABELS[mealType]}</h1>
-      </header>
-
-      <div className="panel">
-        <div className="meal-type-chips" role="group" aria-label="Тип приёма">
-          {MEAL_TYPE_ORDER.map((key) => (
-            <button
-              key={key}
-              type="button"
-              className={`meal-type-chip${mealType === key ? ' active' : ''}`}
-              onClick={() => setMealType(key)}
-            >
-              {MEAL_TYPE_LABELS[key]}
-            </button>
-          ))}
+      <header className="screen-header meal-detail-header">
+        <div className="meal-detail-nav">
+          <button type="button" className="link-btn" onClick={() => void goBack()}>
+            ← Назад
+          </button>
+          <button
+            type="button"
+            className="icon-btn sm danger"
+            disabled={busy}
+            onClick={() => void remove()}
+            aria-label="Удалить приём"
+            title="Удалить"
+          >
+            <TrashIcon size={18} />
+          </button>
         </div>
-        <label className="field">
-          <span>Дата</span>
-          <input
-            type="date"
-            max={todayIso()}
+
+        <div className="meal-detail-title-row">
+          <h1>{MEAL_TYPE_LABELS[mealType]}</h1>
+          <div className="meal-type-chips meal-type-chips-inline" role="group" aria-label="Тип приёма">
+            {MEAL_TYPE_ORDER.map((key) => (
+              <button
+                key={key}
+                type="button"
+                className={`meal-type-chip${mealType === key ? ' active' : ''}`}
+                onClick={() => setMealType(key)}
+              >
+                {MEAL_TYPE_LABELS[key]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="meal-detail-meta">
+          <DateField
+            className="meal-detail-date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            max={todayIso()}
+            onChange={setDate}
           />
-        </label>
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={eatingOut}
-            onChange={(e) => setEatingOut(e.target.checked)}
-          />
-          <span>Вне дома</span>
-        </label>
-      </div>
+          <label className="check-row meal-detail-out">
+            <input
+              type="checkbox"
+              checked={eatingOut}
+              onChange={(e) => setEatingOut(e.target.checked)}
+            />
+            <span>Вне дома</span>
+          </label>
+        </div>
+      </header>
 
       <MacroBar totals={totals} />
 
@@ -173,21 +241,36 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
           setItems((prev) => applyItemPatch(prev, index, patch, data.foods))
         }
         onRemoveItem={(index) => setItems((prev) => prev.filter((_, i) => i !== index))}
-        onAddItem={() => setItems((prev) => [...prev, emptyMealItem()])}
+        onAddItem={(seed) => setItems((prev) => [...prev, { ...emptyMealItem(), ...seed }])}
+        onAddFromFood={(food) => setItems((prev) => [...prev, mealItemFromFood(food)])}
+        estimatingProduct={estimatingProduct}
+        onEstimateProduct={async (line) => {
+          setEstimatingProduct(true)
+          setError(null)
+          try {
+            const foodsRef = data.foods.map((f) => ({
+              id: f.id,
+              name: f.name,
+              aliases: f.aliases,
+              per100g: f.per100g,
+              kind: f.kind,
+            }))
+            const result = await parseMeal(line, foodsRef, mealType)
+            setItems((prev) => [...prev, ...result.items])
+          } finally {
+            setEstimatingProduct(false)
+          }
+        }}
         onSaveToLibrary={(index) => void saveToLibrary(index)}
         savingFoodIndex={savingFoodIndex}
       />
 
+      {(saveState === 'saving' || saveState === 'saved') && (
+        <p className="muted small meal-detail-save-hint">
+          {saveState === 'saving' ? 'Сохраняю…' : 'Сохранено'}
+        </p>
+      )}
       {error && <p className="form-msg error">{error}</p>}
-
-      <div className="btn-row">
-        <button type="button" className="primary-btn" disabled={busy} onClick={() => void save()}>
-          {busy ? 'Сохраняю…' : 'Сохранить'}
-        </button>
-        <button type="button" className="ghost-btn danger" disabled={busy} onClick={() => void remove()}>
-          Удалить
-        </button>
-      </div>
     </section>
   )
 }

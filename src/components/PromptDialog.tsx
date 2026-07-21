@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { CloseIcon } from './CloseIcon'
 
 type Props = {
   title: string
@@ -55,9 +56,21 @@ export function PromptDialog({
         aria-labelledby="prompt-dialog-title"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 id="prompt-dialog-title" className="subhead" style={{ marginTop: 0 }}>
-          {title}
-        </h2>
+        <div className="modal-card-head">
+          <h2 id="prompt-dialog-title" className="subhead">
+            {title}
+          </h2>
+          <button
+            type="button"
+            className="icon-btn sm"
+            aria-label="Закрыть"
+            title="Закрыть"
+            disabled={busy}
+            onClick={onCancel}
+          >
+            <CloseIcon size={18} />
+          </button>
+        </div>
         <label className="field">
           <span>{label}</span>
           <input
@@ -86,9 +99,6 @@ export function PromptDialog({
             onClick={() => onConfirm(value)}
           >
             {busy ? 'Сохраняю…' : confirmLabel}
-          </button>
-          <button type="button" className="ghost-btn" disabled={busy} onClick={onCancel}>
-            Отмена
           </button>
         </div>
       </div>

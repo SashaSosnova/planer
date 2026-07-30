@@ -1666,6 +1666,27 @@
   align-self: center;
 }
 
+.add-parse-actions .primary-btn,
+.add-parse-actions .ghost-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+.photo-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.photo-preview {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
 .form-msg-block {
   display: flex;
   flex-direction: column;
@@ -2659,4 +2680,200 @@ button.food-row-open:focus-visible {
 .cycle-chip strong {
   font-size: 0.92rem;
   line-height: 1.25;
+}
+
+/* —— Уход (notes / checklist) —— */
+.care-screen {
+  gap: 14px;
+}
+
+.care-stack {
+  gap: 12px;
+}
+
+.care-day-chips {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.care-day-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 8px 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.care-day-chip.is-today {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.care-day-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.care-flags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.care-flag {
+  display: inline-block;
+  min-width: 1.4em;
+  text-align: center;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.care-flag.on {
+  color: var(--accent);
+}
+
+.care-note {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+}
+
+.care-note h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.care-note-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.care-note-sub {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.care-check-list,
+.care-product-list,
+.care-rules-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.care-check {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--bg, transparent);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+
+.care-check input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+
+.care-check-num {
+  min-width: 1.1em;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding-top: 2px;
+}
+
+.care-check-text {
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.care-check.done .care-check-text {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.care-product {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.care-product:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.care-product-name {
+  margin: 0;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.care-product-when {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.care-product-how {
+  margin: 6px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.care-rules-list {
+  gap: 10px;
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+
+.care-rules-list.bullets {
+  list-style: disc;
+}
+
+.care-rules-list li {
+  line-height: 1.4;
+  padding-left: 2px;
+}
+
+.care-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.care-table th,
+.care-table td {
+  text-align: center;
+  padding: 8px 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.care-table th:first-child,
+.care-table td:first-child {
+  text-align: left;
+  font-weight: 600;
+}
+
+.care-table tr.active td {
+  background: var(--accent-soft);
 }

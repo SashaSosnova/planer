@@ -15,6 +15,7 @@ import {
   getWeekNutritionSummary,
 } from './lib/weekSummaryLlm'
 import { AddMealScreen } from './screens/AddMealScreen'
+import { CareScreen } from './screens/CareScreen'
 import { DiaryScreen } from './screens/DiaryScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
 import { LibraryScreen } from './screens/LibraryScreen'
@@ -39,6 +40,7 @@ type Overlay =
   | { type: 'measures' }
   | { type: 'tastes' }
   | { type: 'library' }
+  | { type: 'care' }
   | null
 
 export default function App() {
@@ -225,6 +227,7 @@ export default function App() {
             onOpenMeasures={() => setOverlay({ type: 'measures' })}
             onOpenTastes={() => setOverlay({ type: 'tastes' })}
             onOpenLibrary={() => setOverlay({ type: 'library' })}
+            onOpenCare={() => setOverlay({ type: 'care' })}
             registerBackHandler={registerBackHandler}
             backEnabled={!showOverlay}
             tastePrefs={tastePrefs}
@@ -357,6 +360,8 @@ export default function App() {
             onBack={closeOverlay}
           />
         )}
+
+        {overlay?.type === 'care' && <CareScreen onBack={closeOverlay} />}
       </main>
     </div>
   )

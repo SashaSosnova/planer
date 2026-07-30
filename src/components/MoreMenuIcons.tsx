@@ -94,3 +94,23 @@ export function LibraryMenuIcon({ size = 24 }: IconProps) {
     </svg>
   )
 }
+
+/** Уход — капля / уход за кожей */
+export function CareMenuIcon({ size = 24 }: IconProps) {
+  return (
+    <svg {...svgProps(size)}>
+      <path
+        d="M12 4.5c2.8 3.2 5.2 5.8 5.2 8.6a5.2 5.2 0 0 1-10.4 0c0-2.8 2.4-5.4 5.2-8.6z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M10.2 14.2c.5 1.2 1.5 1.9 2.8 1.9"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}

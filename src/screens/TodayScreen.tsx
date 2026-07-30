@@ -13,6 +13,7 @@ import { AppsGridIcon } from '../components/AppsGridIcon'
 import { CloseIcon } from '../components/CloseIcon'
 import { LightbulbIcon } from '../components/LightbulbIcon'
 import {
+  CareMenuIcon,
   DiaryMenuIcon,
   HistoryMenuIcon,
   LibraryMenuIcon,
@@ -72,6 +73,7 @@ type Props = {
   onOpenMeasures: () => void
   onOpenTastes: () => void
   onOpenLibrary: () => void
+  onOpenCare: () => void
   /** Register nested back handler; return unregister. */
   registerBackHandler?: (fn: () => boolean) => () => void
   /** When false (overlay open), Today does not own the back stack. */
@@ -112,6 +114,7 @@ export function TodayScreen({
   onOpenMeasures,
   onOpenTastes,
   onOpenLibrary,
+  onOpenCare,
   registerBackHandler,
   backEnabled = true,
   tastePrefs,
@@ -473,6 +476,15 @@ export function TodayScreen({
                   >
                     <LibraryMenuIcon />
                     <span>Справочник</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenCare)}
+                  >
+                    <CareMenuIcon />
+                    <span>Уход</span>
                   </button>
                 </div>
               </div>

@@ -14,8 +14,12 @@ export type DeepseekChatOptions = {
   system?: string
 }
 
-export async function deepseekChat(
-  prompt: string,
+export type DeepseekContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } }
+
+async function deepseekRequest(
+  userContent: string | DeepseekContentPart[],
   options: DeepseekChatOptions = {},
 ): Promise<string> {
   const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY as string | undefined
@@ -39,7 +43,7 @@ export async function deepseekChat(
       temperature,
       messages: [
         { role: 'system', content: system },
-        { role: 'user', content: prompt },
+        { role: 'user', content: userContent },
       ],
       // Non-thinking mode for speed (flash)
       thinking: { type: 'disabled' },
@@ -59,10 +63,32 @@ export async function deepseekChat(
   return text
 }
 
+export async function deepseekChat(
+  prompt: string,
+  options: DeepseekChatOptions = {},
+): Promise<string> {
+  return deepseekRequest(prompt, options)
+}
+
 export async function deepseekJson<T>(
   prompt: string,
   options?: DeepseekChatOptions,
 ): Promise<T> {
   const text = await deepseekChat(prompt, options)
+  return extractJsonObject(text) as T
+}
+
+export async function deepseekChatVision(
+  parts: DeepseekContentPart[],
+  options: DeepseekChatOptions = {},
+): Promise<string> {
+  return deepseekRequest(parts, options)
+}
+
+export async function deepseekJsonVision<T>(
+  parts: DeepseekContentPart[],
+  options?: DeepseekChatOptions,
+): Promise<T> {
+  const text = await deepseekChatVision(parts, options)
   return extractJsonObject(text) as T
 }

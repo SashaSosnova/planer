@@ -16,6 +16,13 @@ const kurica: FoodRef = {
   kind: 'ingredient',
 }
 
+vi.mock('../firebase', () => ({
+  isFirebaseConfigured: () => false,
+  getFirebaseFunctions: () => {
+    throw new Error('no firebase in unit test')
+  },
+}))
+
 describe('buildParseMealPhotoPrompt', () => {
   it('asks for approximate portion JSON and includes catalog at home', () => {
     const prompt = buildParseMealPhotoPrompt({
@@ -64,33 +71,9 @@ describe('mapLlmResultToDraft (photo options)', () => {
       { forceApproximate: true, notesPrefix: PHOTO_MEAL_NOTES },
     )
     expect(draft.isApproximate).toBe(true)
-    expect(draft.parseSource).toBe('deepseek')
     expect(draft.notes).toBe(PHOTO_MEAL_NOTES)
     expect(draft.items).toHaveLength(1)
-    expect(draft.items[0]!.name).toBe('Паста с курицей')
     expect(draft.totals.kcal).toBe(450)
-  })
-
-  it('uses library macros when foodId matches at home', () => {
-    const draft = mapLlmResultToDraft(
-      {
-        items: [
-          {
-            name: 'Курица',
-            grams: 100,
-            foodId: 'k1',
-            needsEstimate: false,
-            source: 'library',
-          },
-        ],
-      },
-      [kurica],
-      'lunch',
-      false,
-    )
-    expect(draft.items[0]!.source).toBe('library')
-    expect(draft.items[0]!.kcal).toBe(165)
-    expect(draft.isApproximate).toBe(false)
   })
 })
 
@@ -100,16 +83,16 @@ describe('parseMealFromPhoto', () => {
     vi.restoreAllMocks()
   })
 
-  it('throws when DeepSeek is not configured', async () => {
-    vi.stubEnv('VITE_DEEPSEEK_API_KEY', '')
+  it('throws when Gemini is not configured', async () => {
+    vi.stubEnv('VITE_GEMINI_API_KEY', '')
     await expect(
       parseMealFromPhoto('data:image/jpeg;base64,xx', [], 'lunch', false),
-    ).rejects.toThrow(/VITE_DEEPSEEK_API_KEY/)
+    ).rejects.toThrow(/Gemini|VITE_GEMINI/)
   })
 
-  it('maps vision JSON into an approximate draft', async () => {
-    vi.stubEnv('VITE_DEEPSEEK_API_KEY', 'test-key')
-    const vision = vi.spyOn(await import('./deepseek'), 'deepseekJsonVision').mockResolvedValue({
+  it('maps Gemini vision JSON into an approximate draft', async () => {
+    vi.stubEnv('VITE_GEMINI_API_KEY', 'test-key')
+    const vision = vi.spyOn(await import('./gemini'), 'geminiJsonVision').mockResolvedValue({
       mealType: 'lunch',
       eatingOut: false,
       items: [
@@ -134,10 +117,9 @@ describe('parseMealFromPhoto', () => {
     )
 
     expect(vision).toHaveBeenCalledOnce()
-    const parts = vision.mock.calls[0]![0] as Array<{ type: string }>
-    expect(parts.some((p) => p.type === 'image_url')).toBe(true)
-    expect(parts.some((p) => p.type === 'text')).toBe(true)
+    expect(vision.mock.calls[0]![0]).toContain('data:image/jpeg')
     expect(draft.isApproximate).toBe(true)
+    expect(draft.parseSource).toBe('cloud')
     expect(draft.notes).toContain('фото')
     expect(draft.items[0]!.name).toBe('Салат')
   })

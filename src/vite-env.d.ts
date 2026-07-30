@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_FIREBASE_APP_ID: string
   /** DeepSeek API key — used for meal/recipe parsing (deepseek-v4-flash) */
   readonly VITE_DEEPSEEK_API_KEY: string
+  /** Gemini API key (AI Studio) — photo meal estimate (gemini-2.0-flash) */
+  readonly VITE_GEMINI_API_KEY: string
 }
 
 interface ImportMeta {

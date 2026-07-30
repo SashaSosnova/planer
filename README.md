@@ -38,9 +38,10 @@ npm run dev
 
 ```
 VITE_DEEPSEEK_API_KEY=sk-...
+VITE_GEMINI_API_KEY=...   # AI Studio — оценка порции по фото (gemini-2.0-flash)
 ```
 
-Модель: `deepseek-v4-flash`. Перезапустите `npm run dev` после изменения `.env`.
+Текст еды: `deepseek-v4-flash`. Фото: Gemini Flash (free tier). Перезапустите `npm run dev` после изменения `.env`.
 
 ### Cloud Function (опционально)
 

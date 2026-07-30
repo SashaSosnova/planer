@@ -6,7 +6,6 @@ import {
   mealItemFromFood,
   patchDraft,
 } from '../components/MealDraftEditor'
-import { compressImageFile } from '../lib/compressImage'
 import { todayIso } from '../lib/date'
 import { isDeepseekConfigured } from '../lib/deepseek'
 import {
@@ -16,7 +15,6 @@ import {
   nextMealType,
 } from '../lib/labels'
 import { parseMeal } from '../lib/parseMeal'
-import { parseMealFromPhoto } from '../lib/parseMealPhoto'
 import { scalePer100g, sumMacros } from '../lib/nutrition'
 import type {
   AppData,
@@ -85,9 +83,6 @@ export function AddMealScreen({
   const [info, setInfo] = useState<string | null>(null)
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
   const [estimatingProduct, setEstimatingProduct] = useState(false)
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
-  const [fromPhoto, setFromPhoto] = useState(false)
-  const photoInputRef = useRef<HTMLInputElement | null>(null)
   const viewRef = useRef(view)
   viewRef.current = view
 
@@ -132,7 +127,6 @@ export function AddMealScreen({
     setBusy(true)
     setError(null)
     setInfo(null)
-    setFromPhoto(false)
     try {
       const result = await parseMeal(text, foodsRef, mealType, eatingOut)
       setDraft(result)
@@ -148,29 +142,6 @@ export function AddMealScreen({
     }
   }
 
-  const runPhotoParse = async (file: File) => {
-    setBusy(true)
-    setError(null)
-    setInfo(null)
-    setDraft(null)
-    try {
-      const dataUrl = await compressImageFile(file)
-      setPhotoPreview(dataUrl)
-      const result = await parseMealFromPhoto(dataUrl, foodsRef, mealType, eatingOut)
-      setDraft(result)
-      setFromPhoto(true)
-      setEatingOut(result.eatingOut)
-      setMealType(result.mealType)
-      const names = result.items.map((i) => i.name).join(', ')
-      if (!text.trim()) setText(`фото: ${names}`)
-      if (result.notes && shouldShowParseNotes(result.parseSource)) setInfo(result.notes)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Не удалось разобрать фото')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const confirmMeal = async () => {
     if (!draft) return
     const kept = draft.items.filter((i) => i.name.trim())
@@ -181,18 +152,16 @@ export function AddMealScreen({
     setBusy(true)
     setError(null)
     try {
-      const names = kept.map((i) => i.name).join(', ')
-      const cleaned = extractMealTypeFromText(text).cleaned.trim()
-      const body = fromPhoto
-        ? `фото: ${names || cleaned || 'порция'}`
-        : cleaned || names || text.trim()
+      const body =
+        extractMealTypeFromText(text).cleaned.trim() ||
+        kept.map((i) => i.name).join(', ') ||
+        text.trim()
       await onSaveMeal({
         date,
         mealType,
         rawText: body,
         items: kept,
-        isApproximate:
-          fromPhoto || draft.eatingOut || kept.some((i) => i.source === 'estimate'),
+        isApproximate: draft.eatingOut || kept.some((i) => i.source === 'estimate'),
         eatingOut: draft.eatingOut,
       })
       onBack()
@@ -299,7 +268,6 @@ export function AddMealScreen({
             setMealTypeTouched(false)
             setDraft(null)
             setInfo(null)
-            setFromPhoto(false)
           }}
         />
         <label className="check-row add-eating-out">
@@ -331,7 +299,6 @@ export function AddMealScreen({
               setMealTypeTouched(false)
               setDraft(null)
               setInfo(null)
-              setFromPhoto(false)
             }}
           >
             Сегодня
@@ -349,7 +316,6 @@ export function AddMealScreen({
             // Draft is tied to the calculated text — invalidate on edit.
             setDraft(null)
             setInfo(null)
-            setFromPhoto(false)
             const hinted = extractMealTypeFromText(value).mealType
             if (hinted) {
               setMealType(hinted)
@@ -361,65 +327,14 @@ export function AddMealScreen({
         />
       </label>
 
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="visually-hidden"
-        tabIndex={-1}
-        aria-hidden
-        onChange={(e) => {
-          const file = e.target.files?.[0]
-          e.target.value = ''
-          if (file) void runPhotoParse(file)
-        }}
-      />
-
-      <div className="btn-row add-parse-actions">
-        <button
-          type="button"
-          className="primary-btn"
-          disabled={busy || !text.trim()}
-          onClick={() => void runParse()}
-        >
-          {busy ? 'Считаю…' : 'Рассчитать'}
-        </button>
-        <button
-          type="button"
-          className="ghost-btn"
-          disabled={busy || !isDeepseekConfigured()}
-          onClick={() => photoInputRef.current?.click()}
-          title={
-            isDeepseekConfigured()
-              ? 'Оценить порцию по фото'
-              : 'Нужен VITE_DEEPSEEK_API_KEY'
-          }
-        >
-          По фото
-        </button>
-      </div>
-
-      {photoPreview && (
-        <div className="photo-preview-row">
-          <img src={photoPreview} alt="Выбранное фото еды" className="photo-preview" />
-          <button
-            type="button"
-            className="link-btn"
-            disabled={busy}
-            onClick={() => {
-              setPhotoPreview(null)
-              if (fromPhoto) {
-                setDraft(null)
-                setFromPhoto(false)
-                setInfo(null)
-              }
-            }}
-          >
-            Убрать фото
-          </button>
-        </div>
-      )}
+      <button
+        type="button"
+        className="primary-btn"
+        disabled={busy || !text.trim()}
+        onClick={() => void runParse()}
+      >
+        {busy ? 'Считаю…' : 'Рассчитать'}
+      </button>
 
       {error && (
         <div className="form-msg-block">
@@ -534,10 +449,7 @@ export function AddMealScreen({
             <button
               type="button"
               className="icon-btn"
-              onClick={() => {
-                setDraft(null)
-                setFromPhoto(false)
-              }}
+              onClick={() => setDraft(null)}
               aria-label="Закрыть"
               title="Закрыть"
             >

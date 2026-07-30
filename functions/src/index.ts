@@ -198,3 +198,136 @@ ${text}`
     }
   },
 )
+
+function splitImageDataUrl(dataUrl: string): { mimeType: string; base64: string } {
+  const m = String(dataUrl).match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/)
+  if (!m?.[1] || !m[2]) {
+    throw new HttpsError('invalid-argument', 'Нужен data URL изображения')
+  }
+  return { mimeType: m[1], base64: m[2].replace(/\s/g, '') }
+}
+
+/** Photo → meal draft via Gemini Flash (vision). */
+export const parseMealPhoto = onCall(
+  {
+    secrets: [geminiApiKey],
+    region: 'europe-west1',
+    // Compressed plate photos can be a few hundred KB.
+    timeoutSeconds: 60,
+    memory: '512MiB',
+  },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Нужна авторизация')
+    }
+
+    const imageDataUrl = String(request.data?.imageDataUrl ?? '')
+    if (!imageDataUrl.startsWith('data:image/')) {
+      throw new HttpsError('invalid-argument', 'Нужно фото (data URL)')
+    }
+
+    const mealTypeHint = request.data?.mealType as MealType | undefined
+    const eatingOut = Boolean(request.data?.eatingOut)
+    const foods = (Array.isArray(request.data?.foods) ? request.data.foods : []) as FoodRef[]
+    const { mimeType, base64 } = splitImageDataUrl(imageDataUrl)
+
+    const catalog = eatingOut
+      ? []
+      : foods.slice(0, 80).map((f) => ({
+          id: f.id,
+          name: f.name,
+          aliases: f.aliases ?? [],
+          per100g: f.per100g,
+        }))
+
+    const prompt = `Ты помощник трекера калорий. По фото еды оцени порцию на русском.
+
+Верни ТОЛЬКО JSON без markdown:
+{
+  "mealType": "breakfast"|"lunch"|"dinner"|"snack",
+  "eatingOut": ${eatingOut},
+  "items": [
+    {
+      "name": "строка",
+      "grams": число,
+      "foodId": null,
+      "needsEstimate": true,
+      "kcal": число,
+      "protein": число,
+      "fat": число,
+      "carbs": число
+    }
+  ],
+  "notes": "кратко"
+}
+
+Правила:
+- Граммы и КБЖУ — ориентировочные. КБЖУ на всю порцию (не на 100 г).
+- ЗАПРЕЩЕНО 0/0/0/0 для еды.
+- Одно составное блюдо — обычно одна позиция.
+- Короткое name по-русски.
+
+eatingOut=${eatingOut}
+mealType hint: ${mealTypeHint ?? 'угадай'}
+
+Каталог:
+${JSON.stringify(catalog)}`
+
+    const genAI = new GoogleGenerativeAI(geminiApiKey.value())
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash',
+      generationConfig: { temperature: 0.2 },
+    })
+
+    let parsed: LlmResult
+    try {
+      const result = await model.generateContent([
+        { text: prompt },
+        { inlineData: { mimeType, data: base64 } },
+      ])
+      parsed = extractJson(result.response.text()) as LlmResult
+    } catch (err) {
+      throw new HttpsError(
+        'internal',
+        err instanceof Error ? err.message : 'Ошибка Gemini',
+      )
+    }
+
+    const foodMap = new Map(catalog.map((f) => [f.id, f]))
+    const items = (parsed.items ?? []).map((item) => {
+      const grams = Number(item.grams) > 0 ? Number(item.grams) : 300
+      const food = item.foodId ? foodMap.get(item.foodId) : undefined
+      if (food && !item.needsEstimate && !eatingOut) {
+        const macros = scalePer100g(food.per100g, grams)
+        return {
+          name: food.name,
+          grams,
+          foodId: food.id,
+          source: 'library' as const,
+          ...macros,
+        }
+      }
+      return {
+        name: String(item.name || 'Блюдо'),
+        grams,
+        foodId: null,
+        source: 'estimate' as const,
+        kcal: Number(item.kcal) || 0,
+        protein: Number(item.protein) || 0,
+        fat: Number(item.fat) || 0,
+        carbs: Number(item.carbs) || 0,
+      }
+    })
+
+    if (items.length === 0) {
+      throw new HttpsError('internal', 'Gemini не вернул позиции')
+    }
+
+    return {
+      mealType: parsed.mealType ?? mealTypeHint ?? 'snack',
+      eatingOut,
+      items,
+      notes: parsed.notes,
+    }
+  },
+)

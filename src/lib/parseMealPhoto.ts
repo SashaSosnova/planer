@@ -1,8 +1,14 @@
+import { httpsCallable } from 'firebase/functions'
+import { getFirebaseFunctions, isFirebaseConfigured } from '../firebase'
 import type { FoodRef, MealType, ParsedMealDraft } from '../types'
-import { deepseekJsonVision, isDeepseekConfigured } from './deepseek'
+import { geminiJsonVision, isGeminiConfigured } from './gemini'
 import { mapLlmResultToDraft, type LlmResult } from './parseMealLlm'
 
 export const PHOTO_MEAL_NOTES = 'Оценка по фото — проверьте граммы.'
+
+export function isPhotoParseConfigured(): boolean {
+  return isGeminiConfigured() || isFirebaseConfigured()
+}
 
 export function buildParseMealPhotoPrompt(input: {
   mealType?: MealType
@@ -57,27 +63,86 @@ mealType hint: ${mealType ?? 'угадай по типу еды (завтрак/
 ${JSON.stringify(catalog)}`
 }
 
+type CloudPhotoResponse = {
+  mealType?: MealType
+  eatingOut?: boolean
+  items?: LlmResult['items']
+  notes?: string
+}
+
+function draftFromParsed(
+  parsed: LlmResult,
+  foods: FoodRef[],
+  mealType: MealType | undefined,
+  eatingOut: boolean,
+): ParsedMealDraft {
+  const draft = mapLlmResultToDraft(parsed, foods, mealType, eatingOut, {
+    forceApproximate: true,
+    notesPrefix: PHOTO_MEAL_NOTES,
+  })
+  return { ...draft, parseSource: 'cloud' }
+}
+
 export async function parseMealFromPhoto(
   imageDataUrl: string,
   foods: FoodRef[],
   mealType: MealType | undefined,
   eatingOut: boolean,
 ): Promise<ParsedMealDraft> {
-  if (!isDeepseekConfigured()) {
-    throw new Error('VITE_DEEPSEEK_API_KEY не задан — фото-разбор недоступен')
-  }
   if (!imageDataUrl.startsWith('data:image/')) {
     throw new Error('Нужен data URL изображения')
   }
 
-  const prompt = buildParseMealPhotoPrompt({ mealType, eatingOut, foods })
-  const parsed = await deepseekJsonVision<LlmResult>([
-    { type: 'image_url', image_url: { url: imageDataUrl } },
-    { type: 'text', text: prompt },
-  ])
+  const foodPayload = foods.map((f) => ({
+    id: f.id,
+    name: f.name,
+    aliases: f.aliases,
+    per100g: f.per100g,
+    kind: f.kind,
+  }))
 
-  return mapLlmResultToDraft(parsed, foods, mealType, eatingOut, {
-    forceApproximate: true,
-    notesPrefix: PHOTO_MEAL_NOTES,
-  })
+  // 1) Cloud Function — GEMINI_API_KEY остаётся на сервере
+  if (isFirebaseConfigured()) {
+    try {
+      const callable = httpsCallable<
+        {
+          imageDataUrl: string
+          mealType?: MealType
+          eatingOut: boolean
+          foods: FoodRef[]
+        },
+        CloudPhotoResponse
+      >(getFirebaseFunctions(), 'parseMealPhoto')
+      const result = await callable({
+        imageDataUrl,
+        mealType,
+        eatingOut,
+        foods: foodPayload,
+      })
+      return draftFromParsed(
+        {
+          mealType: result.data.mealType,
+          eatingOut: result.data.eatingOut,
+          items: result.data.items,
+          notes: result.data.notes,
+        },
+        foods,
+        mealType,
+        eatingOut,
+      )
+    } catch {
+      // fall through to client key
+    }
+  }
+
+  // 2) Client free-tier key (AI Studio)
+  if (!isGeminiConfigured()) {
+    throw new Error(
+      'Gemini не настроен — добавьте VITE_GEMINI_API_KEY или войдите в аккаунт с Cloud Functions',
+    )
+  }
+
+  const prompt = buildParseMealPhotoPrompt({ mealType, eatingOut, foods })
+  const parsed = await geminiJsonVision<LlmResult>(imageDataUrl, prompt)
+  return draftFromParsed(parsed, foods, mealType, eatingOut)
 }

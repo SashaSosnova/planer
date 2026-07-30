@@ -33,6 +33,7 @@ import {
 import { getMealIdeas } from '../lib/mealSuggestionsLlm'
 import { DAY_NOTE_MAX } from '../lib/sanitize'
 import type { TastePrefs } from '../lib/settings'
+import { buildProgressMotivator } from '../lib/progressMotivator'
 import { forecastFromAppData } from '../lib/weightForecast'
 import type { AppData, DayNote, MealType } from '../types'
 
@@ -134,6 +135,7 @@ export function TodayScreen({
   const [moreOpen, setMoreOpen] = useState(false)
   const [noteDraft, setNoteDraft] = useState(savedNote)
   const [noteSaving, setNoteSaving] = useState(false)
+  const [noteFocused, setNoteFocused] = useState(false)
   const [adviceOpen, setAdviceOpen] = useState(false)
   const [adviceSlot, setAdviceSlot] = useState<MealSlot>(() =>
     mealSlotForHour(new Date().getHours()),
@@ -242,6 +244,19 @@ export function TodayScreen({
       tone: lostKg > 0 ? 'down' : lostKg < 0 ? 'up' : 'flat',
     }
   }, [forecast])
+
+  const progressMotivator = useMemo(
+    () =>
+      buildProgressMotivator({
+        weights: data.weights,
+        periodStarts: data.periodStarts,
+        cycleLengthDays,
+        periodLengthDays,
+        targetKg: targetWeightKg,
+        today: date,
+      }),
+    [data.weights, data.periodStarts, cycleLengthDays, periodLengthDays, targetWeightKg, date],
+  )
 
   const cycle = useMemo(
     () => getCycleInfo(data.periodStarts, date, cycleLengthDays, periodLengthDays),
@@ -531,6 +546,14 @@ export function TodayScreen({
               {progressDelta.hero}
             </strong>
           </div>
+          {progressMotivator && (
+            <p className={`progress-motivator tone-${progressMotivator.tone}`}>
+              {progressMotivator.text}
+            </p>
+          )}
+          {progressMotivator?.deltaLabel && (
+            <p className="muted small">{progressMotivator.deltaLabel}</p>
+          )}
           <p className="muted small">{forecast.summary}</p>
           {forecast.targetKg == null && (
             <p className="muted small">Цель по весу можно задать в профиле.</p>
@@ -598,7 +621,11 @@ export function TodayScreen({
             aria-label={dayPrompt.question}
             disabled={noteSaving}
             onChange={(e) => setNoteDraft(e.target.value.slice(0, DAY_NOTE_MAX))}
-            onBlur={() => void saveNote()}
+            onFocus={() => setNoteFocused(true)}
+            onBlur={() => {
+              setNoteFocused(false)
+              void saveNote()
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -606,6 +633,19 @@ export function TodayScreen({
               }
             }}
           />
+          {noteFocused && noteDraft.trim() && (
+            <div className="day-note-actions">
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={noteSaving || !noteDirty}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => void saveNote()}
+              >
+                {noteSaving ? 'Сохраняю…' : 'Отправить'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

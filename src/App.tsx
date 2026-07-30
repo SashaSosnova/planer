@@ -62,6 +62,7 @@ export default function App() {
     saveMeasurement,
     deleteMeasurement,
     saveDayNote,
+    saveMedCheck,
     savePeriodStart,
     removePeriodStart,
   } = useAppData()
@@ -253,6 +254,7 @@ export default function App() {
             onSaveMeal={saveMeal}
             onSaveFood={saveFood}
             onDeleteFood={deleteFood}
+            onSaveMedCheck={saveMedCheck}
             registerBackHandler={registerBackHandler}
           />
         )}
@@ -265,6 +267,7 @@ export default function App() {
             onSave={saveMeal}
             onDelete={deleteMeal}
             onSaveFood={saveFood}
+            onSaveMedCheck={saveMedCheck}
           />
         )}
 

@@ -8,6 +8,7 @@ import type {
   Meal,
   MealItem,
   MeasurementEntry,
+  MedDayEntry,
   PeriodStart,
   StepsEntry,
   WeightEntry,
@@ -197,6 +198,38 @@ export function sanitizePeriodStart(raw: unknown): PeriodStart | null {
   return { id, date, createdAt: Number(p.createdAt) || Date.now() }
 }
 
+function sanitizeIsoAt(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || !raw.trim()) return undefined
+  const t = new Date(raw).getTime()
+  if (Number.isNaN(t)) return undefined
+  return raw
+}
+
+export function sanitizeMedDay(raw: unknown): MedDayEntry | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  const id = String(m.id ?? '')
+  const date = String(m.date ?? '')
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  const ironAt = sanitizeIsoAt(m.ironAt)
+  const mgBreakfastAt = sanitizeIsoAt(m.mgBreakfastAt)
+  const mgLunchAt = sanitizeIsoAt(m.mgLunchAt)
+  const mgDinnerAt = sanitizeIsoAt(m.mgDinnerAt)
+  if (!ironAt && !mgBreakfastAt && !mgLunchAt && !mgDinnerAt) return null
+  const createdAt = Number(m.createdAt) || Date.now()
+  const updatedAt = Number(m.updatedAt) || createdAt
+  return {
+    id,
+    date,
+    createdAt,
+    updatedAt,
+    ...(ironAt ? { ironAt } : {}),
+    ...(mgBreakfastAt ? { mgBreakfastAt } : {}),
+    ...(mgLunchAt ? { mgLunchAt } : {}),
+    ...(mgDinnerAt ? { mgDinnerAt } : {}),
+  }
+}
+
 /** One entry per id, then one per date (keep newest). Returns dropped ids for cloud cleanup. */
 function dedupeByDate<T extends { id: string; date: string; createdAt: number }>(
   entries: T[],
@@ -254,6 +287,7 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
       steps: [],
       dayNotes: [],
       periodStarts: [],
+      medDays: [],
     }
   }
   return {
@@ -273,6 +307,11 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
       asArray(parsed.periodStarts)
         .map(sanitizePeriodStart)
         .filter((p): p is PeriodStart => p != null),
+    ).kept,
+    medDays: dedupeByDate(
+      asArray(parsed.medDays)
+        .map(sanitizeMedDay)
+        .filter((m): m is MedDayEntry => m != null),
     ).kept,
   }
 }

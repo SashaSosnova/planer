@@ -26,6 +26,8 @@ import type {
 } from '../types'
 import { CloseIcon } from '../components/CloseIcon'
 import { DateField } from '../components/DateField'
+import { MealMedChecks } from '../components/MealMedChecks'
+import type { MedDoseKey } from '../lib/medRoutine'
 import { LibraryScreen } from './LibraryScreen'
 
 const PARSE_SOURCE_LABEL: Record<MealParseSource, string> = {
@@ -58,6 +60,11 @@ type Props = {
   }) => Promise<unknown>
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
   onDeleteFood: (id: string) => Promise<void>
+  onSaveMedCheck: (input: {
+    date: string
+    dose: MedDoseKey
+    taken: boolean
+  }) => Promise<unknown>
   registerBackHandler?: (fn: () => boolean) => () => void
 }
 
@@ -69,6 +76,7 @@ export function AddMealScreen({
   onSaveMeal,
   onSaveFood,
   onDeleteFood,
+  onSaveMedCheck,
   registerBackHandler,
 }: Props) {
   const [view, setView] = useState<View>('meal')
@@ -290,6 +298,12 @@ export function AddMealScreen({
           />
           <span>Вне дома</span>
         </label>
+        <MealMedChecks
+          date={date}
+          mealType={mealType}
+          entry={(data.medDays ?? []).find((m) => m.date === date)}
+          onToggle={onSaveMedCheck}
+        />
         {!isToday && (
           <button
             type="button"

@@ -15,6 +15,7 @@ import {
   sanitizeFood,
   sanitizeMeal,
   sanitizeMeasurement,
+  sanitizeMedDay,
   sanitizePeriodStart,
   sanitizeSteps,
   sanitizeWeight,
@@ -26,6 +27,7 @@ import type {
   FoodItem,
   Meal,
   MeasurementEntry,
+  MedDayEntry,
   PeriodStart,
   StepsEntry,
   WeightEntry,
@@ -132,6 +134,7 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
   watch<PeriodStart>('periodStarts', 'periodStarts', (id, data) =>
     sanitizePeriodStart({ ...data, id }),
   )
+  watch<MedDayEntry>('medDays', 'medDays', (id, data) => sanitizeMedDay({ ...data, id }))
 
   return () => {
     for (const u of unsubs) u()

@@ -120,6 +120,19 @@ export type PeriodStart = {
   createdAt: number
 }
 
+/** Daily supplement check-ins (iron once, magnesium with main meals) */
+export type MedDayEntry = {
+  id: string
+  date: string
+  /** ISO datetime when taken; omit = not taken */
+  ironAt?: string
+  mgBreakfastAt?: string
+  mgLunchAt?: string
+  mgDinnerAt?: string
+  createdAt: number
+  updatedAt: number
+}
+
 export type FoodRef = {
   id: string
   name: string
@@ -149,4 +162,5 @@ export type AppData = {
   steps: StepsEntry[]
   dayNotes: DayNote[]
   periodStarts: PeriodStart[]
+  medDays: MedDayEntry[]
 }

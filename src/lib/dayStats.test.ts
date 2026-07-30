@@ -23,6 +23,7 @@ const empty: AppData = {
   steps: [],
   dayNotes: [],
   periodStarts: [],
+  medDays: [],
 }
 
 describe('statsForDate', () => {

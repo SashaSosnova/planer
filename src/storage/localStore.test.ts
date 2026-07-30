@@ -43,5 +43,25 @@ describe('sanitizeAppData', () => {
     expect(data.meals[0]!.totals.kcal).toBe(0)
     expect(data.weights).toHaveLength(0)
     expect(data.steps[0]!.count).toBe(0)
+    expect(data.medDays).toEqual([])
+  })
+
+  it('keeps med day doses and drops empty entries', () => {
+    const data = sanitizeAppData({
+      medDays: [
+        {
+          id: 'md1',
+          date: '2026-07-30',
+          ironAt: '2026-07-30T09:00:00.000Z',
+          mgBreakfastAt: 'bad',
+          createdAt: 1,
+          updatedAt: 2,
+        },
+        { id: 'md2', date: '2026-07-29', createdAt: 1, updatedAt: 1 },
+      ],
+    })
+    expect(data.medDays).toHaveLength(1)
+    expect(data.medDays[0]!.ironAt).toBe('2026-07-30T09:00:00.000Z')
+    expect(data.medDays[0]!.mgBreakfastAt).toBeUndefined()
   })
 })

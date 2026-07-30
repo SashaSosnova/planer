@@ -7,9 +7,11 @@ import {
 } from '../components/MealDraftEditor'
 import { DateField } from '../components/DateField'
 import { MacroBar } from '../components/MacroBar'
+import { MealMedChecks } from '../components/MealMedChecks'
 import { TrashIcon } from '../components/TrashIcon'
 import { todayIso } from '../lib/date'
 import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER } from '../lib/labels'
+import type { MedDoseKey } from '../lib/medRoutine'
 import { parseMeal } from '../lib/parseMeal'
 import { scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, Meal, MealItem, MealType } from '../types'
@@ -29,9 +31,22 @@ type Props = {
   }) => Promise<unknown>
   onDelete: (id: string) => Promise<void>
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
+  onSaveMedCheck: (input: {
+    date: string
+    dose: MedDoseKey
+    taken: boolean
+  }) => Promise<unknown>
 }
 
-export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveFood }: Props) {
+export function MealDetailScreen({
+  data,
+  meal,
+  onBack,
+  onSave,
+  onDelete,
+  onSaveFood,
+  onSaveMedCheck,
+}: Props) {
   const [items, setItems] = useState(meal.items)
   const [date, setDate] = useState(meal.date)
   const [mealType, setMealType] = useState(meal.mealType)
@@ -227,6 +242,12 @@ export function MealDetailScreen({ data, meal, onBack, onSave, onDelete, onSaveF
             />
             <span>Вне дома</span>
           </label>
+          <MealMedChecks
+            date={date}
+            mealType={mealType}
+            entry={(data.medDays ?? []).find((m) => m.date === date)}
+            onToggle={onSaveMedCheck}
+          />
         </div>
       </header>
 

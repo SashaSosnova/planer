@@ -13,6 +13,7 @@ import {
   sanitizeMacros,
   sanitizeMealItems,
 } from '../lib/sanitize'
+import { isMedDayEmpty, MED_DOSE_AT_FIELD, type MedDoseKey } from '../lib/medRoutine'
 import { parseTelegramImportBundle } from '../lib/tgImport'
 import { applyKnownWeightFixes } from '../lib/weightCleanup'
 import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/cloudSync'
@@ -26,6 +27,7 @@ import type {
   MealItem,
   MealType,
   MeasurementEntry,
+  MedDayEntry,
   PeriodStart,
   StepsEntry,
   WeightEntry,
@@ -61,6 +63,7 @@ const CLOUD_KEYS: (keyof AppData)[] = [
   'steps',
   'dayNotes',
   'periodStarts',
+  'medDays',
 ]
 
 export function useAppData() {
@@ -474,6 +477,53 @@ export function useAppData() {
     [data.dayNotes, persistLocal, uid, useCloud],
   )
 
+  const saveMedCheck = useCallback(
+    async (input: { date: string; dose: MedDoseKey; taken: boolean }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Некорректная дата')
+      const existing = (data.medDays ?? []).find((m) => m.date === input.date)
+      const field = MED_DOSE_AT_FIELD[input.dose]
+      const now = Date.now()
+      const at = new Date().toISOString()
+
+      const doses = {
+        ironAt: existing?.ironAt,
+        mgBreakfastAt: existing?.mgBreakfastAt,
+        mgLunchAt: existing?.mgLunchAt,
+        mgDinnerAt: existing?.mgDinnerAt,
+      }
+      if (input.taken) doses[field] = at
+      else delete doses[field]
+
+      const cleaned: MedDayEntry = {
+        id: existing?.id ?? newId(),
+        date: input.date,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+        ...(doses.ironAt ? { ironAt: doses.ironAt } : {}),
+        ...(doses.mgBreakfastAt ? { mgBreakfastAt: doses.mgBreakfastAt } : {}),
+        ...(doses.mgLunchAt ? { mgLunchAt: doses.mgLunchAt } : {}),
+        ...(doses.mgDinnerAt ? { mgDinnerAt: doses.mgDinnerAt } : {}),
+      }
+
+      if (isMedDayEmpty(cleaned)) {
+        if (existing && useCloud && uid) await removeDoc(uid, 'medDays', existing.id)
+        persistLocal((prev) => ({
+          ...prev,
+          medDays: (prev.medDays ?? []).filter((m) => m.date !== input.date),
+        }))
+        return null
+      }
+
+      if (useCloud && uid) await upsertDoc(uid, 'medDays', cleaned.id, { ...cleaned })
+      persistLocal((prev) => ({
+        ...prev,
+        medDays: [...(prev.medDays ?? []).filter((m) => m.date !== cleaned.date), cleaned],
+      }))
+      return cleaned
+    },
+    [data.medDays, persistLocal, uid, useCloud],
+  )
+
   const savePeriodStart = useCallback(
     async (date: string) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error('Некорректная дата')
@@ -657,6 +707,7 @@ export function useAppData() {
     saveMeasurement,
     deleteMeasurement,
     saveDayNote,
+    saveMedCheck,
     savePeriodStart,
     removePeriodStart,
     resetLocal,

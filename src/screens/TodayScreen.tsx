@@ -20,6 +20,7 @@ import {
   MeasuresMenuIcon,
   TastesMenuIcon,
 } from '../components/MoreMenuIcons'
+import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
 import { PlusIcon } from '../components/PlusIcon'
 import { LikeIcon, DislikeIcon } from '../components/VoteIcons'
 import {
@@ -127,6 +128,7 @@ export function TodayScreen({
   const date = todayIso()
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
+  const medDay = (data.medDays ?? []).find((m) => m.date === date)
   const savedNote = (data.dayNotes ?? []).find((n) => n.date === date)?.text ?? ''
 
   const [prompt, setPrompt] = useState<PromptKind>(null)
@@ -723,28 +725,39 @@ export function TodayScreen({
 
         {today.meals.length > 0 ? (
           <ul className="meal-list">
-            {today.meals.map((meal) => (
-              <li key={meal.id}>
-                <button
-                  type="button"
-                  className="meal-card meal-card-btn"
-                  onClick={() => onOpenMeal(meal.id)}
-                >
-                  <div className="meal-card-top">
-                    <strong>
-                      {MEAL_TYPE_LABELS[meal.mealType]}
-                      {meal.eatingOut ? ' · вне дома' : ''}
-                    </strong>
-                    <span>{Math.round(meal.totals.kcal)} ккал</span>
-                  </div>
-                  <p className="meal-preview">{mealBodyText(meal.rawText)}</p>
-                  <p className="meal-bju">
-                    Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
-                    {Math.round(meal.totals.carbs)}
-                  </p>
-                </button>
-              </li>
-            ))}
+            {today.meals.map((meal) => {
+              const mgDose = mgDoseKeyForMealType(meal.mealType)
+              const hasMg = mgDose ? Boolean(medTakenAt(medDay, mgDose)) : false
+              const hasFe = mgDose ? Boolean(medTakenAt(medDay, 'iron')) : false
+              return (
+                <li key={meal.id}>
+                  <button
+                    type="button"
+                    className="meal-card meal-card-btn"
+                    onClick={() => onOpenMeal(meal.id)}
+                  >
+                    <div className="meal-card-top">
+                      <strong>
+                        {MEAL_TYPE_LABELS[meal.mealType]}
+                        {meal.eatingOut ? ' · вне дома' : ''}
+                        {hasMg || hasFe ? (
+                          <span className="meal-med-tags">
+                            {hasMg ? ' · Mg' : ''}
+                            {hasFe ? ' · Fe' : ''}
+                          </span>
+                        ) : null}
+                      </strong>
+                      <span>{Math.round(meal.totals.kcal)} ккал</span>
+                    </div>
+                    <p className="meal-preview">{mealBodyText(meal.rawText)}</p>
+                    <p className="meal-bju">
+                      Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
+                      {Math.round(meal.totals.carbs)}
+                    </p>
+                  </button>
+                </li>
+              )
+            })}
           </ul>
         ) : (
           !adviceOpen && (

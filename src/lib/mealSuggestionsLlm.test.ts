@@ -160,6 +160,7 @@ describe('frequentMealPatterns', () => {
       steps: [],
       dayNotes: [],
       periodStarts: [],
+      medDays: [],
     } as AppData
 
     const patterns = frequentMealPatterns(data, '2026-07-20', 'dinner')
@@ -247,6 +248,7 @@ describe('frequentMealPatterns', () => {
       steps: [],
       dayNotes: [],
       periodStarts: [],
+      medDays: [],
     } as AppData
 
     // One-off single-line "с пюре" alone would not qualify; the two-item combo appears twice
@@ -284,6 +286,7 @@ describe('frequentFoodsForSlot', () => {
       steps: [],
       dayNotes: [],
       periodStarts: [],
+      medDays: [],
     } as AppData
     expect(frequentFoodsForSlot(data, '2026-07-20', 'breakfast')).toEqual(['Сырники'])
     expect(recentFoodTitles(data, '2026-07-20', 10, 'breakfast')).toEqual(['Сырники'])

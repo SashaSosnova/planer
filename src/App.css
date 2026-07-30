@@ -1639,6 +1639,7 @@
 
 .add-date-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
 }
@@ -2900,4 +2901,26 @@ button.food-row-open:focus-visible {
 
 .care-table tr.active td {
   background: var(--accent-soft);
+}
+
+.meal-med-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+}
+
+.meal-med-checks .check-row {
+  margin: 0;
+}
+
+.meal-med-time {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+.meal-med-tags {
+  color: var(--accent);
+  font-weight: 600;
 }

@@ -3,7 +3,9 @@ import type { MealType, MedDayEntry } from '../types'
 /** Dose keys stored on MedDayEntry (*At fields). */
 export type MedDoseKey = 'iron' | 'mgBreakfast' | 'mgLunch' | 'mgDinner'
 
-export const MED_DOSE_AT_FIELD: Record<MedDoseKey, keyof MedDayEntry> = {
+export type MedAtField = 'ironAt' | 'mgBreakfastAt' | 'mgLunchAt' | 'mgDinnerAt'
+
+export const MED_DOSE_AT_FIELD: Record<MedDoseKey, MedAtField> = {
   iron: 'ironAt',
   mgBreakfast: 'mgBreakfastAt',
   mgLunch: 'mgLunchAt',

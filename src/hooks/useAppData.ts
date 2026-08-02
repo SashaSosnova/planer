@@ -25,13 +25,26 @@ import {
   sanitizeMacros,
   sanitizeMealItems,
 } from '../lib/sanitize'
+import { isCareDayEmpty } from '../lib/careSchedule'
 import { isMedDayEmpty, MED_DOSE_AT_FIELD, type MedDoseKey } from '../lib/medRoutine'
+import {
+  buildSeedCareProducts,
+  hasSeededCareProducts,
+  markSeededCareProducts,
+  RETIRED_CARE_PRODUCT_IDS,
+  SEED_CARE_PRODUCTS_KEY,
+} from '../lib/seedCareProducts'
 import { parseTelegramImportBundle } from '../lib/tgImport'
 import { applyKnownWeightFixes } from '../lib/weightCleanup'
 import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/cloudSync'
 import { emptyAppData, loadLocalData, saveLocalData } from '../storage/localStore'
 import type {
   AppData,
+  CareDayEntry,
+  CareProduct,
+  CareSkinTags,
+  CareSlot,
+  CareWeekday,
   DayNote,
   FoodItem,
   MacroSet,
@@ -76,6 +89,8 @@ const CLOUD_KEYS: (keyof AppData)[] = [
   'dayNotes',
   'periodStarts',
   'medDays',
+  'careProducts',
+  'careDays',
 ]
 
 export function useAppData() {
@@ -93,6 +108,7 @@ export function useAppData() {
   /** One-shot personal catalog fill from meal history. */
   const foodsSeedStarted = useRef(false)
   const menuDishesSeedStarted = useRef(false)
+  const careProductsSeedStarted = useRef(false)
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -117,9 +133,11 @@ export function useAppData() {
         cloudHydrated.current = new Set(CLOUD_KEYS)
         foodsSeedStarted.current = false
         menuDishesSeedStarted.current = false
+        careProductsSeedStarted.current = false
         try {
           localStorage.removeItem(SEED_FOODS_FROM_MEALS_KEY)
           localStorage.removeItem(SEED_MENU_DISHES_KEY)
+          localStorage.removeItem(SEED_CARE_PRODUCTS_KEY)
         } catch {
           /* ignore */
         }
@@ -246,6 +264,11 @@ export function useAppData() {
       const per100g = sanitizeMacros(input.per100g)
       assertNonNegMacros(per100g)
       const place = input.place?.trim()
+      const portionRaw = input.portionGrams
+      const portionGrams =
+        portionRaw != null && Number.isFinite(portionRaw) && portionRaw > 0 && portionRaw <= 5000
+          ? Math.round(portionRaw * 10) / 10
+          : undefined
       const item: FoodItem = {
         id: input.id ?? newId(),
         name,
@@ -255,12 +278,14 @@ export function useAppData() {
         updatedAt: Date.now(),
         ...(input.recipe ? { recipe: input.recipe } : {}),
         ...(place ? { place } : {}),
+        ...(portionGrams != null ? { portionGrams } : {}),
       }
       if (useCloud && uid) {
-        // merge:true keeps stale place unless we explicitly clear it
+        // merge:true keeps stale fields unless we explicitly clear them
         await upsertDoc(uid, 'foods', item.id, {
           ...item,
           place: place || null,
+          portionGrams: portionGrams ?? null,
         })
       }
       persistLocal((prev) => ({
@@ -685,8 +710,221 @@ export function useAppData() {
     })()
   }, [ready, data.measurements, persistLocal, uid, useCloud])
 
+  // Seed / refresh canonical care products (v2: water + LRP foam, no CeraVe/Squalane).
+  useEffect(() => {
+    if (!ready) return
+    if (careProductsSeedStarted.current) return
+    if (hasSeededCareProducts() && (data.careProducts ?? []).length > 0) return
+    careProductsSeedStarted.current = true
+    const seeded = buildSeedCareProducts()
+    const seedIds = new Set(seeded.map((p) => p.id))
+    const retired = new Set<string>(RETIRED_CARE_PRODUCT_IDS)
+    markSeededCareProducts()
+    void (async () => {
+      const customKeep = (data.careProducts ?? []).filter(
+        (p) => !seedIds.has(p.id) && !retired.has(p.id),
+      )
+      const next = [...seeded, ...customKeep]
+      if (useCloud && uid) {
+        await Promise.all([
+          ...seeded.map((p) => upsertDoc(uid, 'careProducts', p.id, { ...p })),
+          ...[...retired].map((id) => removeDoc(uid, 'careProducts', id)),
+        ])
+      }
+      persistLocal((prev) => ({ ...prev, careProducts: next }))
+    })()
+  }, [ready, data.careProducts, persistLocal, uid, useCloud])
+
+  const saveCareProduct = useCallback(
+    async (
+      input: Omit<CareProduct, 'id' | 'createdAt' | 'updatedAt'> & {
+        id?: string
+        createdAt?: number
+      },
+    ) => {
+      const name = input.name.trim()
+      if (!name) throw new Error('Укажите название средства')
+      const slots = [...new Set(input.slots)].filter(
+        (s): s is CareSlot => s === 'morning' || s === 'evening',
+      )
+      if (!slots.length) throw new Error('Выберите утро и/или вечер')
+      let days: CareWeekday[] | 'every' = 'every'
+      if (input.days !== 'every') {
+        const list = [...new Set(input.days)].filter(
+          (d): d is CareWeekday =>
+            d === 'mon' ||
+            d === 'tue' ||
+            d === 'wed' ||
+            d === 'thu' ||
+            d === 'fri' ||
+            d === 'sat' ||
+            d === 'sun',
+        )
+        days = list.length ? list : 'every'
+      }
+      const how = input.how?.trim()
+      const now = Date.now()
+      const existing = input.id
+        ? (data.careProducts ?? []).find((p) => p.id === input.id)
+        : undefined
+      const item: CareProduct = {
+        id: input.id ?? newId(),
+        name,
+        slots,
+        days,
+        sortOrder: Number.isFinite(input.sortOrder) ? input.sortOrder : now,
+        createdAt: existing?.createdAt ?? input.createdAt ?? now,
+        updatedAt: now,
+        ...(how ? { how } : {}),
+        ...(input.archived ? { archived: true } : {}),
+      }
+      if (useCloud && uid) {
+        await upsertDoc(uid, 'careProducts', item.id, {
+          ...item,
+          how: how || null,
+          archived: item.archived === true ? true : null,
+        })
+      }
+      persistLocal((prev) => ({
+        ...prev,
+        careProducts: [
+          ...(prev.careProducts ?? []).filter((p) => p.id !== item.id),
+          item,
+        ],
+      }))
+      return item
+    },
+    [data.careProducts, persistLocal, uid, useCloud],
+  )
+
+  const archiveCareProduct = useCallback(
+    async (id: string, archived = true) => {
+      const existing = (data.careProducts ?? []).find((p) => p.id === id)
+      if (!existing) throw new Error('Средство не найдено')
+      return saveCareProduct({
+        ...existing,
+        archived: archived || undefined,
+      })
+    },
+    [data.careProducts, saveCareProduct],
+  )
+
+  const persistCareDay = useCallback(
+    async (draft: CareDayEntry) => {
+      const cleaned: CareDayEntry = {
+        id: draft.id,
+        date: draft.date,
+        morning: [...new Set(draft.morning)],
+        evening: [...new Set(draft.evening)],
+        createdAt: draft.createdAt,
+        updatedAt: Date.now(),
+        ...(draft.skin && Object.keys(draft.skin).length ? { skin: draft.skin } : {}),
+        ...(draft.note?.trim() ? { note: draft.note.trim() } : {}),
+      }
+
+      if (isCareDayEmpty(cleaned)) {
+        if (useCloud && uid) await removeDoc(uid, 'careDays', cleaned.id)
+        persistLocal((prev) => ({
+          ...prev,
+          careDays: (prev.careDays ?? []).filter((d) => d.date !== cleaned.date),
+        }))
+        return null
+      }
+
+      if (useCloud && uid) await upsertDoc(uid, 'careDays', cleaned.id, { ...cleaned })
+      persistLocal((prev) => ({
+        ...prev,
+        careDays: [
+          ...(prev.careDays ?? []).filter((d) => d.date !== cleaned.date),
+          cleaned,
+        ],
+      }))
+      return cleaned
+    },
+    [persistLocal, uid, useCloud],
+  )
+
+  const toggleCareProductCheck = useCallback(
+    async (input: { date: string; slot: CareSlot; productId: string }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Некорректная дата')
+      const existing = (data.careDays ?? []).find((d) => d.date === input.date)
+      const now = Date.now()
+      const morning = [...(existing?.morning ?? [])]
+      const evening = [...(existing?.evening ?? [])]
+      const list = input.slot === 'morning' ? morning : evening
+      const idx = list.indexOf(input.productId)
+      if (idx >= 0) list.splice(idx, 1)
+      else list.push(input.productId)
+
+      return persistCareDay({
+        id: existing?.id ?? newId(),
+        date: input.date,
+        morning,
+        evening,
+        skin: existing?.skin,
+        note: existing?.note,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      })
+    },
+    [data.careDays, persistCareDay],
+  )
+
+  const setCareSlotChecks = useCallback(
+    async (input: { date: string; slot: CareSlot; productIds: string[] }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Некорректная дата')
+      const existing = (data.careDays ?? []).find((d) => d.date === input.date)
+      const now = Date.now()
+      const ids = [...new Set(input.productIds)]
+      return persistCareDay({
+        id: existing?.id ?? newId(),
+        date: input.date,
+        morning: input.slot === 'morning' ? ids : [...(existing?.morning ?? [])],
+        evening: input.slot === 'evening' ? ids : [...(existing?.evening ?? [])],
+        skin: existing?.skin,
+        note: existing?.note,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      })
+    },
+    [data.careDays, persistCareDay],
+  )
+
+  const saveCareDaySkin = useCallback(
+    async (input: { date: string; skin?: CareSkinTags; note?: string | null }) => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Некорректная дата')
+      const existing = (data.careDays ?? []).find((d) => d.date === input.date)
+      const now = Date.now()
+      const note =
+        input.note === undefined ? existing?.note : input.note?.trim() || undefined
+      const skin =
+        input.skin === undefined
+          ? existing?.skin
+          : input.skin && Object.keys(input.skin).length
+            ? input.skin
+            : undefined
+      return persistCareDay({
+        id: existing?.id ?? newId(),
+        date: input.date,
+        morning: [...(existing?.morning ?? [])],
+        evening: [...(existing?.evening ?? [])],
+        ...(skin ? { skin } : {}),
+        ...(note ? { note } : {}),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      })
+    },
+    [data.careDays, persistCareDay],
+  )
+
   const resetLocal = useCallback(() => {
     const empty = emptyAppData()
+    careProductsSeedStarted.current = false
+    try {
+      localStorage.removeItem(SEED_CARE_PRODUCTS_KEY)
+    } catch {
+      /* ignore */
+    }
     saveLocalData(empty)
     setData(empty)
   }, [])
@@ -799,6 +1037,11 @@ export function useAppData() {
     saveMedCheck,
     savePeriodStart,
     removePeriodStart,
+    saveCareProduct,
+    archiveCareProduct,
+    toggleCareProductCheck,
+    setCareSlotChecks,
+    saveCareDaySkin,
     resetLocal,
     importDiaryBundle,
   }

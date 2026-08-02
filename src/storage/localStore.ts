@@ -18,6 +18,8 @@ export const emptyAppData = (): AppData => ({
   dayNotes: [],
   periodStarts: [],
   medDays: [],
+  careProducts: [],
+  careDays: [],
 })
 
 function wipeDemoIfNeeded(): void {

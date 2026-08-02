@@ -16,7 +16,7 @@ describe('careRoutine', () => {
   })
 
   it('has morning steps and evening for every weekday', () => {
-    expect(CARE_MORNING_STEPS.length).toBeGreaterThanOrEqual(5)
+    expect(CARE_MORNING_STEPS.length).toBeGreaterThanOrEqual(6)
     expect(CARE_RULES.length).toBeGreaterThanOrEqual(4)
     for (const day of Object.keys(CARE_EVENING_BY_DAY) as Array<keyof typeof CARE_EVENING_BY_DAY>) {
       expect(eveningForWeekday(day).steps.length).toBeGreaterThan(0)

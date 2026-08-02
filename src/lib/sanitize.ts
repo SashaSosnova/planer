@@ -2,6 +2,12 @@ import { coerceMealType } from './labels'
 import { round1, sumMacros } from './nutrition'
 import type {
   AppData,
+  CareDayEntry,
+  CareProduct,
+  CareSkinDelta,
+  CareSkinTags,
+  CareSlot,
+  CareWeekday,
   DayNote,
   FoodItem,
   MacroSet,
@@ -13,6 +19,7 @@ import type {
   StepsEntry,
   WeightEntry,
 } from '../types'
+import { hasCareSkin } from './careSchedule'
 
 export const DAY_NOTE_MAX = 280
 
@@ -86,6 +93,11 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
   const id = String(f.id ?? '')
   if (!name || !id) return null
   const place = String(f.place ?? '').trim()
+  const portionRaw = Number(f.portionGrams)
+  const portionGrams =
+    Number.isFinite(portionRaw) && portionRaw > 0 && portionRaw <= 5000
+      ? Math.round(portionRaw * 10) / 10
+      : undefined
   return {
     id,
     name,
@@ -95,6 +107,7 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
     recipe: f.recipe as FoodItem['recipe'],
     updatedAt: Number(f.updatedAt) || Date.now(),
     ...(place ? { place } : {}),
+    ...(portionGrams != null ? { portionGrams } : {}),
   }
 }
 
@@ -232,6 +245,119 @@ export function sanitizeMedDay(raw: unknown): MedDayEntry | null {
   }
 }
 
+const CARE_WEEKDAYS = new Set<CareWeekday>([
+  'mon',
+  'tue',
+  'wed',
+  'thu',
+  'fri',
+  'sat',
+  'sun',
+])
+const CARE_SLOTS = new Set<CareSlot>(['morning', 'evening'])
+const CARE_DELTAS = new Set<CareSkinDelta>(['+', '0', '-'])
+const CARE_SKIN_KEYS = ['tzoneOil', 'cheekDry', 'redness', 'tzoneTexture'] as const
+
+function sanitizeCareSlots(raw: unknown): CareSlot[] {
+  if (!Array.isArray(raw)) return []
+  const out: CareSlot[] = []
+  for (const item of raw) {
+    if (typeof item === 'string' && CARE_SLOTS.has(item as CareSlot) && !out.includes(item as CareSlot)) {
+      out.push(item as CareSlot)
+    }
+  }
+  return out
+}
+
+function sanitizeCareDaysField(raw: unknown): CareWeekday[] | 'every' {
+  if (raw === 'every') return 'every'
+  if (!Array.isArray(raw)) return 'every'
+  const out: CareWeekday[] = []
+  for (const item of raw) {
+    if (
+      typeof item === 'string' &&
+      CARE_WEEKDAYS.has(item as CareWeekday) &&
+      !out.includes(item as CareWeekday)
+    ) {
+      out.push(item as CareWeekday)
+    }
+  }
+  return out.length ? out : 'every'
+}
+
+function sanitizeIdList(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const item of raw) {
+    const id = typeof item === 'string' ? item.trim() : ''
+    if (id && !out.includes(id)) out.push(id)
+  }
+  return out
+}
+
+function sanitizeCareSkin(raw: unknown): CareSkinTags | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const s = raw as Record<string, unknown>
+  const skin: CareSkinTags = {}
+  for (const key of CARE_SKIN_KEYS) {
+    const v = s[key]
+    if (typeof v === 'string' && CARE_DELTAS.has(v as CareSkinDelta)) {
+      skin[key] = v as CareSkinDelta
+    }
+  }
+  return hasCareSkin(skin) ? skin : undefined
+}
+
+export function sanitizeCareProduct(raw: unknown): CareProduct | null {
+  if (!raw || typeof raw !== 'object') return null
+  const p = raw as Record<string, unknown>
+  const id = String(p.id ?? '').trim()
+  const name = String(p.name ?? '').trim()
+  if (!id || !name) return null
+  const slots = sanitizeCareSlots(p.slots)
+  if (!slots.length) return null
+  const how = typeof p.how === 'string' ? p.how.trim() : ''
+  const sortOrder = Number(p.sortOrder)
+  const createdAt = Number(p.createdAt) || Date.now()
+  const updatedAt = Number(p.updatedAt) || createdAt
+  return {
+    id,
+    name,
+    slots,
+    days: sanitizeCareDaysField(p.days),
+    sortOrder: Number.isFinite(sortOrder) ? sortOrder : 0,
+    createdAt,
+    updatedAt,
+    ...(how ? { how } : {}),
+    ...(p.archived === true ? { archived: true } : {}),
+  }
+}
+
+export function sanitizeCareDay(raw: unknown): CareDayEntry | null {
+  if (!raw || typeof raw !== 'object') return null
+  const m = raw as Record<string, unknown>
+  const id = String(m.id ?? '').trim()
+  const date = String(m.date ?? '')
+  if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
+  const morning = sanitizeIdList(m.morning)
+  const evening = sanitizeIdList(m.evening)
+  const skin = sanitizeCareSkin(m.skin)
+  const note = typeof m.note === 'string' ? m.note.trim() : ''
+  if (!morning.length && !evening.length && !skin && !note) return null
+  const createdAt = Number(m.createdAt) || Date.now()
+  const updatedAt = Number(m.updatedAt) || createdAt
+  return {
+    id,
+    date,
+    morning,
+    evening,
+    createdAt,
+    updatedAt,
+    ...(skin ? { skin } : {}),
+    ...(note ? { note: note.slice(0, DAY_NOTE_MAX) } : {}),
+  }
+}
+
 /** One entry per id, then one per date (keep newest). Returns dropped ids for cloud cleanup. */
 function dedupeByDate<T extends { id: string; date: string; createdAt: number }>(
   entries: T[],
@@ -290,6 +416,8 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
       dayNotes: [],
       periodStarts: [],
       medDays: [],
+      careProducts: [],
+      careDays: [],
     }
   }
   return {
@@ -314,6 +442,14 @@ export function sanitizeAppData(parsed: Partial<AppData> | null | undefined): Ap
       asArray(parsed.medDays)
         .map(sanitizeMedDay)
         .filter((m): m is MedDayEntry => m != null),
+    ).kept,
+    careProducts: asArray(parsed.careProducts)
+      .map(sanitizeCareProduct)
+      .filter((p): p is CareProduct => p != null),
+    careDays: dedupeByDate(
+      asArray(parsed.careDays)
+        .map(sanitizeCareDay)
+        .filter((d): d is CareDayEntry => d != null),
     ).kept,
   }
 }

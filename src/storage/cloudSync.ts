@@ -11,6 +11,8 @@ import { onAuthStateChanged, signInAnonymously, signOut, type User } from 'fireb
 import { getFirebaseAuth, getFirebaseDb, isFirebaseConfigured } from '../firebase'
 import { isAnonymousSuppressed } from '../lib/authGate'
 import {
+  sanitizeCareDay,
+  sanitizeCareProduct,
   sanitizeDayNote,
   sanitizeFood,
   sanitizeMeal,
@@ -23,6 +25,8 @@ import {
 import type { AppSettings } from '../lib/settings'
 import type {
   AppData,
+  CareDayEntry,
+  CareProduct,
   DayNote,
   FoodItem,
   Meal,
@@ -135,6 +139,10 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
     sanitizePeriodStart({ ...data, id }),
   )
   watch<MedDayEntry>('medDays', 'medDays', (id, data) => sanitizeMedDay({ ...data, id }))
+  watch<CareProduct>('careProducts', 'careProducts', (id, data) =>
+    sanitizeCareProduct({ ...data, id }),
+  )
+  watch<CareDayEntry>('careDays', 'careDays', (id, data) => sanitizeCareDay({ ...data, id }))
 
   return () => {
     for (const u of unsubs) u()

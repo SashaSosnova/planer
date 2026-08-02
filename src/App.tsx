@@ -65,6 +65,11 @@ export default function App() {
     saveMedCheck,
     savePeriodStart,
     removePeriodStart,
+    saveCareProduct,
+    archiveCareProduct,
+    toggleCareProductCheck,
+    setCareSlotChecks,
+    saveCareDaySkin,
   } = useAppData()
 
   const latestWeightKg = useMemo(() => {
@@ -364,7 +369,18 @@ export default function App() {
           />
         )}
 
-        {overlay?.type === 'care' && <CareScreen onBack={closeOverlay} />}
+        {overlay?.type === 'care' && (
+          <CareScreen
+            careProducts={data.careProducts ?? []}
+            careDays={data.careDays ?? []}
+            onBack={closeOverlay}
+            onToggleCheck={toggleCareProductCheck}
+            onSetSlotChecks={setCareSlotChecks}
+            onSaveSkin={saveCareDaySkin}
+            onSaveProduct={saveCareProduct}
+            onArchiveProduct={archiveCareProduct}
+          />
+        )}
       </main>
     </div>
   )

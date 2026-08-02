@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { defaultFoodGrams } from '../lib/foodPortion'
 import { foodVariants } from '../lib/foodVariants'
 import { round1, scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, MealItem, ParsedMealDraft } from '../types'
@@ -19,12 +20,13 @@ export function emptyMealItem(): MealItem {
   }
 }
 
-export function mealItemFromFood(food: FoodItem, grams = 100): MealItem {
+export function mealItemFromFood(food: FoodItem, grams?: number): MealItem {
+  const g = grams != null && grams > 0 ? grams : defaultFoodGrams(food)
   return {
     name: food.name,
-    grams,
+    grams: g,
     foodId: food.id,
-    ...scalePer100g(food.per100g, grams),
+    ...scalePer100g(food.per100g, g),
     source: 'library',
   }
 }
@@ -538,7 +540,11 @@ export function MealDraftEditor({
                       <strong>{food.name}</strong>
                       <span className="muted small">
                         {Math.round(food.per100g.kcal)} ккал / 100 г
+                        {food.portionGrams != null && food.portionGrams > 0
+                          ? ` · порция ${food.portionGrams} г → ${Math.round(scalePer100g(food.per100g, food.portionGrams).kcal)} ккал`
+                          : ''}
                         {food.kind === 'dish' ? ' · блюдо' : ''}
+                        {food.place ? ` · ${food.place}` : ''}
                       </span>
                     </button>
                   </li>

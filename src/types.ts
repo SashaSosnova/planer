@@ -52,6 +52,11 @@ export type FoodItem = {
   recipe?: RecipeSnapshot
   /** Кафе / магазин / сеть, откуда продукт (чип в справочнике) */
   place?: string
+  /**
+   * Типичная порция в граммах. В справочнике КБЖУ хранятся на 100 г;
+   * порция подставляется при добавлении в приём (иначе 100 г).
+   */
+  portionGrams?: number
 }
 
 export type MealItemSource = 'library' | 'estimate'
@@ -137,6 +142,52 @@ export type MedDayEntry = {
   updatedAt: number
 }
 
+export type CareWeekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun'
+
+export type CareSlot = 'morning' | 'evening'
+
+/** Daily skin delta vs yesterday: better / same / worse */
+export type CareSkinDelta = '+' | '0' | '-'
+
+export type CareSkinTags = {
+  /** Жирность Т-зоны: менее жирная? */
+  tzoneOil?: CareSkinDelta
+  /** Сухость щёк: меньше стянутости? */
+  cheekDry?: CareSkinDelta
+  /** Купероз / краснота: светлее? */
+  redness?: CareSkinDelta
+  /** Рельеф Т-зоны: глаже / меньше комедонов? */
+  tzoneTexture?: CareSkinDelta
+}
+
+/** User-editable skincare product in the routine */
+export type CareProduct = {
+  id: string
+  name: string
+  slots: CareSlot[]
+  /** Which weekdays the product is scheduled; `every` = all days */
+  days: CareWeekday[] | 'every'
+  how?: string
+  sortOrder: number
+  archived?: boolean
+  createdAt: number
+  updatedAt: number
+}
+
+/** Daily care check-ins + optional skin tags */
+export type CareDayEntry = {
+  id: string
+  date: string
+  /** Product ids checked in the morning */
+  morning: string[]
+  /** Product ids checked in the evening */
+  evening: string[]
+  skin?: CareSkinTags
+  note?: string
+  createdAt: number
+  updatedAt: number
+}
+
 export type FoodRef = {
   id: string
   name: string
@@ -167,4 +218,6 @@ export type AppData = {
   dayNotes: DayNote[]
   periodStarts: PeriodStart[]
   medDays: MedDayEntry[]
+  careProducts: CareProduct[]
+  careDays: CareDayEntry[]
 }

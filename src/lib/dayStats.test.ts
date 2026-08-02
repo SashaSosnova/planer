@@ -24,6 +24,8 @@ const empty: AppData = {
   dayNotes: [],
   periodStarts: [],
   medDays: [],
+  careProducts: [],
+  careDays: [],
 }
 
 describe('statsForDate', () => {

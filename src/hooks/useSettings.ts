@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { calcDailyKcalGoal, calcMaintainKcalGoal, type BodyProfile } from '../lib/calorieGoal'
 import { calcProteinGoal } from '../lib/macroGoals'
-import { applyTasteFeedback, canonicalMealKey } from '../lib/mealSuggestions'
 import {
   getSettingsOwnerUid,
   loadSettings,
@@ -13,7 +12,6 @@ import {
   saveSettings,
   setSettingsOwnerUid,
   type AppSettings,
-  type TastePrefs,
 } from '../lib/settings'
 import { subscribeSettings, upsertSettings } from '../storage/cloudSync'
 
@@ -137,44 +135,6 @@ export function useSettings(latestWeightKg?: number, uid?: string | null) {
     [commit],
   )
 
-  const rateMealIdea = useCallback(
-    (title: string, vote: 'like' | 'dislike') => {
-      const tastePrefs: TastePrefs = applyTasteFeedback(
-        loadSettings().tastePrefs,
-        title,
-        vote,
-      )
-      return commit(saveSettings({ tastePrefs }))
-    },
-    [commit],
-  )
-
-  const clearTasteVote = useCallback(
-    (title: string, list: 'likes' | 'dislikes' | 'canCook') => {
-      const key = canonicalMealKey(title)
-      const prev = loadSettings().tastePrefs
-      const tastePrefs: TastePrefs = {
-        ...prev,
-        [list]: prev[list].filter((x) => canonicalMealKey(x) !== key),
-      }
-      return commit(saveSettings({ tastePrefs }))
-    },
-    [commit],
-  )
-
-  const addCanCook = useCallback(
-    (title: string) => {
-      const t = title.trim()
-      if (!t) return loadSettings()
-      const prev = loadSettings().tastePrefs
-      if (prev.canCook.some((x) => canonicalMealKey(x) === canonicalMealKey(t))) {
-        return loadSettings()
-      }
-      return commit(saveSettings({ tastePrefs: { ...prev, canCook: [...prev.canCook, t] } }))
-    },
-    [commit],
-  )
-
   return {
     settings,
     dailyKcalGoal,
@@ -185,12 +145,8 @@ export function useSettings(latestWeightKg?: number, uid?: string | null) {
     cycleLengthDays: settings.cycleLengthDays,
     periodLengthDays: settings.periodLengthDays,
     cycleConfigured: settings.cycleConfigured,
-    tastePrefs: settings.tastePrefs,
     saveProfile,
     syncGoalFromWeight,
     saveTargets,
-    rateMealIdea,
-    clearTasteVote,
-    addCanCook,
   }
 }

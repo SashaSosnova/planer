@@ -537,7 +537,10 @@ export function MealDraftEditor({
                 {filteredFoods.map((food) => (
                   <li key={food.id}>
                     <button type="button" className="draft-food-option" onClick={() => pickFood(food)}>
-                      <strong>{food.name}</strong>
+                      <span className="food-row-title">
+                        <strong>{food.name}</strong>
+                        {food.brand && <span className="brand-chip">{food.brand}</span>}
+                      </span>
                       <span className="muted small">
                         {Math.round(food.per100g.kcal)} ккал / 100 г
                         {food.portionGrams != null && food.portionGrams > 0

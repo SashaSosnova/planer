@@ -68,19 +68,6 @@ export function MeasuresMenuIcon({ size = 24 }: IconProps) {
   )
 }
 
-export function TastesMenuIcon({ size = 24 }: IconProps) {
-  return (
-    <svg {...svgProps(size)}>
-      <path
-        d="M12 19.2S5.5 15.2 5.5 10.4A3.6 3.6 0 0 1 12 8.6a3.6 3.6 0 0 1 6.5 1.8c0 4.8-6.5 8.8-6.5 8.8z"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 export function LibraryMenuIcon({ size = 24 }: IconProps) {
   return (
     <svg {...svgProps(size)}>

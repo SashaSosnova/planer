@@ -182,7 +182,7 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setBusy(true)
     setError(null)
     try {
-      await onSave(recipeToFoodItem(draft, editId ?? undefined))
+      await onSave(recipeToFoodItem(draft, editId ?? undefined, recipeText))
       backToList()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения')

@@ -1,12 +1,17 @@
 import type { MacroSet } from '../types'
 import { compressImageFile } from './compressImage'
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
+import { per100FromPortionMacros } from './foodPortion'
 import { recognizeImageText } from './ocrImage'
 import { sanitizeMacros } from './sanitize'
 
 export type FoodLabelCandidate = {
   name: string
   per100g: MacroSet
+  /** Typical serving size from label/menu, if known */
+  portionGrams?: number
+  /** Brand / марка on the package */
+  brand?: string
   note?: string
 }
 
@@ -21,7 +26,13 @@ type LlmFoodLabelResult = {
   place?: string | null
   items?: Array<{
     name?: string
+    /** Always preferred as stored basis after normalize */
     per100g?: Partial<MacroSet> | null
+    /** Macros as printed (per 100 g or per portion) */
+    macros?: Partial<MacroSet> | null
+    macrosBasis?: 'per100' | 'portion' | null
+    portionGrams?: number | null
+    brand?: string | null
     note?: string | null
   }>
 }
@@ -32,33 +43,89 @@ export function isFoodPhotoParseConfigured(): boolean {
 
 export function buildParseFoodLabelPrompt(ocrText: string, placeHint?: string): string {
   const hint = placeHint?.trim()
-  return `Ты помощник трекера калорий. Ниже текст с фото этикетки продукта или меню кафе (OCR, возможны ошибки).
+  return `Ты помощник трекера калорий. Ниже текст с фото этикетки, меню или экрана приложения доставки (OCR, возможны ошибки и перепутанный порядок строк).
 
 Верни ТОЛЬКО JSON без markdown:
 {
   "place": "название кафе/магазина/сети или null",
   "items": [
     {
-      "name": "короткое название по-русски",
-      "per100g": { "kcal": число, "protein": число, "fat": число, "carbs": число },
+      "name": "короткое название по-русски (без марки)",
+      "brand": "марка/бренд или null",
+      "macros": { "kcal": число, "protein": число, "fat": число, "carbs": число },
+      "macrosBasis": "per100" | "portion",
+      "portionGrams": число или null,
       "note": "кратко или null"
     }
   ]
 }
 
 Правила:
-- Этикетка: читай КБЖУ на 100 г. Если указано только на порцию и есть граммы порции — пересчитай на 100 г.
-- Меню: вытащи позиции еды с ккал. Если нет БЖУ — оцени реалистично или поставь 0 с note. Если нет граммов — типичная порция блюда и нормализуй в per100g (не оставляй ккал «на блюдо» как будто на 100 г без пересчёта).
-- place: логотип/шапка (Mechtai, Пятёрочка, ВкусВилл…). Не выдумывай сеть.
-- Отбрасывай цены без еды, акции, адреса, Wi‑Fi, часы работы.
+- КБЖУ брать ТОЛЬКО рядом с подписями «Ккал» / «Белки» / «Жиры» / «Углеводы» (или kcal/protein/fat/carbs).
+- ЗАПРЕЩЕНО брать цену как ккал: числа с «₽», «руб», «рублей», вида 339,99 / 339.99 / «339 99», кнопки «В корзину». OCR часто читает 339,99 ₽ как 339.4 — это НЕ калории.
+- Экран приложения: переключатель «Всего» | «На 100 г».
+  • Если активно/выбрано «На 100 г» → macrosBasis="per100" ОБЯЗАТЕЛЬНО. Числа под Ккал/Белки/Жиры/Углеводы уже на 100 г — НЕ делить на вес.
+  • Если активно «Всего» → macrosBasis="portion".
+  • Поле «Вес 274 г» / «220 г» в кнопке — это только portionGrams. Само по себе НЕ делает macrosBasis="portion".
+  Ошибка: взять 263/10/16/19 (на 100 г) и пересчитать через вес 274 → получится ~96/3.6/5.8/6.9 — так делать НЕЛЬЗЯ.
+- Таблица «НА 100Г | БЛЮДО» (две колонки): бери ВСЕ четыре числа из ОДНОЙ колонки.
+  • Предпочтительно колонка «НА 100Г» → macrosBasis="per100", portionGrams из веса блюда (220 г).
+  • Либо вся колонка «БЛЮДО» → macrosBasis="portion", portionGrams=вес.
+  ЗАПРЕЩЕНО миксовать: ккал из «НА 100Г» (165) + белки из «БЛЮДО» (25) + жиры/углеводы из «НА 100Г» → 165 25 4 20 — НЕПРАВИЛЬНО.
+  Верно на 100 г: 165 / 11 / 4 / 20; на блюдо: 364 / 25 / 10 / 44.
+- Этикетка: КБЖУ на 100 г → per100; только на порцию + граммы → portion.
+- Меню без веса: macrosBasis="portion", portionGrams типичный (суп ~300, салат ~250, бургер/паста ~300–350, напиток ~250, десерт ~120).
+- Согласованность: kcal ≈ белки×4 + жиры×9 + углеводы×4 (допуск большой, но 339 ккал при БЖУ 3/6/7 — явная ошибка, ищи другие цифры).
+- place: магазин/кафе/сеть (Пятёрочка, Бургер Кинг…) — не марка продукта. Не выдумывай.
+- brand: марка на упаковке (Lay's, Простоквашино, Domestos…) отдельно от name. В name не дублируй марку, если вынес в brand.
+- Отбрасывай акции, адреса, Wi‑Fi, баллы лояльности, «+33», короны.
 - 1–30 позиций; пустой items только если еды реально нет.
-- kcal на 100 г обычно 5–900; protein/fat/carbs ≥ 0.
 
 ${hint ? `Подсказка места от пользователя (используй, если похоже на фото): ${hint}\n` : ''}
 OCR-текст:
 """
 ${ocrText.slice(0, 6000)}
 """`
+}
+
+function clampPortionGrams(raw: unknown): number | undefined {
+  const n = typeof raw === 'number' ? raw : Number(raw)
+  if (!Number.isFinite(n) || n <= 0 || n > 5000) return undefined
+  return Math.round(n * 10) / 10
+}
+
+/**
+ * Model often sets macrosBasis=portion just because «Вес» is present,
+ * while the numbers are already per 100 g (BK toggle «На 100 г»).
+ */
+export function likelyMisTaggedPortionBasis(
+  entered: MacroSet,
+  portionGrams: number,
+): boolean {
+  if (!(portionGrams >= 200)) return false
+  if (entered.kcal < 200 || entered.kcal > 420) return false
+  const converted = per100FromPortionMacros(entered, portionGrams)
+  if (converted.kcal >= entered.kcal * 0.55) return false
+  const bj = entered.protein + entered.fat + entered.carbs
+  // Real per-100g burger-like density, not a tiny seasoning line
+  return bj >= 30 && macrosLookPlausible(entered)
+}
+
+/** Reject price-as-kcal, mixed columns, and nonsense BJU vs kcal (Atwater). */
+export function macrosLookPlausible(m: MacroSet): boolean {
+  if (m.kcal < 5 || m.kcal > 950) return false
+  if (m.protein > 100 || m.fat > 100 || m.carbs > 120) return false
+  const fromMacro = m.protein * 4 + m.fat * 9 + m.carbs * 4
+  // Price OCR: huge kcal, tiny macros (339 / 3.6 / 5.8 / 6.9)
+  if (fromMacro < 15 && m.kcal > 120) return false
+  if (m.kcal > fromMacro * 2.2 + 80) return false
+  if (fromMacro > 20 && m.kcal < fromMacro * 0.35) return false
+  // Mixed «НА 100Г» kcal with «БЛЮДО» protein (165 / 25 / 4 / 20 → ~216 ккал из БЖУ)
+  const gap = Math.abs(m.kcal - fromMacro)
+  if (gap > Math.max(50, m.kcal * 0.2)) return false
+  // Prices often end up as x.4 / x.9 from «,99»
+  if (m.kcal > 150 && m.kcal % 1 > 0.05 && fromMacro < m.kcal * 0.45) return false
+  return true
 }
 
 /** Normalize / validate LLM JSON into catalog candidates. */
@@ -74,11 +141,48 @@ export function normalizeFoodLabelResult(
   for (const raw of parsed.items ?? []) {
     const name = String(raw?.name ?? '').trim()
     if (!name || name.length > 80) continue
-    const per100g = sanitizeMacros(raw?.per100g)
-    if (per100g.kcal < 5 || per100g.kcal > 950) continue
-    if (per100g.protein > 100 || per100g.fat > 100 || per100g.carbs > 120) continue
+
+    const portionGrams = clampPortionGrams(raw?.portionGrams)
+    const basis =
+      raw?.macrosBasis === 'portion' || raw?.macrosBasis === 'per100'
+        ? raw.macrosBasis
+        : null
+    const macrosSource = raw?.macros ?? raw?.per100g
+    const entered = sanitizeMacros(macrosSource)
+
+    let effectiveBasis = basis
+    if (
+      effectiveBasis === 'portion' &&
+      portionGrams != null &&
+      likelyMisTaggedPortionBasis(entered, portionGrams)
+    ) {
+      // «На 100 г» + «Вес» — keep macros as per100g, keep portionGrams for default serving
+      effectiveBasis = 'per100'
+    }
+
+    let per100g: MacroSet
+    if (effectiveBasis === 'portion' && portionGrams != null) {
+      per100g = per100FromPortionMacros(entered, portionGrams)
+    } else if (raw?.per100g && effectiveBasis !== 'portion') {
+      per100g = sanitizeMacros(raw.per100g)
+    } else if (raw?.per100g && macrosLookPlausible(sanitizeMacros(raw.per100g))) {
+      per100g = sanitizeMacros(raw.per100g)
+    } else {
+      per100g = entered
+    }
+
+    // Also reject when the *entered* macros are a price even if scaled per100 slips through.
+    if (!macrosLookPlausible(entered) && !macrosLookPlausible(per100g)) continue
+    if (!macrosLookPlausible(per100g)) continue
     const note = String(raw?.note ?? '').trim() || undefined
-    items.push({ name, per100g, ...(note ? { note } : {}) })
+    const brand = String(raw?.brand ?? '').trim() || undefined
+    items.push({
+      name,
+      per100g,
+      ...(portionGrams != null ? { portionGrams } : {}),
+      ...(brand && brand.length <= 60 ? { brand } : {}),
+      ...(note ? { note } : {}),
+    })
   }
 
   return { ...(place ? { place } : {}), items }

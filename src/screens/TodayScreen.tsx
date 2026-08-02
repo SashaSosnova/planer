@@ -10,50 +10,21 @@ import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS, mealBodyText } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { AppsGridIcon } from '../components/AppsGridIcon'
-import { CloseIcon } from '../components/CloseIcon'
-import { LightbulbIcon } from '../components/LightbulbIcon'
 import {
   CareMenuIcon,
   DiaryMenuIcon,
   HistoryMenuIcon,
   LibraryMenuIcon,
   MeasuresMenuIcon,
-  TastesMenuIcon,
 } from '../components/MoreMenuIcons'
 import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
 import { PlusIcon } from '../components/PlusIcon'
-import { LikeIcon, DislikeIcon } from '../components/VoteIcons'
-import {
-  applyTasteFeedback,
-  canonicalMealKey,
-  formatIdeaMacros,
-  mealSlotForHour,
-  type MealSlot,
-  type MealSuggestion,
-} from '../lib/mealSuggestions'
-import { getMealIdeas } from '../lib/mealSuggestionsLlm'
 import { DAY_NOTE_MAX } from '../lib/sanitize'
-import type { TastePrefs } from '../lib/settings'
 import { buildProgressMotivator } from '../lib/progressMotivator'
 import { forecastFromAppData } from '../lib/weightForecast'
 import type { AppData, DayNote, MealType } from '../types'
 
-const ADVICE_SLOTS: MealSlot[] = ['breakfast', 'lunch', 'dinner', 'snack']
-
 type PromptKind = 'weight' | 'steps' | null
-
-function dedupeAdviceIdeas(list: MealSuggestion[]): MealSuggestion[] {
-  const seen = new Set<string>()
-  const out: MealSuggestion[] = []
-  for (const item of list) {
-    const key = canonicalMealKey(item.title)
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    out.push(item)
-  }
-  return out
-}
-
 
 type Props = {
   data: AppData
@@ -73,15 +44,12 @@ type Props = {
   onOpenDiary: () => void
   onOpenHistory: () => void
   onOpenMeasures: () => void
-  onOpenTastes: () => void
   onOpenLibrary: () => void
   onOpenCare: () => void
   /** Register nested back handler; return unregister. */
   registerBackHandler?: (fn: () => boolean) => () => void
   /** When false (overlay open), Today does not own the back stack. */
   backEnabled?: boolean
-  tastePrefs: TastePrefs
-  onRateMealIdea: (title: string, vote: 'like' | 'dislike') => void
   onSaveWeight: (date: string, kg: number) => Promise<unknown>
   onSaveSteps: (date: string, count: number) => Promise<unknown>
   onSaveDayNote: (input: {
@@ -114,13 +82,10 @@ export function TodayScreen({
   onOpenDiary,
   onOpenHistory,
   onOpenMeasures,
-  onOpenTastes,
   onOpenLibrary,
   onOpenCare,
   registerBackHandler,
   backEnabled = true,
-  tastePrefs,
-  onRateMealIdea,
   onSaveWeight,
   onSaveSteps,
   onSaveDayNote,
@@ -138,34 +103,11 @@ export function TodayScreen({
   const [noteDraft, setNoteDraft] = useState(savedNote)
   const [noteSaving, setNoteSaving] = useState(false)
   const [noteFocused, setNoteFocused] = useState(false)
-  const [adviceOpen, setAdviceOpen] = useState(false)
-  const [adviceSlot, setAdviceSlot] = useState<MealSlot>(() =>
-    mealSlotForHour(new Date().getHours()),
-  )
-  const [suggestions, setSuggestions] = useState<MealSuggestion[]>([])
-  const [ideasLoading, setIdeasLoading] = useState(false)
-  const [openIdea, setOpenIdea] = useState<MealSuggestion | null>(null)
   const moreOpenRef = useRef(moreOpen)
   moreOpenRef.current = moreOpen
-  const adviceOpenRef = useRef(adviceOpen)
-  adviceOpenRef.current = adviceOpen
-  const openIdeaRef = useRef(openIdea)
-  openIdeaRef.current = openIdea
   const promptRef = useRef(prompt)
   promptRef.current = prompt
   const moreRef = useRef<HTMLDivElement | null>(null)
-  /** Session for which a full list was successfully applied (reopen keeps it). */
-  const adviceReadySessionRef = useRef<string | null>(null)
-  /** Bumps to ignore stale getMealIdeas results (load vs dislike race). */
-  const adviceReqRef = useRef(0)
-  const dataRef = useRef(data)
-  dataRef.current = data
-  const tastePrefsRef = useRef(tastePrefs)
-  tastePrefsRef.current = tastePrefs
-  const dailyKcalGoalRef = useRef(dailyKcalGoal)
-  dailyKcalGoalRef.current = dailyKcalGoal
-  const suggestionsRef = useRef(suggestions)
-  suggestionsRef.current = suggestions
 
   useEffect(() => {
     setNoteDraft(savedNote)
@@ -177,14 +119,6 @@ export function TodayScreen({
       if (promptRef.current) {
         setPrompt(null)
         setPromptError(null)
-        return true
-      }
-      if (openIdeaRef.current) {
-        setOpenIdea(null)
-        return true
-      }
-      if (adviceOpenRef.current) {
-        setAdviceOpen(false)
         return true
       }
       if (!moreOpenRef.current) return false
@@ -274,81 +208,6 @@ export function TodayScreen({
     [data, dailyKcalGoal, cycleLengthDays, periodLengthDays, date],
   )
   const cycleTip = cycleInsights.tip
-
-  const likedSet = useMemo(
-    () => new Set(tastePrefs.likes.map((x) => canonicalMealKey(x))),
-    [tastePrefs.likes],
-  )
-
-  useEffect(() => {
-    if (!adviceOpen) return
-    const session = `${date}|${adviceSlot}`
-    if (
-      adviceReadySessionRef.current === session &&
-      suggestionsRef.current.length > 0
-    ) {
-      return
-    }
-    const req = ++adviceReqRef.current
-    let cancelled = false
-    const prefs = tastePrefsRef.current
-    // Wait for getMealIdeas (LLM or local fallback) — no flash of a temporary list.
-    setSuggestions([])
-    setIdeasLoading(true)
-    void getMealIdeas({
-      data: dataRef.current,
-      prefs,
-      slot: adviceSlot,
-      kcalGoal: dailyKcalGoalRef.current,
-      limit: 3,
-    })
-      .then((list) => {
-        if (cancelled || req !== adviceReqRef.current) return
-        setSuggestions(dedupeAdviceIdeas(list).slice(0, 3))
-        adviceReadySessionRef.current = session
-      })
-      .finally(() => {
-        if (!cancelled && req === adviceReqRef.current) setIdeasLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [adviceOpen, adviceSlot, date])
-
-  const handleDislikeIdea = (idea: MealSuggestion) => {
-    const key = canonicalMealKey(idea.title)
-    onRateMealIdea(idea.title, 'dislike')
-    // Invalidate in-flight initial load so it cannot overwrite / append later.
-    const req = ++adviceReqRef.current
-    setIdeasLoading(false)
-    const excludeTitles = suggestionsRef.current.map((x) => x.title)
-    setSuggestions((prev) =>
-      dedupeAdviceIdeas(prev.filter((x) => canonicalMealKey(x.title) !== key)).slice(0, 3),
-    )
-    const prefs = applyTasteFeedback(tastePrefsRef.current, idea.title, 'dislike')
-    void getMealIdeas({
-      data: dataRef.current,
-      prefs,
-      slot: adviceSlot,
-      kcalGoal: dailyKcalGoalRef.current,
-      limit: 1,
-      excludeTitles,
-      skipCache: true,
-    }).then((list) => {
-      if (req !== adviceReqRef.current) return
-      const one = list[0]
-      if (!one) return
-      const oneKey = canonicalMealKey(one.title)
-      setSuggestions((cur) => {
-        if (cur.length >= 3) return cur.slice(0, 3)
-        if (cur.some((x) => canonicalMealKey(x.title) === oneKey)) return cur.slice(0, 3)
-        return dedupeAdviceIdeas([
-          ...cur,
-          { ...one, id: `${one.id}-r${Date.now()}` },
-        ]).slice(0, 3)
-      })
-    })
-  }
 
   const dayPrompt = useMemo(() => dayPromptForDate(date), [date])
   const noteAnswered = Boolean(savedNote.trim())
@@ -453,19 +312,28 @@ export function TodayScreen({
                     type="button"
                     role="menuitem"
                     className="more-grid-item"
-                    onClick={() => runMore(onOpenDiary)}
+                    onClick={() => runMore(onOpenHistory)}
                   >
-                    <DiaryMenuIcon />
-                    <span>Дневник</span>
+                    <HistoryMenuIcon />
+                    <span>История</span>
                   </button>
                   <button
                     type="button"
                     role="menuitem"
                     className="more-grid-item"
-                    onClick={() => runMore(onOpenHistory)}
+                    onClick={() => runMore(onOpenCare)}
                   >
-                    <HistoryMenuIcon />
-                    <span>История</span>
+                    <CareMenuIcon />
+                    <span>Уход</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="more-grid-item"
+                    onClick={() => runMore(onOpenDiary)}
+                  >
+                    <DiaryMenuIcon />
+                    <span>Дневник</span>
                   </button>
                   <button
                     type="button"
@@ -480,28 +348,10 @@ export function TodayScreen({
                     type="button"
                     role="menuitem"
                     className="more-grid-item"
-                    onClick={() => runMore(onOpenTastes)}
-                  >
-                    <TastesMenuIcon />
-                    <span>Вкусы</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
                     onClick={() => runMore(onOpenLibrary)}
                   >
                     <LibraryMenuIcon />
                     <span>Справочник</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
-                    onClick={() => runMore(onOpenCare)}
-                  >
-                    <CareMenuIcon />
-                    <span>Уход</span>
                   </button>
                 </div>
               </div>
@@ -652,77 +502,6 @@ export function TodayScreen({
       )}
 
       <section className="meal-section" aria-label="Приёмы пищи">
-        <div className="meal-toolbar">
-          <button
-            type="button"
-            className={`meal-ideas-btn${adviceOpen ? ' active' : ''}`}
-            onClick={() => setAdviceOpen((v) => !v)}
-            aria-label={adviceOpen ? 'Скрыть идеи' : 'Идеи для приёма'}
-            aria-pressed={adviceOpen}
-          >
-            <LightbulbIcon size={18} />
-            <span>{adviceOpen ? 'Скрыть идеи' : 'Идеи'}</span>
-          </button>
-        </div>
-
-        {adviceOpen && (
-          <div className="meal-advice">
-            <div className="meal-type-chips" role="group" aria-label="На какой приём совет">
-              {ADVICE_SLOTS.map((slot) => (
-                <button
-                  key={slot}
-                  type="button"
-                  className={`meal-type-chip${adviceSlot === slot ? ' active' : ''}`}
-                  onClick={() => setAdviceSlot(slot)}
-                >
-                  {MEAL_TYPE_LABELS[slot]}
-                </button>
-              ))}
-            </div>
-            {ideasLoading && suggestions.length === 0 ? (
-              <p className="muted small">Думаю…</p>
-            ) : (
-              <ul className="meal-ideas">
-                {suggestions.map((s) => {
-                  const liked = likedSet.has(canonicalMealKey(s.title))
-                  return (
-                    <li key={s.id} className="meal-idea-row">
-                      <button
-                        type="button"
-                        className="meal-idea-main"
-                        onClick={() => setOpenIdea(s)}
-                      >
-                        <span className="meal-idea-title">{s.title}</span>
-                        <span className="meal-idea-macros muted small">{formatIdeaMacros(s)}</span>
-                      </button>
-                      <div className="meal-idea-votes">
-                        <button
-                          type="button"
-                          className={`vote-btn${liked ? ' active' : ''}`}
-                          aria-label="Нравится"
-                          title="Нравится"
-                          onClick={() => onRateMealIdea(s.title, 'like')}
-                        >
-                          <LikeIcon size={17} />
-                        </button>
-                        <button
-                          type="button"
-                          className="vote-btn"
-                          aria-label="Не предлагать"
-                          title="Не предлагать"
-                          onClick={() => handleDislikeIdea(s)}
-                        >
-                          <DislikeIcon size={17} />
-                        </button>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
-            )}
-          </div>
-        )}
-
         {today.meals.length > 0 ? (
           <ul className="meal-list">
             {today.meals.map((meal) => {
@@ -760,13 +539,11 @@ export function TodayScreen({
             })}
           </ul>
         ) : (
-          !adviceOpen && (
-            <p className="muted small meal-section-empty">Пока пусто — идеи или +</p>
-          )
+          <p className="muted small meal-section-empty">Пока пусто — нажмите +</p>
         )}
       </section>
 
-      {!openIdea && !prompt && (
+      {!prompt && (
         <button
           type="button"
           className="meal-fab"
@@ -776,61 +553,6 @@ export function TodayScreen({
         >
           <PlusIcon size={26} />
         </button>
-      )}
-
-      {openIdea && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setOpenIdea(null)}>
-          <div
-            className="modal-card"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="meal-idea-title"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="modal-card-head">
-              <h2 id="meal-idea-title" className="subhead">
-                {openIdea.title}
-              </h2>
-              <button
-                type="button"
-                className="icon-btn sm"
-                aria-label="Закрыть"
-                title="Закрыть"
-                onClick={() => setOpenIdea(null)}
-              >
-                <CloseIcon size={18} />
-              </button>
-            </div>
-            <p className="meal-bju">{formatIdeaMacros(openIdea)}</p>
-            {openIdea.ingredients ? (
-              <p className="meal-idea-detail-block">
-                <span className="muted small">Состав</span>
-                <br />
-                {openIdea.ingredients}
-              </p>
-            ) : null}
-            {openIdea.recipe ? (
-              <p className="meal-idea-detail-block">
-                <span className="muted small">Как сделать</span>
-                <br />
-                {openIdea.recipe}
-              </p>
-            ) : null}
-            <div className="btn-row">
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => {
-                  const composition = openIdea.ingredients.trim() || openIdea.title
-                  setOpenIdea(null)
-                  onAddMeal({ text: composition, mealType: adviceSlot })
-                }}
-              >
-                В расчёт
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {prompt === 'weight' && (

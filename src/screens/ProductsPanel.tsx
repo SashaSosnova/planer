@@ -38,6 +38,9 @@ type ReviewRow = FoodLabelCandidate & {
   key: string
   selected: boolean
   kbju: string
+  /** Editable portion grams as text */
+  portion: string
+  brand: string
 }
 
 type Props = {
@@ -51,6 +54,7 @@ type FormFieldsProps = {
   name: string
   kbju: string
   place: string
+  brand: string
   portion: string
   kbjuBasis: KbjuBasis
   busy: boolean
@@ -63,6 +67,7 @@ type FormFieldsProps = {
   onName: (v: string) => void
   onKbju: (v: string) => void
   onPlace: (v: string) => void
+  onBrand: (v: string) => void
   onPortion: (v: string) => void
   onKbjuBasis: (v: KbjuBasis) => void
   onSubmit: () => void
@@ -80,6 +85,7 @@ function ProductFormCard({
   name,
   kbju,
   place,
+  brand,
   portion,
   kbjuBasis,
   busy,
@@ -92,6 +98,7 @@ function ProductFormCard({
   onName,
   onKbju,
   onPlace,
+  onBrand,
   onPortion,
   onKbjuBasis,
   onSubmit,
@@ -125,6 +132,15 @@ function ProductFormCard({
           onChange={(e) => onName(e.target.value)}
           placeholder="Название"
           aria-label="Название"
+        />
+      </label>
+      <label className="field">
+        <input
+          value={brand}
+          onChange={(e) => onBrand(e.target.value)}
+          placeholder="Марка (необязательно)"
+          aria-label="Марка"
+          autoComplete="off"
         />
       </label>
       <div className="meal-type-chips-inline" role="group" aria-label="КБЖУ относительно">
@@ -246,6 +262,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const [name, setName] = useState('')
   const [kbju, setKbju] = useState('')
   const [place, setPlace] = useState('')
+  const [brand, setBrand] = useState('')
   const [portion, setPortion] = useState('')
   const [kbjuBasis, setKbjuBasis] = useState<KbjuBasis>('per100')
   const [editId, setEditId] = useState<string | null>(null)
@@ -287,6 +304,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setName('')
     setKbju('')
     setPlace('')
+    setBrand('')
     setPortion('')
     setKbjuBasis('per100')
     setError(null)
@@ -342,6 +360,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setKbju(formatKbjuLine(food.per100g))
     setPortion(food.portionGrams != null && food.portionGrams > 0 ? String(food.portionGrams) : '')
     setPlace(food.place ?? '')
+    setBrand(food.brand ?? '')
     setError(null)
     setInfo(null)
   }
@@ -378,6 +397,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         per100g,
         kind: 'ingredient',
         place: place.trim() || undefined,
+        brand: brand.trim() || undefined,
         portionGrams: portionGrams ?? undefined,
       })
       if (wasEdit) {
@@ -423,6 +443,11 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           key: `${i}-${item.name}`,
           selected: true,
           kbju: formatKbjuLine(item.per100g),
+          portion:
+            item.portionGrams != null && item.portionGrams > 0
+              ? String(item.portionGrams)
+              : '',
+          brand: item.brand ?? '',
         })),
       )
       setPhotoStage(null)
@@ -452,12 +477,18 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
       for (const row of selected) {
         const per100g = parseKbjuLine(row.kbju)
         if (!per100g || !row.name.trim()) continue
+        const portionGrams = parsePortionGrams(row.portion)
+        if (row.portion.trim() && portionGrams == null) {
+          throw new Error(`«${row.name}»: порция — число граммов`)
+        }
         await onSave({
           name: row.name,
           aliases: generateAliases(row.name),
           per100g,
           kind: 'ingredient',
           place: reviewPlace.trim() || undefined,
+          brand: row.brand.trim() || undefined,
+          portionGrams: portionGrams ?? undefined,
         })
         saved += 1
       }
@@ -477,6 +508,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     name,
     kbju,
     place,
+    brand,
     portion,
     kbjuBasis,
     busy,
@@ -487,6 +519,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     onName: setName,
     onKbju: setKbju,
     onPlace: setPlace,
+    onBrand: setBrand,
     onPortion: setPortion,
     onKbjuBasis: switchKbjuBasis,
     onSubmit: () => void submit(),
@@ -584,6 +617,19 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                     placeholder="Название"
                   />
                   <input
+                    value={row.brand}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setReviewRows(
+                        (prev) =>
+                          prev?.map((r) => (r.key === row.key ? { ...r, brand: next } : r)) ?? null,
+                      )
+                    }}
+                    aria-label="Марка"
+                    placeholder="Марка"
+                    autoComplete="off"
+                  />
+                  <input
                     value={row.kbju}
                     onChange={(e) => {
                       const next = e.target.value
@@ -593,9 +639,36 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                       )
                     }}
                     aria-label="КБЖУ на 100 г"
-                    placeholder="Ккал Б Ж У"
+                    placeholder="Ккал Б Ж У на 100 г"
                     autoComplete="off"
                   />
+                  <input
+                    inputMode="decimal"
+                    value={row.portion}
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setReviewRows(
+                        (prev) =>
+                          prev?.map((r) =>
+                            r.key === row.key ? { ...r, portion: next } : r,
+                          ) ?? null,
+                      )
+                    }}
+                    aria-label="Порция в граммах"
+                    placeholder="Порция, г"
+                    autoComplete="off"
+                  />
+                  {(() => {
+                    const pg = parsePortionGrams(row.portion)
+                    const per100 = parseKbjuLine(row.kbju)
+                    if (pg == null || !per100) return null
+                    const p = portionMacrosFromPer100(per100, pg)
+                    return (
+                      <p className="muted small">
+                        порция {pg} г → {p.kcal} ккал · Б {p.protein} · Ж {p.fat} · У {p.carbs}
+                      </p>
+                    )
+                  })()}
                   {row.note && <p className="muted small">{row.note}</p>}
                 </div>
               </li>
@@ -668,7 +741,10 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           <li key={food.id} className="food-list-item">
             <div className={`food-row food-row-icons${editId === food.id ? ' is-editing' : ''}`}>
               <div className="food-row-body">
-                <strong>{food.name}</strong>
+                <div className="food-row-title">
+                  <strong>{food.name}</strong>
+                  {food.brand && <span className="brand-chip">{food.brand}</span>}
+                </div>
                 <p className="muted small">
                   {food.per100g.kcal} ккал · Б {food.per100g.protein} · Ж {food.per100g.fat} · У{' '}
                   {food.per100g.carbs} / 100 г

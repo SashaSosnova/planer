@@ -80,7 +80,10 @@ export function computeRecipe(draft: {
 export function recipeToFoodItem(
   recipe: RecipeDraft,
   existingId?: string,
+  /** Editor textarea — must be saved so reopen shows the text you calculated from */
+  sourceText?: string,
 ): Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string } {
+  const text = sourceText?.trim()
   return {
     id: existingId,
     name: recipe.name.trim(),
@@ -93,6 +96,7 @@ export function recipeToFoodItem(
       totalCookedGrams: recipe.totalCookedGrams,
       totalMacros: recipe.totalMacros,
       notes: recipe.notes,
+      ...(text ? { sourceText: text } : {}),
     },
   }
 }
@@ -133,7 +137,7 @@ export function recipeTextFromDraft(draft: Pick<RecipeDraft, 'name' | 'ingredien
   return lines.filter(Boolean).join('\n')
 }
 
-/** Prefer stored free-text (menu import) over synthetic «name 100 гр» lines. */
+/** Prefer stored free-text source over synthetic «name 100 гр» lines. */
 export function recipeEditorText(food: FoodItem): string {
   const source = food.recipe?.sourceText?.trim()
   if (source) return source

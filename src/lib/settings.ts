@@ -13,12 +13,6 @@ const KEY = 'planer-settings-v1'
 const OWNER_KEY = 'planer-settings-uid-v1'
 const FALLBACK_GOAL = 1800
 
-export type TastePrefs = {
-  likes: string[]
-  dislikes: string[]
-  canCook: string[]
-}
-
 export type AppSettings = {
   profile: BodyProfile | null
   /** Cached goal; recalculated from profile + latest weight */
@@ -29,8 +23,6 @@ export type AppSettings = {
   periodLengthDays: number
   /** True after the user explicitly saved cycle lengths in profile */
   cycleConfigured: boolean
-  /** Scaffold for future meal suggestions */
-  tastePrefs: TastePrefs
 }
 
 const DEFAULT_PROFILE: BodyProfile = {
@@ -68,24 +60,6 @@ function parseTargetWeight(raw: unknown): number | null {
   return Math.round(n * 10) / 10
 }
 
-const emptyTastePrefs = (): TastePrefs => ({
-  likes: [],
-  dislikes: [],
-  canCook: [],
-})
-
-function parseTastePrefs(raw: unknown): TastePrefs {
-  if (!raw || typeof raw !== 'object') return emptyTastePrefs()
-  const t = raw as Partial<TastePrefs>
-  const list = (v: unknown) =>
-    Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
-  return {
-    likes: list(t.likes),
-    dislikes: list(t.dislikes),
-    canCook: list(t.canCook),
-  }
-}
-
 export function defaultSettings(): AppSettings {
   return {
     profile: null,
@@ -94,7 +68,6 @@ export function defaultSettings(): AppSettings {
     cycleLengthDays: DEFAULT_CYCLE_LENGTH,
     periodLengthDays: DEFAULT_PERIOD_LENGTH,
     cycleConfigured: false,
-    tastePrefs: emptyTastePrefs(),
   }
 }
 
@@ -137,7 +110,6 @@ export function parseSettingsBlob(raw: unknown): AppSettings {
       Number(parsed.periodLengthDays) || DEFAULT_PERIOD_LENGTH,
     ),
     cycleConfigured: Boolean(parsed.cycleConfigured),
-    tastePrefs: parseTastePrefs(parsed.tastePrefs),
   }
 }
 
@@ -174,8 +146,6 @@ export function saveSettings(patch: Partial<AppSettings>): AppSettings {
         : prev.periodLengthDays,
     cycleConfigured:
       patch.cycleConfigured !== undefined ? patch.cycleConfigured : prev.cycleConfigured,
-    tastePrefs:
-      patch.tastePrefs !== undefined ? parseTastePrefs(patch.tastePrefs) : prev.tastePrefs,
   }
   if (next.dailyKcalGoal <= 0) next.dailyKcalGoal = FALLBACK_GOAL
   next.dailyKcalGoal = Math.round(next.dailyKcalGoal)

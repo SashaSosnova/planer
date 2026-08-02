@@ -2305,52 +2305,10 @@ button.food-row-open:focus-visible {
   background: transparent;
 }
 
-.meal-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  min-height: 0;
-}
-
 .meal-section .meal-card-top strong {
   font-size: 1rem;
   font-weight: 700;
   color: var(--ink);
-}
-
-.meal-ideas-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  padding: 6px 4px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  min-height: 36px;
-}
-
-.meal-ideas-btn svg {
-  display: block;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  color: var(--warm);
-}
-
-.meal-ideas-btn.active,
-.meal-ideas-btn:active {
-  color: var(--warm);
-}
-
-.meal-ideas-btn.active svg,
-.meal-ideas-btn:active svg {
-  color: var(--warm);
 }
 
 .today-screen {
@@ -2394,16 +2352,6 @@ button.food-row-open:focus-visible {
 
 .meal-section .meal-list {
   gap: 8px;
-}
-
-.meal-advice {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
 }
 
 .day-note-block {
@@ -2561,92 +2509,6 @@ button.food-row-open:focus-visible {
   box-sizing: border-box;
   outline: 2px solid rgba(255, 255, 255, 0.35);
   outline-offset: 0;
-}
-
-.meal-ideas {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.meal-idea-row {
-  margin: 0;
-  padding: 4px 6px 4px 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-  font-size: 0.9rem;
-  display: flex;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 4px;
-}
-
-.meal-idea-main {
-  flex: 1;
-  min-width: 0;
-  margin: 0;
-  padding: 8px 8px 8px 10px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  cursor: pointer;
-}
-
-.meal-idea-main:active {
-  background: var(--accent-soft);
-}
-
-.meal-idea-title {
-  min-width: 0;
-  line-height: 1.3;
-  font-weight: 600;
-}
-
-.meal-idea-macros {
-  line-height: 1.25;
-}
-
-.meal-idea-votes {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 2px;
-}
-
-.meal-idea-detail-block {
-  margin: 0 0 10px;
-  line-height: 1.4;
-}
-
-.vote-btn {
-  width: 32px;
-  height: 32px;
-  margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-
-.vote-btn:active,
-.vote-btn.active {
-  color: var(--accent);
-  background: var(--accent-soft);
 }
 
 .day-brief {
@@ -3140,6 +3002,32 @@ button.food-row-open:focus-visible {
   background: var(--warm-soft);
   border-color: #e2c4b0;
   color: var(--warm);
+}
+
+.food-row-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.brand-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--text) 6%, var(--surface));
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .photo-import-list {

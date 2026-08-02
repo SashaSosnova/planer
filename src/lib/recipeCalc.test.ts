@@ -5,6 +5,7 @@ import {
   draftFromFoodItem,
   ingredientPer100Cooked,
   ingredientPer100RawFromCooked,
+  recipeEditorText,
   recipeTextFromDraft,
   recipeToFoodItem,
 } from './recipeCalc'
@@ -76,6 +77,29 @@ describe('computeRecipe', () => {
     expect(again.totalCookedGrams).toBe(500)
     expect(again.ingredients[0]!.name).toBe('Макароны сухие')
     expect(recipeTextFromDraft(again)).toContain('Макароны сухие 200 гр')
+  })
+
+  it('persists editor sourceText so reopen shows the edited recipe text', () => {
+    const recipe = computeRecipe({
+      name: 'Омлет',
+      ingredients: [
+        {
+          name: 'яйцо',
+          gramsRaw: 120,
+          per100g: { kcal: 140, protein: 12, fat: 10, carbs: 1 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+      ],
+    })
+    const text = 'Омлет\nяйцо 120 г\nмолоко 50 г'
+    const food = {
+      ...recipeToFoodItem(recipe, 'd1', text),
+      id: 'd1',
+      updatedAt: 1,
+    }
+    expect(food.recipe?.sourceText).toBe(text)
+    expect(recipeEditorText(food)).toBe(text)
   })
 
   it('honors cooked weight override without changing total macros', () => {

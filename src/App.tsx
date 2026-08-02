@@ -22,7 +22,6 @@ import { LibraryScreen } from './screens/LibraryScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
 import { MeasuresScreen } from './screens/MeasuresScreen'
 import { ProfileScreen } from './screens/ProfileScreen'
-import { TastesScreen } from './screens/TastesScreen'
 import { StepsHistoryScreen } from './screens/StepsHistoryScreen'
 import { TodayScreen } from './screens/TodayScreen'
 import { WeightHistoryScreen } from './screens/WeightHistoryScreen'
@@ -38,7 +37,6 @@ type Overlay =
   | { type: 'diary' }
   | { type: 'history' }
   | { type: 'measures' }
-  | { type: 'tastes' }
   | { type: 'library' }
   | { type: 'care' }
   | null
@@ -86,13 +84,9 @@ export default function App() {
     targetWeightKg,
     cycleLengthDays,
     periodLengthDays,
-    tastePrefs,
     saveProfile,
     syncGoalFromWeight,
     saveTargets,
-    rateMealIdea,
-    clearTasteVote,
-    addCanCook,
   } = useSettings(latestWeightKg, uid)
 
   const latestWeightDate = useMemo(() => {
@@ -231,13 +225,10 @@ export default function App() {
             onOpenDiary={() => setOverlay({ type: 'diary' })}
             onOpenHistory={() => setOverlay({ type: 'history' })}
             onOpenMeasures={() => setOverlay({ type: 'measures' })}
-            onOpenTastes={() => setOverlay({ type: 'tastes' })}
             onOpenLibrary={() => setOverlay({ type: 'library' })}
             onOpenCare={() => setOverlay({ type: 'care' })}
             registerBackHandler={registerBackHandler}
             backEnabled={!showOverlay}
-            tastePrefs={tastePrefs}
-            onRateMealIdea={rateMealIdea}
             onSaveWeight={async (date, kg) => {
               const entry = await saveWeight(date, kg)
               if (!latestWeightDate || date >= latestWeightDate) {
@@ -307,15 +298,6 @@ export default function App() {
             onBack={closeOverlay}
             onSave={saveMeasurement}
             onDelete={deleteMeasurement}
-          />
-        )}
-
-        {overlay?.type === 'tastes' && (
-          <TastesScreen
-            tastePrefs={tastePrefs}
-            onBack={closeOverlay}
-            onClearTasteVote={clearTasteVote}
-            onAddCanCook={addCanCook}
           />
         )}
 

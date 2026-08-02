@@ -140,9 +140,17 @@ export function scoreFoodMatch(query: string, food: FoodRef): number {
       }
 
       if (!score) {
+        const foodTok = tokens(foodName)
+        // Alias/stem is only a fragment of a longer dish/product name.
+        const aliasIsFragment =
+          n !== foodName && foodTok.length >= 2 && (nTok.length <= 1 || n.length + 4 < foodName.length)
+
         // Food name/alias contained in query — but not a multi-word phrase partial («кофе с молоком» ⊃ молоко)
         if (q.includes(n) && n.length >= 6) {
-          if (qTok.length >= 2 && nTok.length <= 1) {
+          if (aliasIsFragment) {
+            // «говядин» ⊂ «говядина» must not score as «Тушеная картошка с говядиной»
+            score = food.kind === 'dish' || foodTok.length >= 3 ? 25 : 40
+          } else if (qTok.length >= 2 && nTok.length <= 1) {
             score = 40
           } else {
             score = 92
@@ -150,15 +158,19 @@ export function scoreFoodMatch(query: string, food: FoodRef): number {
         } else if (n.includes(q) && queryMatchesAsToken(q, qTok, nTok)) {
           // Whole-token containment — but one word of a compound is weak
           // («кофе» ⊂ «кофе с молоком»).
-          if (qTok.length === 1 && nTok.length >= 2) {
-            score = food.kind === 'dish' ? 30 : 45
+          if (qTok.length === 1 && (nTok.length >= 2 || foodTok.length >= 2)) {
+            score = food.kind === 'dish' || foodTok.length >= 3 ? 30 : 45
           } else if (qTok.length >= 3 || q.length >= 12) score = 85
           else if (nTok.length <= 2 && q.length >= 4) score = 75
           else score = 25
         } else {
           // Case inflection: «овсянки» ↔ «овсянка»
           if (qTok.length === 1 && nTok.length === 1 && sameLexeme(qTok[0]!, nTok[0]!)) {
-            score = 90
+            if (aliasIsFragment || foodTok.length >= 3) {
+              score = food.kind === 'dish' ? 30 : 40
+            } else {
+              score = 90
+            }
           } else {
             const overlap = tokenOverlap(qTok, nTok)
             if (overlap >= 2) score = 50 + overlap * 10

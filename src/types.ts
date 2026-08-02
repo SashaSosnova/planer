@@ -27,6 +27,8 @@ export type RecipeSnapshot = {
   totalCookedGrams: number
   totalMacros: MacroSet
   notes?: string
+  /** Original free-text for the recipe editor (name + ingredient lines) */
+  sourceText?: string
 }
 
 export type RecipeDraft = {
@@ -48,6 +50,8 @@ export type FoodItem = {
   updatedAt: number
   kind?: FoodKind
   recipe?: RecipeSnapshot
+  /** Кафе / магазин / сеть, откуда продукт (чип в справочнике) */
+  place?: string
 }
 
 export type MealItemSource = 'library' | 'estimate'

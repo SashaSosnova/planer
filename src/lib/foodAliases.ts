@@ -92,10 +92,16 @@ export function generateAliases(name: string): string[] {
   if (withoutFat && withoutFat !== full) aliases.add(withoutFat)
 
   const tokens = significantTokens(raw)
-  for (const t of tokens) {
-    aliases.add(t)
-    const stem = softStem(t)
-    if (stem && stem.length >= 3) aliases.add(stem)
+  // «Тушеная картошка с говядиной» — do NOT alias single parts («говядина»),
+  // or short queries steal the whole dish in the recipe calculator.
+  const dishWithParts = tokens.length >= 3 && /(?:^|\s)с(?:\s|$)/i.test(full)
+
+  if (!dishWithParts) {
+    for (const t of tokens) {
+      aliases.add(t)
+      const stem = softStem(t)
+      if (stem && stem.length >= 3) aliases.add(stem)
+    }
   }
 
   // 2-word swap: «творожный сыр» ↔ «сыр творожный»
@@ -103,15 +109,11 @@ export function generateAliases(name: string): string[] {
     aliases.add(`${tokens[1]} ${tokens[0]}`)
   }
 
-  // Head noun + rest: keep first token as short key if multi-word.
-  // Skip for «X с Y и Z» dishes — otherwise alias «паста» steals short queries.
-  if (tokens.length >= 2) {
-    const dishWithParts = tokens.length >= 3 && /(?:^|\s)с(?:\s|$)/i.test(full)
-    if (!dishWithParts) {
-      aliases.add(tokens[0])
-    }
+  // Head noun + rest: keep first/last token as short keys if multi-word.
+  if (tokens.length >= 2 && !dishWithParts) {
+    aliases.add(tokens[0]!)
     // last token often the product: сыр, форель, хлеб
-    const last = tokens[tokens.length - 1]
+    const last = tokens[tokens.length - 1]!
     if (last.length >= 3) aliases.add(last)
   }
 

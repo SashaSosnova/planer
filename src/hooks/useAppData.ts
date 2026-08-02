@@ -6,6 +6,18 @@ import { newId } from '../lib/date'
 import { generateAliases } from '../lib/foodAliases'
 import { sumMacros } from '../lib/nutrition'
 import {
+  extractFoodsFromMeals,
+  hasSeededFoodsFromMeals,
+  markSeededFoodsFromMeals,
+  SEED_FOODS_FROM_MEALS_KEY,
+} from '../lib/seedFoodsFromMeals'
+import {
+  buildMenuDishSeedFoods,
+  hasSeededMenuDishes,
+  markSeededMenuDishes,
+  SEED_MENU_DISHES_KEY,
+} from '../lib/seedMenuDishes'
+import {
   assertNonNegMacros,
   DAY_NOTE_MAX,
   dedupeMeasurements,
@@ -78,6 +90,9 @@ export function useAppData() {
   const prevUidRef = useRef<string | null>(null)
   /** Dates deleted this session — ignore / re-delete if a sync race resurrects them. */
   const suppressedMeasureDates = useRef(new Set<string>())
+  /** One-shot personal catalog fill from meal history. */
+  const foodsSeedStarted = useRef(false)
+  const menuDishesSeedStarted = useRef(false)
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -100,6 +115,14 @@ export function useAppData() {
         saveLocalData(empty)
         setData(empty)
         cloudHydrated.current = new Set(CLOUD_KEYS)
+        foodsSeedStarted.current = false
+        menuDishesSeedStarted.current = false
+        try {
+          localStorage.removeItem(SEED_FOODS_FROM_MEALS_KEY)
+          localStorage.removeItem(SEED_MENU_DISHES_KEY)
+        } catch {
+          /* ignore */
+        }
       } else {
         cloudHydrated.current = new Set()
       }
@@ -222,6 +245,7 @@ export function useAppData() {
       if (!name) throw new Error('Укажите название продукта')
       const per100g = sanitizeMacros(input.per100g)
       assertNonNegMacros(per100g)
+      const place = input.place?.trim()
       const item: FoodItem = {
         id: input.id ?? newId(),
         name,
@@ -230,9 +254,14 @@ export function useAppData() {
         kind: input.kind ?? (input.recipe ? 'dish' : 'ingredient'),
         updatedAt: Date.now(),
         ...(input.recipe ? { recipe: input.recipe } : {}),
+        ...(place ? { place } : {}),
       }
       if (useCloud && uid) {
-        await upsertDoc(uid, 'foods', item.id, { ...item })
+        // merge:true keeps stale place unless we explicitly clear it
+        await upsertDoc(uid, 'foods', item.id, {
+          ...item,
+          place: place || null,
+        })
       }
       persistLocal((prev) => ({
         ...prev,
@@ -250,6 +279,66 @@ export function useAppData() {
     },
     [persistLocal, uid, useCloud],
   )
+
+  // One-time: fill personal product catalog from what the user actually logs.
+  useEffect(() => {
+    if (!ready || foodsSeedStarted.current || hasSeededFoodsFromMeals()) return
+    if (useCloud) {
+      if (!cloudHydrated.current.has('meals') || !cloudHydrated.current.has('foods')) {
+        return
+      }
+    }
+    if (data.meals.length === 0) {
+      markSeededFoodsFromMeals()
+      return
+    }
+    foodsSeedStarted.current = true
+    const candidates = extractFoodsFromMeals(data.meals, data.foods)
+    // Mark before writes so a remount cannot double-insert.
+    markSeededFoodsFromMeals()
+    if (candidates.length === 0) return
+    void (async () => {
+      for (const c of candidates) {
+        try {
+          await saveFood({
+            name: c.name,
+            aliases: [],
+            per100g: c.per100g,
+            kind: c.kind,
+          })
+        } catch {
+          /* skip bad rows */
+        }
+      }
+    })()
+  }, [ready, useCloud, data.meals, data.foods, saveFood])
+
+  // One-time (per seed version): upsert weekly-menu catalog dishes into Recipes.
+  useEffect(() => {
+    if (!ready || menuDishesSeedStarted.current || hasSeededMenuDishes()) return
+    if (useCloud && !cloudHydrated.current.has('foods')) return
+
+    menuDishesSeedStarted.current = true
+    const candidates = buildMenuDishSeedFoods()
+    markSeededMenuDishes()
+    if (candidates.length === 0) return
+    void (async () => {
+      for (const c of candidates) {
+        try {
+          await saveFood({
+            id: c.id,
+            name: c.name,
+            aliases: c.aliases,
+            per100g: c.per100g,
+            kind: 'dish',
+            recipe: c.recipe,
+          })
+        } catch {
+          /* skip bad rows */
+        }
+      }
+    })()
+  }, [ready, useCloud, data.foods, saveFood])
 
   const saveMeal = useCallback(
     async (input: {

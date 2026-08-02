@@ -132,3 +132,10 @@ export function recipeTextFromDraft(draft: Pick<RecipeDraft, 'name' | 'ingredien
   ]
   return lines.filter(Boolean).join('\n')
 }
+
+/** Prefer stored free-text (menu import) over synthetic «name 100 гр» lines. */
+export function recipeEditorText(food: FoodItem): string {
+  const source = food.recipe?.sourceText?.trim()
+  if (source) return source
+  return recipeTextFromDraft(draftFromFoodItem(food))
+}

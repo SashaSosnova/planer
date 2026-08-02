@@ -2924,3 +2924,85 @@ button.food-row-open:focus-visible {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* —— Place chips (food catalog) —— */
+.place-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.place-chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.82rem;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.place-chip.sm {
+  margin-top: 6px;
+  padding: 3px 8px;
+  font-size: 0.75rem;
+}
+
+.place-chip.active {
+  background: var(--warm-soft);
+  border-color: #e2c4b0;
+  color: var(--warm);
+}
+
+.photo-import-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.photo-import-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.photo-import-check {
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+
+.photo-import-fields {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.photo-import-fields input {
+  width: 100%;
+}
+
+.food-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.food-list-item .food-row.is-editing {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.food-list-item .product-form-card {
+  margin: 0;
+}

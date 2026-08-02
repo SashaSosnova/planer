@@ -8,7 +8,7 @@ import {
   draftFromFoodItem,
   ingredientPer100Cooked,
   ingredientPer100RawFromCooked,
-  recipeTextFromDraft,
+  recipeEditorText,
   recipeToFoodItem,
 } from '../lib/recipeCalc'
 import { round1 } from '../lib/nutrition'
@@ -82,7 +82,7 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setCookedOverride(String(next.totalCookedGrams))
     setEditingCooked(false)
     setMacrosEdit(null)
-    setRecipeText(recipeTextFromDraft(next))
+    setRecipeText(recipeEditorText(food))
   }
 
   const backToList = () => {

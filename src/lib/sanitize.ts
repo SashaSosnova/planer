@@ -85,6 +85,7 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
   const name = String(f.name ?? '').trim()
   const id = String(f.id ?? '')
   if (!name || !id) return null
+  const place = String(f.place ?? '').trim()
   return {
     id,
     name,
@@ -93,6 +94,7 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
     kind: f.kind === 'dish' ? 'dish' : 'ingredient',
     recipe: f.recipe as FoodItem['recipe'],
     updatedAt: Number(f.updatedAt) || Date.now(),
+    ...(place ? { place } : {}),
   }
 }
 

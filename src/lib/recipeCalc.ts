@@ -27,6 +27,69 @@ export function ingredientPer100RawFromCooked(
   }
 }
 
+/**
+ * Density scale after pan weigh-in: estimatedCooked / actualCooked.
+ * Heavier finished dish → lower kcal per 100 g cooked on each ingredient row.
+ */
+export function cookedDensityScale(
+  draft: Pick<RecipeDraft, 'estimatedCookedGrams' | 'totalCookedGrams'>,
+): number {
+  const est = draft.estimatedCookedGrams
+  const actual = draft.totalCookedGrams
+  if (!(est > 0) || !(actual > 0)) return 1
+  return est / actual
+}
+
+function scaleMacros(m: MacroSet, factor: number): MacroSet {
+  return {
+    kcal: round1(m.kcal * factor),
+    protein: round1(m.protein * factor),
+    fat: round1(m.fat * factor),
+    carbs: round1(m.carbs * factor),
+  }
+}
+
+/** Ingredient per-100g cooked, adjusted for dish-level cooked weight override. */
+export function ingredientPer100CookedForDish(
+  ing: RecipeIngredientLine,
+  draft: Pick<RecipeDraft, 'estimatedCookedGrams' | 'totalCookedGrams'>,
+): MacroSet {
+  return scaleMacros(ingredientPer100Cooked(ing), cookedDensityScale(draft))
+}
+
+/** Cooked grams of one ingredient after redistributing pan weight across yields. */
+export function ingredientCookedGramsForDish(
+  ing: RecipeIngredientLine,
+  draft: Pick<RecipeDraft, 'estimatedCookedGrams' | 'totalCookedGrams'>,
+): number {
+  const y = ing.yieldFactor > 0 ? ing.yieldFactor : 1
+  const estimated = ing.gramsRaw * y
+  const scale = cookedDensityScale(draft)
+  return round1(scale > 0 ? estimated / scale : estimated)
+}
+
+/** Convert edited (dish-adjusted) cooked per-100g back to raw per-100g storage. */
+export function ingredientPer100RawFromDishCooked(
+  per100CookedDisplayed: MacroSet,
+  ing: RecipeIngredientLine,
+  draft: Pick<RecipeDraft, 'estimatedCookedGrams' | 'totalCookedGrams'>,
+): MacroSet {
+  const scale = cookedDensityScale(draft)
+  const baseCooked = scale > 0 ? scaleMacros(per100CookedDisplayed, 1 / scale) : per100CookedDisplayed
+  return ingredientPer100RawFromCooked(baseCooked, ing.yieldFactor)
+}
+
+/** КБЖУ блюда на 100 г готового из суммарных макросов и веса. */
+export function dishPer100g(totalMacros: MacroSet, totalCookedGrams: number): MacroSet {
+  if (!(totalCookedGrams > 0)) return emptyMacros()
+  return {
+    kcal: round1((totalMacros.kcal * 100) / totalCookedGrams),
+    protein: round1((totalMacros.protein * 100) / totalCookedGrams),
+    fat: round1((totalMacros.fat * 100) / totalCookedGrams),
+    carbs: round1((totalMacros.carbs * 100) / totalCookedGrams),
+  }
+}
+
 export function computeRecipe(draft: {
   name: string
   ingredients: RecipeIngredientLine[]
@@ -50,20 +113,14 @@ export function computeRecipe(draft: {
   const totalRawGrams = round1(withYield.reduce((s, i) => s + i.gramsRaw, 0))
   const totalMacros = sumMacros(withYield.map((i) => i.macros))
   const estimatedCooked = round1(withYield.reduce((s, i) => s + i.cookedGrams, 0))
-  const totalCookedGrams =
-    draft.cookedGramsOverride && draft.cookedGramsOverride > 0
-      ? draft.cookedGramsOverride
-      : estimatedCooked
-
-  const per100g: MacroSet =
-    totalCookedGrams > 0
-      ? {
-          kcal: round1((totalMacros.kcal * 100) / totalCookedGrams),
-          protein: round1((totalMacros.protein * 100) / totalCookedGrams),
-          fat: round1((totalMacros.fat * 100) / totalCookedGrams),
-          carbs: round1((totalMacros.carbs * 100) / totalCookedGrams),
-        }
-      : emptyMacros()
+  const override =
+    draft.cookedGramsOverride != null &&
+    Number.isFinite(draft.cookedGramsOverride) &&
+    draft.cookedGramsOverride > 0
+      ? round1(draft.cookedGramsOverride)
+      : null
+  const totalCookedGrams = override ?? estimatedCooked
+  const per100g = dishPer100g(totalMacros, totalCookedGrams)
 
   return {
     name: draft.name,

@@ -3,7 +3,9 @@ import { guessYieldFactor } from './cookingYield'
 import {
   computeRecipe,
   draftFromFoodItem,
+  ingredientCookedGramsForDish,
   ingredientPer100Cooked,
+  ingredientPer100CookedForDish,
   ingredientPer100RawFromCooked,
   recipeEditorText,
   recipeTextFromDraft,
@@ -119,5 +121,56 @@ describe('computeRecipe', () => {
     expect(recipe.totalMacros.kcal).toBe(110)
     expect(recipe.totalCookedGrams).toBe(250)
     expect(recipe.per100g.kcal).toBe(44)
+  })
+
+  it('recomputes per-100g when only cooked weight changes', () => {
+    const base = computeRecipe({
+      name: 'Блюдо',
+      ingredients: [
+        {
+          name: 'курица',
+          gramsRaw: 200,
+          per100g: { kcal: 110, protein: 23, fat: 1.5, carbs: 0 },
+          source: 'estimate',
+          yieldFactor: 0.75,
+        },
+      ],
+    })
+    const heavier = computeRecipe({
+      name: base.name,
+      ingredients: base.ingredients,
+      cookedGramsOverride: base.totalCookedGrams * 2,
+      notes: base.notes,
+    })
+    expect(heavier.totalMacros).toEqual(base.totalMacros)
+    expect(heavier.per100g.kcal).toBeCloseTo(base.per100g.kcal / 2, 1)
+    expect(heavier.per100g.protein).toBeCloseTo(base.per100g.protein / 2, 1)
+  })
+
+  it('scales ingredient cooked cards when pan weight changes', () => {
+    const base = computeRecipe({
+      name: 'Паста',
+      ingredients: [
+        {
+          name: 'спагетти',
+          gramsRaw: 100,
+          per100g: { kcal: 350, protein: 12, fat: 1.5, carbs: 72 },
+          source: 'estimate',
+          yieldFactor: 2.3,
+        },
+      ],
+    })
+    const heavier = computeRecipe({
+      name: base.name,
+      ingredients: base.ingredients,
+      cookedGramsOverride: base.estimatedCookedGrams * 2,
+    })
+    const baseCard = ingredientPer100CookedForDish(base.ingredients[0]!, base)
+    const heavyCard = ingredientPer100CookedForDish(heavier.ingredients[0]!, heavier)
+    expect(heavyCard.kcal).toBeCloseTo(baseCard.kcal / 2, 1)
+    expect(ingredientCookedGramsForDish(heavier.ingredients[0]!, heavier)).toBeCloseTo(
+      ingredientCookedGramsForDish(base.ingredients[0]!, base) * 2,
+      1,
+    )
   })
 })

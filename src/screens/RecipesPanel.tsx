@@ -1,17 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { DecimalInput } from '../components/DecimalInput'
 import { PlusIcon } from '../components/PlusIcon'
 import { TrashIcon } from '../components/TrashIcon'
 import { parseRecipe } from '../lib/parseRecipe'
 import {
   computeRecipe,
+  dishPer100g,
   draftFromFoodItem,
-  ingredientPer100Cooked,
-  ingredientPer100RawFromCooked,
+  ingredientCookedGramsForDish,
+  ingredientPer100CookedForDish,
+  ingredientPer100RawFromDishCooked,
   recipeEditorText,
   recipeToFoodItem,
 } from '../lib/recipeCalc'
-import { round1 } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, RecipeDraft, RecipeIngredientLine } from '../types'
 
 const RECIPE_PLACEHOLDER =
@@ -35,6 +36,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
   const [recipeText, setRecipeText] = useState('')
   const [draft, setDraft] = useState<RecipeDraft | null>(null)
   const [cookedOverride, setCookedOverride] = useState('')
+  const cookedOverrideRef = useRef(cookedOverride)
+  cookedOverrideRef.current = cookedOverride
   const [editingCooked, setEditingCooked] = useState(false)
   const [macrosEdit, setMacrosEdit] = useState<{ index: number; basis: MacrosBasis } | null>(
     null,
@@ -105,26 +108,6 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setMacrosEdit(null)
   }
 
-  const recompute = (
-    next: {
-      name?: string
-      ingredients?: RecipeIngredientLine[]
-      notes?: string
-    },
-    cookedValue = cookedOverride,
-  ) => {
-    if (!draft) return
-    const override = Number(cookedValue.replace(',', '.'))
-    setDraft(
-      computeRecipe({
-        name: next.name ?? draft.name,
-        ingredients: next.ingredients ?? draft.ingredients,
-        cookedGramsOverride: Number.isFinite(override) && override > 0 ? override : null,
-        notes: next.notes ?? draft.notes,
-      }),
-    )
-  }
-
   const runRecipeParse = async () => {
     setBusy(true)
     setError(null)
@@ -142,18 +125,35 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
   }
 
   const updateIngredient = (index: number, patch: Partial<RecipeIngredientLine>) => {
-    if (!draft) return
-    const ingredients = draft.ingredients.map((ing, i) =>
-      i === index ? { ...ing, ...patch } : ing,
-    )
-    recompute({ ingredients })
+    setDraft((prev) => {
+      if (!prev) return prev
+      const ingredients = prev.ingredients.map((ing, i) =>
+        i === index ? { ...ing, ...patch } : ing,
+      )
+      const override = Number(String(cookedOverrideRef.current).replace(',', '.'))
+      return computeRecipe({
+        name: prev.name,
+        ingredients,
+        cookedGramsOverride: Number.isFinite(override) && override > 0 ? override : null,
+        notes: prev.notes,
+      })
+    })
   }
 
   const commitCookedGrams = (n: number) => {
     if (!(n > 0)) return
     const value = String(n)
     setCookedOverride(value)
-    recompute({}, value)
+    cookedOverrideRef.current = value
+    setDraft((prev) => {
+      if (!prev) return prev
+      return computeRecipe({
+        name: prev.name,
+        ingredients: prev.ingredients,
+        cookedGramsOverride: n,
+        notes: prev.notes,
+      })
+    })
   }
 
   const toggleMacrosEdit = (index: number, basis: MacrosBasis) => {
@@ -176,11 +176,26 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       })
       return
     }
-    const cooked = { ...ingredientPer100Cooked(ing), ...patch }
-    updateIngredient(index, {
-      per100g: ingredientPer100RawFromCooked(cooked, ing.yieldFactor),
-      foodId: undefined,
-      source: 'estimate',
+    setDraft((prev) => {
+      if (!prev) return prev
+      const cooked = { ...ingredientPer100CookedForDish(ing, prev), ...patch }
+      const ingredients = prev.ingredients.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              per100g: ingredientPer100RawFromDishCooked(cooked, row, prev),
+              foodId: undefined,
+              source: 'estimate' as const,
+            }
+          : row,
+      )
+      const override = Number(String(cookedOverrideRef.current).replace(',', '.'))
+      return computeRecipe({
+        name: prev.name,
+        ingredients,
+        cookedGramsOverride: Number.isFinite(override) && override > 0 ? override : null,
+        notes: prev.notes,
+      })
     })
   }
 
@@ -240,14 +255,19 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
               <span>Название блюда</span>
               <input
                 value={draft.name}
-                onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                onChange={(e) => {
+                  const name = e.target.value
+                  setDraft((prev) => (prev ? { ...prev, name } : prev))
+                }}
                 placeholder="Название блюда"
               />
             </label>
 
             <div className="recipe-per100-hero">
               <span className="recipe-per100-hero-label">На 100 г готового</span>
-              <strong className="recipe-per100-hero-value">{formatMacros(draft.per100g)}</strong>
+              <strong className="recipe-per100-hero-value">
+                {formatMacros(dishPer100g(draft.totalMacros, draft.totalCookedGrams))}
+              </strong>
             </div>
 
             <p className="recipe-summary-line muted small">
@@ -279,8 +299,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
 
             <ul className="draft-list">
               {draft.ingredients.map((ing, index) => {
-                const per100Cooked = ingredientPer100Cooked(ing)
-                const cookedGrams = round1(ing.gramsRaw * (ing.yieldFactor > 0 ? ing.yieldFactor : 1))
+                const per100Cooked = ingredientPer100CookedForDish(ing, draft)
+                const cookedGrams = ingredientCookedGramsForDish(ing, draft)
                 const editing = macrosEdit?.index === index ? macrosEdit.basis : null
                 const fromLibrary = ing.source === 'library'
 

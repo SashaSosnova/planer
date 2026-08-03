@@ -447,7 +447,8 @@ export function TodayScreen({
             {today.meals.map((meal) => {
               const mgDose = mgDoseKeyForMealType(meal.mealType)
               const hasMg = mgDose ? Boolean(medTakenAt(medDay, mgDose)) : false
-              const hasFe = mgDose ? Boolean(medTakenAt(medDay, 'iron')) : false
+              const hasFe =
+                meal.mealType === 'breakfast' && Boolean(medTakenAt(medDay, 'iron'))
               return (
                 <li key={meal.id}>
                   <button

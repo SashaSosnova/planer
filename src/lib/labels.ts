@@ -1,4 +1,4 @@
-import type { MealType } from '../types'
+import type { Meal, MealItem, MealType } from '../types'
 
 export const MEAL_TYPE_LABELS: Record<MealType, string> = {
   breakfast: 'Завтрак',
@@ -87,4 +87,23 @@ export function extractMealTypeFromText(text: string): {
 export function mealBodyText(rawText: string): string {
   const { cleaned } = extractMealTypeFromText(rawText)
   return cleaned.trim() || rawText.trim()
+}
+
+/** Preview from current items (catalog names); falls back to raw free text. */
+export function mealPreviewText(
+  meal: Pick<Meal, 'rawText' | 'items'> | { rawText: string; items?: MealItem[] },
+): string {
+  const fromItems = (meal.items ?? [])
+    .map((i) => i.name.trim())
+    .filter(Boolean)
+    .join(', ')
+  return fromItems || mealBodyText(meal.rawText)
+}
+
+/** Persistable description built from item names (matched catalog labels). */
+export function mealRawTextFromItems(items: MealItem[]): string {
+  return items
+    .map((i) => i.name.trim())
+    .filter(Boolean)
+    .join(', ')
 }

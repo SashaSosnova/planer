@@ -3,6 +3,7 @@ import {
   coerceMealType,
   extractMealTypeFromText,
   mealBodyText,
+  mealPreviewText,
   nextMealType,
 } from './labels'
 
@@ -47,5 +48,23 @@ describe('coerceMealType', () => {
     expect(coerceMealType('lunch')).toBe('lunch')
     expect(coerceMealType('brunch', 'dinner')).toBe('dinner')
     expect(coerceMealType(null)).toBe('snack')
+  })
+})
+
+describe('mealPreviewText', () => {
+  it('prefers item names over frozen rawText', () => {
+    expect(
+      mealPreviewText({
+        rawText: 'творог 100 и банан',
+        items: [
+          { name: 'Творог 5%', grams: 100, kcal: 0, protein: 0, fat: 0, carbs: 0, source: 'library' },
+          { name: 'Банан', grams: 80, kcal: 0, protein: 0, fat: 0, carbs: 0, source: 'library' },
+        ],
+      }),
+    ).toBe('Творог 5%, Банан')
+  })
+
+  it('falls back to rawText when items are empty', () => {
+    expect(mealPreviewText({ rawText: 'Завтрак\nомлет', items: [] })).toBe('омлет')
   })
 })

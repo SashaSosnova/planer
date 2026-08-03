@@ -81,7 +81,6 @@ export default function App() {
     maintainKcalGoal,
     proteinGoal,
     profileReady,
-    targetWeightKg,
     cycleLengthDays,
     periodLengthDays,
     saveProfile,
@@ -207,7 +206,6 @@ export default function App() {
             maintainKcalGoal={maintainKcalGoal}
             proteinGoal={proteinGoal}
             profileReady={profileReady}
-            targetWeightKg={targetWeightKg}
             cycleLengthDays={cycleLengthDays}
             periodLengthDays={periodLengthDays}
             onAddMeal={(opts) =>
@@ -313,11 +311,6 @@ export default function App() {
         {overlay?.type === 'weight-history' && (
           <WeightHistoryScreen
             data={data}
-            targetWeightKg={targetWeightKg}
-            maintainKcalGoal={maintainKcalGoal}
-            dailyKcalGoal={dailyKcalGoal}
-            cycleLengthDays={cycleLengthDays}
-            periodLengthDays={periodLengthDays}
             onBack={closeOverlay}
             onSave={async (date, kg) => {
               const entry = await saveWeight(date, kg)

@@ -7,7 +7,7 @@ import {
 } from './parseFoodLabel'
 
 describe('buildParseFoodLabelPrompt', () => {
-  it('includes OCR text, place hint and portion fields', () => {
+  it('includes OCR text, brand hint and portion fields', () => {
     const prompt = buildParseFoodLabelPrompt('Творог 5% белки 16', 'Пятёрочка')
     expect(prompt).toContain('Творог 5%')
     expect(prompt).toContain('Пятёрочка')
@@ -33,7 +33,7 @@ describe('macrosLookPlausible', () => {
 })
 
 describe('normalizeFoodLabelResult', () => {
-  it('keeps valid items and place', () => {
+  it('folds legacy place into item brand', () => {
     const result = normalizeFoodLabelResult({
       place: 'Mechtai',
       items: [
@@ -55,9 +55,9 @@ describe('normalizeFoodLabelResult', () => {
         },
       ],
     })
-    expect(result.place).toBe('Mechtai')
     expect(result.items).toHaveLength(1)
     expect(result.items[0]!.name).toBe('Латте')
+    expect(result.items[0]!.brand).toBe('Mechtai')
     expect(result.items[0]!.per100g.kcal).toBe(45)
     expect(result.items[0]!.portionGrams).toBe(250)
   })
@@ -79,7 +79,7 @@ describe('normalizeFoodLabelResult', () => {
     expect(result.items[0]!.per100g.protein).toBe(6)
   })
 
-  it('falls back to placeHint when LLM place empty', () => {
+  it('falls back to brandHint when brand empty', () => {
     const result = normalizeFoodLabelResult(
       {
         place: null,
@@ -92,10 +92,25 @@ describe('normalizeFoodLabelResult', () => {
           },
         ],
       },
-      { placeHint: 'ВкусВилл' },
+      { brandHint: 'ВкусВилл' },
     )
-    expect(result.place).toBe('ВкусВилл')
+    expect(result.items[0]!.brand).toBe('ВкусВилл')
     expect(result.items[0]!.note).toBe('оценка')
+  })
+
+  it('prefers item brand over legacy place', () => {
+    const result = normalizeFoodLabelResult({
+      place: 'Пятёрочка',
+      items: [
+        {
+          name: 'Йогурт',
+          brand: 'Простоквашино',
+          macros: { kcal: 80, protein: 4, fat: 3, carbs: 10 },
+          macrosBasis: 'per100',
+        },
+      ],
+    })
+    expect(result.items[0]!.brand).toBe('Простоквашино')
   })
 
   it('drops impossible macros', () => {
@@ -165,6 +180,7 @@ describe('normalizeFoodLabelResult', () => {
       ],
     })
     expect(result.items).toHaveLength(1)
+    expect(result.items[0]!.brand).toBe('Бургер Кинг')
     expect(result.items[0]!.per100g.kcal).toBe(263)
     expect(result.items[0]!.per100g.protein).toBe(10)
     expect(result.items[0]!.portionGrams).toBe(274)

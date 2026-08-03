@@ -7,7 +7,7 @@ import { dayPromptForDate } from '../lib/dayPrompts'
 import { formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
-import { MEAL_TYPE_LABELS, mealBodyText } from '../lib/labels'
+import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { AppsGridIcon } from '../components/AppsGridIcon'
 import {
@@ -20,8 +20,7 @@ import {
 import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
 import { PlusIcon } from '../components/PlusIcon'
 import { DAY_NOTE_MAX } from '../lib/sanitize'
-import { buildProgressMotivator } from '../lib/progressMotivator'
-import { forecastFromAppData } from '../lib/weightForecast'
+import { buildWeightCheckin } from '../lib/weightCheckin'
 import type { AppData, DayNote, MealType } from '../types'
 
 type PromptKind = 'weight' | 'steps' | null
@@ -32,7 +31,6 @@ type Props = {
   maintainKcalGoal: number
   proteinGoal: number | null
   profileReady: boolean
-  targetWeightKg: number | null
   cycleLengthDays: number
   periodLengthDays: number
   onAddMeal: (opts?: { text?: string; mealType?: MealType }) => void
@@ -70,7 +68,6 @@ export function TodayScreen({
   maintainKcalGoal,
   proteinGoal,
   profileReady,
-  targetWeightKg,
   cycleLengthDays,
   periodLengthDays,
   onAddMeal,
@@ -145,53 +142,14 @@ export function TodayScreen({
 
   const today = useMemo(() => statsForDate(data, date), [data, date])
 
-  const forecast = useMemo(
+  const weightCheckin = useMemo(
     () =>
-      forecastFromAppData(data, {
-        targetKg: targetWeightKg,
-        maintainKcal: maintainKcalGoal,
-        dailyKcalGoal,
-        cycleLengthDays,
-        periodLengthDays,
-        today: date,
-      }),
-    [
-      data,
-      targetWeightKg,
-      maintainKcalGoal,
-      dailyKcalGoal,
-      cycleLengthDays,
-      periodLengthDays,
-      date,
-    ],
-  )
-
-  const progressDelta = useMemo(() => {
-    if (!forecast) return null
-    const fmtKg = (n: number) => n.toFixed(1).replace('.', ',')
-    const lostKg = Math.round((forecast.startKg - forecast.currentKg) * 10) / 10
-    return {
-      hero:
-        lostKg > 0
-          ? `−${fmtKg(lostKg)} кг`
-          : lostKg < 0
-            ? `+${fmtKg(-lostKg)} кг`
-            : '0 кг',
-      tone: lostKg > 0 ? 'down' : lostKg < 0 ? 'up' : 'flat',
-    }
-  }, [forecast])
-
-  const progressMotivator = useMemo(
-    () =>
-      buildProgressMotivator({
+      buildWeightCheckin({
         weights: data.weights,
-        periodStarts: data.periodStarts,
-        cycleLengthDays,
-        periodLengthDays,
-        targetKg: targetWeightKg,
-        today: date,
+        meals: data.meals,
+        dailyKcalGoal,
       }),
-    [data.weights, data.periodStarts, cycleLengthDays, periodLengthDays, targetWeightKg, date],
+    [data.weights, data.meals, dailyKcalGoal],
   )
 
   const cycle = useMemo(
@@ -390,33 +348,15 @@ export function TodayScreen({
         </p>
       )}
 
-      {forecast && progressDelta && (
+      {weightCheckin && (
         <div className="progress-card">
           <div className="progress-card-top">
             <span>Прогресс</span>
-            <strong className={`progress-card-delta ${progressDelta.tone}`}>
-              {progressDelta.hero}
+            <strong className={`progress-card-delta ${weightCheckin.tone}`}>
+              {weightCheckin.hero}
             </strong>
           </div>
-          {progressMotivator && (
-            <p className={`progress-motivator tone-${progressMotivator.tone}`}>
-              {progressMotivator.text}
-            </p>
-          )}
-          {progressMotivator?.deltaLabel && (
-            <p className="muted small">{progressMotivator.deltaLabel}</p>
-          )}
-          <p className="muted small">{forecast.summary}</p>
-          {forecast.targetKg == null && (
-            <p className="muted small">Цель по весу можно задать в профиле.</p>
-          )}
-          {forecast.notes
-            .filter((note) => note !== cycle.weightNote)
-            .map((note) => (
-              <p key={note} className="muted small cycle-weight-note">
-                {note}
-              </p>
-            ))}
+          <p className="muted small">{weightCheckin.note}</p>
         </div>
       )}
 
@@ -528,7 +468,7 @@ export function TodayScreen({
                       </strong>
                       <span>{Math.round(meal.totals.kcal)} ккал</span>
                     </div>
-                    <p className="meal-preview">{mealBodyText(meal.rawText)}</p>
+                    <p className="meal-preview">{mealPreviewText(meal)}</p>
                     <p className="meal-bju">
                       Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
                       {Math.round(meal.totals.carbs)}

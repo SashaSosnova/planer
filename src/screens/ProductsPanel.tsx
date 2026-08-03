@@ -53,7 +53,6 @@ type FormFieldsProps = {
   title: string
   name: string
   kbju: string
-  place: string
   brand: string
   portion: string
   kbjuBasis: KbjuBasis
@@ -66,7 +65,6 @@ type FormFieldsProps = {
   photoStage: string | null
   onName: (v: string) => void
   onKbju: (v: string) => void
-  onPlace: (v: string) => void
   onBrand: (v: string) => void
   onPortion: (v: string) => void
   onKbjuBasis: (v: KbjuBasis) => void
@@ -84,7 +82,6 @@ function ProductFormCard({
   title,
   name,
   kbju,
-  place,
   brand,
   portion,
   kbjuBasis,
@@ -97,7 +94,6 @@ function ProductFormCard({
   photoStage,
   onName,
   onKbju,
-  onPlace,
   onBrand,
   onPortion,
   onKbjuBasis,
@@ -138,7 +134,7 @@ function ProductFormCard({
         <input
           value={brand}
           onChange={(e) => onBrand(e.target.value)}
-          placeholder="Марка (необязательно)"
+          placeholder="Марка / кафе / магазин (необязательно)"
           aria-label="Марка"
           autoComplete="off"
         />
@@ -208,15 +204,6 @@ function ProductFormCard({
           )}
         </p>
       )}
-      <label className="field">
-        <input
-          value={place}
-          onChange={(e) => onPlace(e.target.value)}
-          placeholder="Место (кафе / магазин)"
-          aria-label="Место"
-          autoComplete="off"
-        />
-      </label>
       <div className="btn-row">
         <button
           type="button"
@@ -261,7 +248,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [kbju, setKbju] = useState('')
-  const [place, setPlace] = useState('')
   const [brand, setBrand] = useState('')
   const [portion, setPortion] = useState('')
   const [kbjuBasis, setKbjuBasis] = useState<KbjuBasis>('per100')
@@ -269,11 +255,10 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
-  const [placeFilter, setPlaceFilter] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoStage, setPhotoStage] = useState<string | null>(null)
-  const [reviewPlace, setReviewPlace] = useState('')
   const [reviewRows, setReviewRows] = useState<ReviewRow[] | null>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -286,24 +271,20 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     [data.foods],
   )
 
-  const places = useMemo(() => {
-    const set = new Set<string>()
-    for (const f of products) {
-      const p = f.place?.trim()
-      if (p) set.add(p)
-    }
-    return [...set].sort((a, b) => a.localeCompare(b, 'ru'))
-  }, [products])
-
   const visibleProducts = useMemo(() => {
-    if (!placeFilter) return products
-    return products.filter((f) => f.place === placeFilter)
-  }, [products, placeFilter])
+    const q = query.trim().toLowerCase()
+    if (!q) return products
+    return products.filter(
+      (f) =>
+        f.name.toLowerCase().includes(q) ||
+        f.aliases.some((a) => a.toLowerCase().includes(q)) ||
+        (f.brand?.toLowerCase().includes(q) ?? false),
+    )
+  }, [products, query])
 
   const clearForm = () => {
     setName('')
     setKbju('')
-    setPlace('')
     setBrand('')
     setPortion('')
     setKbjuBasis('per100')
@@ -328,7 +309,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const closeAdd = () => {
     setAdding(false)
     setReviewRows(null)
-    setReviewPlace('')
     setPhotoStage(null)
     clearForm()
   }
@@ -342,7 +322,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setEditId(null)
     clearForm()
     setReviewRows(null)
-    setReviewPlace('')
     setAdding(true)
   }
 
@@ -353,20 +332,14 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     }
     setAdding(false)
     setReviewRows(null)
-    setReviewPlace('')
     setEditId(food.id)
     setName(food.name)
     setKbjuBasis('per100')
     setKbju(formatKbjuLine(food.per100g))
     setPortion(food.portionGrams != null && food.portionGrams > 0 ? String(food.portionGrams) : '')
-    setPlace(food.place ?? '')
     setBrand(food.brand ?? '')
     setError(null)
     setInfo(null)
-  }
-
-  const togglePlaceFilter = (p: string) => {
-    setPlaceFilter((prev) => (prev === p ? null : p))
   }
 
   const submit = async () => {
@@ -396,7 +369,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         aliases: generateAliases(name),
         per100g,
         kind: 'ingredient',
-        place: place.trim() || undefined,
         brand: brand.trim() || undefined,
         portionGrams: portionGrams ?? undefined,
       })
@@ -433,10 +405,9 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setPhotoStage('Сжимаю фото…')
     try {
       const result = await parseFoodsFromPhoto(file, {
-        placeHint: place.trim() || undefined,
+        brandHint: brand.trim() || undefined,
         onProgress: (stage) => setPhotoStage(stageLabel(stage)),
       })
-      setReviewPlace(result.place ?? place.trim())
       setReviewRows(
         result.items.map((item, i) => ({
           ...item,
@@ -447,7 +418,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
             item.portionGrams != null && item.portionGrams > 0
               ? String(item.portionGrams)
               : '',
-          brand: item.brand ?? '',
+          brand: item.brand ?? brand.trim(),
         })),
       )
       setPhotoStage(null)
@@ -486,17 +457,14 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           aliases: generateAliases(row.name),
           per100g,
           kind: 'ingredient',
-          place: reviewPlace.trim() || undefined,
           brand: row.brand.trim() || undefined,
           portionGrams: portionGrams ?? undefined,
         })
         saved += 1
       }
       if (saved === 0) throw new Error('Нет корректных строк для сохранения')
-      const placeSaved = reviewPlace.trim()
       closeAdd()
       setInfo(`Добавлено продуктов: ${saved}`)
-      if (placeSaved) setPlaceFilter(placeSaved)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения')
     } finally {
@@ -507,7 +475,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const formProps = {
     name,
     kbju,
-    place,
     brand,
     portion,
     kbjuBasis,
@@ -518,7 +485,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     photoStage: adding ? photoStage : null,
     onName: setName,
     onKbju: setKbju,
-    onPlace: setPlace,
     onBrand: setBrand,
     onPortion: setPortion,
     onKbjuBasis: switchKbjuBasis,
@@ -579,14 +545,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           <h2 className="subhead" style={{ marginTop: 0 }}>
             С фото — проверка
           </h2>
-          <label className="field">
-            <input
-              value={reviewPlace}
-              onChange={(e) => setReviewPlace(e.target.value)}
-              placeholder="Место для всех (кафе / магазин)"
-              aria-label="Место для импорта"
-            />
-          </label>
           <ul className="photo-import-list">
             {reviewRows.map((row) => (
               <li key={row.key} className="photo-import-row">
@@ -626,7 +584,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                       )
                     }}
                     aria-label="Марка"
-                    placeholder="Марка"
+                    placeholder="Марка / кафе / магазин"
                     autoComplete="off"
                   />
                   <input
@@ -689,7 +647,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
               disabled={busy}
               onClick={() => {
                 setReviewRows(null)
-                setReviewPlace('')
                 setInfo(null)
                 setError(null)
               }}
@@ -707,34 +664,27 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
 
       {!adding && !editId && info && <p className="form-msg">{info}</p>}
 
-      {places.length > 0 && (
-        <div className="place-chip-row" role="toolbar" aria-label="Фильтр по месту">
-          <button
-            type="button"
-            className={`place-chip${placeFilter == null ? ' active' : ''}`}
-            onClick={() => setPlaceFilter(null)}
-          >
-            Все
-          </button>
-          {places.map((p) => (
-            <button
-              key={p}
-              type="button"
-              className={`place-chip${placeFilter === p ? ' active' : ''}`}
-              onClick={() => togglePlaceFilter(p)}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
+      {products.length > 0 && (
+        <label className="field catalog-search">
+          <span className="visually-hidden">Поиск продукта</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Найти продукт…"
+            autoComplete="off"
+          />
+        </label>
       )}
 
       <ul className="food-list">
         {visibleProducts.length === 0 && (
           <li className="muted">
-            {placeFilter
-              ? `Нет продуктов из «${placeFilter}».`
-              : 'Пока пусто — нажмите +.'}
+            {products.length === 0
+              ? 'Пока пусто — нажмите +.'
+              : query.trim()
+                ? `Ничего не найдено по «${query.trim()}».`
+                : 'Пока пусто — нажмите +.'}
           </li>
         )}
         {visibleProducts.map((food) => (
@@ -758,20 +708,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                     </>
                   )}
                 </p>
-                <div className="place-chip-row" style={{ marginTop: 6, marginBottom: 0 }}>
-                  {food.portionGrams != null && food.portionGrams > 0 && (
-                    <span className="place-chip sm">порция {food.portionGrams} г</span>
-                  )}
-                  {food.place && (
-                    <button
-                      type="button"
-                      className={`place-chip sm${placeFilter === food.place ? ' active' : ''}`}
-                      onClick={() => togglePlaceFilter(food.place!)}
-                    >
-                      {food.place}
-                    </button>
-                  )}
-                </div>
               </div>
               <div className="btn-row tight nowrap food-row-actions">
                 <button

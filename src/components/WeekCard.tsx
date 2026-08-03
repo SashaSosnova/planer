@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatRuDate } from '../lib/date'
 import type { WeekStats } from '../lib/dayStats'
-import { MEAL_TYPE_LABELS, mealBodyText } from '../lib/labels'
+import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
 import {
   getCachedWeekSummary,
   getWeekNutritionSummary,
@@ -127,7 +127,7 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
                             {MEAL_TYPE_LABELS[meal.mealType]}
                           </span>
                           <span className="week-day-meal-body">
-                            {mealBodyText(meal.rawText) || '—'}
+                            {mealPreviewText(meal) || '—'}
                           </span>
                           <span className="muted small">
                             {Math.round(meal.totals.kcal)} ккал

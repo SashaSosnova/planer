@@ -41,6 +41,7 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
   )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const dishes = useMemo(
     () =>
@@ -49,6 +50,16 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
         .sort((a, b) => a.name.localeCompare(b.name, 'ru')),
     [data.foods],
   )
+
+  const visibleDishes = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return dishes
+    return dishes.filter(
+      (f) =>
+        f.name.toLowerCase().includes(q) ||
+        f.aliases.some((a) => a.toLowerCase().includes(q)),
+    )
+  }, [dishes, query])
 
   const foodsRef = useMemo(
     () =>
@@ -419,9 +430,24 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       <p className="muted small">
         Блюда, собранные из ингредиентов — КБЖУ на 100 г готового
       </p>
+      {dishes.length > 0 && (
+        <label className="field catalog-search">
+          <span className="visually-hidden">Поиск рецепта</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Найти рецепт…"
+            autoComplete="off"
+          />
+        </label>
+      )}
       <ul className="food-list">
         {dishes.length === 0 && <li className="muted">Пока пусто — нажмите +.</li>}
-        {dishes.map((food) => (
+        {dishes.length > 0 && visibleDishes.length === 0 && (
+          <li className="muted">Ничего не найдено по «{query.trim()}».</li>
+        )}
+        {visibleDishes.map((food) => (
           <li key={food.id} className="food-row food-row-icons">
             <button
               type="button"

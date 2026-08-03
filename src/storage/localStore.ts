@@ -114,7 +114,18 @@ export function loadLocalData(): AppData {
     const raw = localStorage.getItem(KEY)
     if (!raw) return migrateLegacyMedChecks(emptyAppData())
     const parsed = JSON.parse(raw) as Partial<AppData>
-    return migrateLegacyMedChecks(sanitizeAppData(parsed))
+    const data = migrateLegacyMedChecks(sanitizeAppData(parsed))
+    // Persist place→brand merge so legacy `place` leaves storage.
+    const hadPlace = Array.isArray(parsed.foods)
+      ? parsed.foods.some(
+          (f) =>
+            f != null &&
+            typeof f === 'object' &&
+            Boolean(String((f as { place?: unknown }).place ?? '').trim()),
+        )
+      : false
+    if (hadPlace) saveLocalData(data)
+    return data
   } catch {
     return migrateLegacyMedChecks(emptyAppData())
   }

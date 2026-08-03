@@ -2408,30 +2408,6 @@ button.food-row-open:focus-visible {
   border-radius: 10px;
 }
 
-.progress-motivator {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.4;
-  font-weight: 550;
-  color: var(--ink);
-}
-
-.progress-motivator.tone-down {
-  color: color-mix(in srgb, var(--ok) 70%, var(--ink));
-}
-
-.progress-motivator.tone-soft {
-  color: color-mix(in srgb, var(--warm) 55%, var(--ink));
-}
-
-.progress-motivator.tone-up {
-  color: var(--ink);
-}
-
-.progress-motivator.tone-flat {
-  color: var(--ink);
-}
-
 .chat-diary {
   list-style: none;
   margin: 0;
@@ -2967,6 +2943,15 @@ button.food-row-open:focus-visible {
 .meal-med-tags {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* —— Catalog search (products / recipes) —— */
+.catalog-search {
+  margin: 0 0 10px;
+}
+
+.catalog-search input {
+  width: 100%;
 }
 
 /* —— Place chips (food catalog) —— */

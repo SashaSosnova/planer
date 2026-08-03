@@ -547,7 +547,6 @@ export function MealDraftEditor({
                           ? ` · порция ${food.portionGrams} г → ${Math.round(scalePer100g(food.per100g, food.portionGrams).kcal)} ккал`
                           : ''}
                         {food.kind === 'dish' ? ' · блюдо' : ''}
-                        {food.place ? ` · ${food.place}` : ''}
                       </span>
                     </button>
                   </li>

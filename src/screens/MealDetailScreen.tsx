@@ -10,7 +10,7 @@ import { MacroBar } from '../components/MacroBar'
 import { MealMedChecks } from '../components/MealMedChecks'
 import { TrashIcon } from '../components/TrashIcon'
 import { todayIso } from '../lib/date'
-import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER } from '../lib/labels'
+import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER, mealRawTextFromItems } from '../lib/labels'
 import type { MedDoseKey } from '../lib/medRoutine'
 import { parseMeal } from '../lib/parseMeal'
 import { scalePer100g, sumMacros } from '../lib/nutrition'
@@ -94,7 +94,7 @@ export function MealDetailScreen({
         id: snap.meal.id,
         date: snap.date,
         mealType: snap.mealType,
-        rawText: snap.meal.rawText.trim() || kept.map((i) => i.name).join(', '),
+        rawText: mealRawTextFromItems(kept),
         items: kept,
         isApproximate,
         eatingOut: snap.eatingOut,

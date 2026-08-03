@@ -260,7 +260,6 @@ export function useAppData() {
       if (!name) throw new Error('Укажите название продукта')
       const per100g = sanitizeMacros(input.per100g)
       assertNonNegMacros(per100g)
-      const place = input.place?.trim()
       const brand = input.brand?.trim()
       const portionRaw = input.portionGrams
       const portionGrams =
@@ -277,7 +276,6 @@ export function useAppData() {
         kind: input.kind ?? (input.recipe ? 'dish' : 'ingredient'),
         updatedAt: Date.now(),
         ...(input.recipe ? { recipe: input.recipe } : {}),
-        ...(place ? { place } : {}),
         ...(brand ? { brand } : {}),
         ...(portionGrams != null ? { portionGrams } : {}),
       }
@@ -286,7 +284,7 @@ export function useAppData() {
         const recipe = item.recipe
         await upsertDoc(uid, 'foods', item.id, {
           ...item,
-          place: place || null,
+          place: null, // legacy field retired → brand
           brand: brand || null,
           portionGrams: portionGrams ?? null,
           recipe: recipe

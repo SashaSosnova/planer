@@ -12,6 +12,7 @@ import {
   MEAL_TYPE_LABELS,
   MEAL_TYPE_ORDER,
   extractMealTypeFromText,
+  mealRawTextFromItems,
   nextMealType,
 } from '../lib/labels'
 import { parseMeal } from '../lib/parseMeal'
@@ -161,8 +162,8 @@ export function AddMealScreen({
     setError(null)
     try {
       const body =
+        mealRawTextFromItems(kept) ||
         extractMealTypeFromText(text).cleaned.trim() ||
-        kept.map((i) => i.name).join(', ') ||
         text.trim()
       await onSaveMeal({
         date,

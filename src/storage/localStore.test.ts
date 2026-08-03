@@ -46,6 +46,34 @@ describe('sanitizeAppData', () => {
     expect(data.medDays).toEqual([])
   })
 
+  it('moves legacy place into brand', () => {
+    const data = sanitizeAppData({
+      foods: [
+        {
+          id: 'f1',
+          name: 'Латте',
+          aliases: [],
+          per100g: { kcal: 45, protein: 2, fat: 2, carbs: 5 },
+          place: 'Mechtai',
+          updatedAt: 1,
+        },
+        {
+          id: 'f2',
+          name: 'Йогурт',
+          aliases: [],
+          per100g: { kcal: 80, protein: 4, fat: 3, carbs: 10 },
+          place: 'Пятёрочка',
+          brand: 'Простоквашино',
+          updatedAt: 1,
+        },
+      ],
+    } as never)
+    expect(data.foods[0]!.brand).toBe('Mechtai')
+    expect((data.foods[0] as { place?: string }).place).toBeUndefined()
+    expect(data.foods[1]!.brand).toBe('Простоквашино')
+    expect((data.foods[1] as { place?: string }).place).toBeUndefined()
+  })
+
   it('keeps med day doses and drops empty entries', () => {
     const data = sanitizeAppData({
       medDays: [

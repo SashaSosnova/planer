@@ -92,8 +92,8 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
   const name = String(f.name ?? '').trim()
   const id = String(f.id ?? '')
   if (!name || !id) return null
-  const place = String(f.place ?? '').trim()
-  const brand = String(f.brand ?? '').trim()
+  // Legacy `place` → `brand` (one field for brand / cafe / store).
+  const brand = String(f.brand ?? '').trim() || String(f.place ?? '').trim()
   const portionRaw = Number(f.portionGrams)
   const portionGrams =
     Number.isFinite(portionRaw) && portionRaw > 0 && portionRaw <= 5000
@@ -107,7 +107,6 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
     kind: f.kind === 'dish' ? 'dish' : 'ingredient',
     recipe: f.recipe as FoodItem['recipe'],
     updatedAt: Number(f.updatedAt) || Date.now(),
-    ...(place ? { place } : {}),
     ...(brand ? { brand } : {}),
     ...(portionGrams != null ? { portionGrams } : {}),
   }

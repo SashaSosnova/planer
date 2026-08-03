@@ -16,13 +16,13 @@ export type FoodLabelCandidate = {
 }
 
 export type FoodLabelParseResult = {
-  place?: string
   items: FoodLabelCandidate[]
   /** Raw OCR text (for debugging / rare retries). */
   ocrText: string
 }
 
 type LlmFoodLabelResult = {
+  /** Legacy top-level cafe/store — folded into item.brand */
   place?: string | null
   items?: Array<{
     name?: string
@@ -41,17 +41,16 @@ export function isFoodPhotoParseConfigured(): boolean {
   return isDeepseekConfigured()
 }
 
-export function buildParseFoodLabelPrompt(ocrText: string, placeHint?: string): string {
-  const hint = placeHint?.trim()
+export function buildParseFoodLabelPrompt(ocrText: string, brandHint?: string): string {
+  const hint = brandHint?.trim()
   return `Ты помощник трекера калорий. Ниже текст с фото этикетки, меню или экрана приложения доставки (OCR, возможны ошибки и перепутанный порядок строк).
 
 Верни ТОЛЬКО JSON без markdown:
 {
-  "place": "название кафе/магазина/сети или null",
   "items": [
     {
       "name": "короткое название по-русски (без марки)",
-      "brand": "марка/бренд или null",
+      "brand": "марка / кафе / магазин / сеть или null",
       "macros": { "kcal": число, "protein": число, "fat": число, "carbs": число },
       "macrosBasis": "per100" | "portion",
       "portionGrams": число или null,
@@ -76,12 +75,11 @@ export function buildParseFoodLabelPrompt(ocrText: string, placeHint?: string): 
 - Этикетка: КБЖУ на 100 г → per100; только на порцию + граммы → portion.
 - Меню без веса: macrosBasis="portion", portionGrams типичный (суп ~300, салат ~250, бургер/паста ~300–350, напиток ~250, десерт ~120).
 - Согласованность: kcal ≈ белки×4 + жиры×9 + углеводы×4 (допуск большой, но 339 ккал при БЖУ 3/6/7 — явная ошибка, ищи другие цифры).
-- place: магазин/кафе/сеть (Пятёрочка, Бургер Кинг…) — не марка продукта. Не выдумывай.
-- brand: марка на упаковке (Lay's, Простоквашино, Domestos…) отдельно от name. В name не дублируй марку, если вынес в brand.
+- brand: одно поле — марка на упаковке (Lay's, Простоквашино) ИЛИ кафе/магазин/сеть (Пятёрочка, Бургер Кинг). Не выдумывай. В name не дублируй brand.
 - Отбрасывай акции, адреса, Wi‑Fi, баллы лояльности, «+33», короны.
 - 1–30 позиций; пустой items только если еды реально нет.
 
-${hint ? `Подсказка места от пользователя (используй, если похоже на фото): ${hint}\n` : ''}
+${hint ? `Подсказка марки/места от пользователя (используй для brand, если похоже на фото): ${hint}\n` : ''}
 OCR-текст:
 """
 ${ocrText.slice(0, 6000)}
@@ -131,11 +129,10 @@ export function macrosLookPlausible(m: MacroSet): boolean {
 /** Normalize / validate LLM JSON into catalog candidates. */
 export function normalizeFoodLabelResult(
   parsed: LlmFoodLabelResult,
-  options?: { placeHint?: string },
+  options?: { brandHint?: string },
 ): Omit<FoodLabelParseResult, 'ocrText'> {
-  const placeHint = options?.placeHint?.trim()
-  const placeRaw = String(parsed.place ?? '').trim() || placeHint || ''
-  const place = placeRaw || undefined
+  const brandFallback =
+    String(parsed.place ?? '').trim() || options?.brandHint?.trim() || ''
 
   const items: FoodLabelCandidate[] = []
   for (const raw of parsed.items ?? []) {
@@ -175,7 +172,7 @@ export function normalizeFoodLabelResult(
     if (!macrosLookPlausible(entered) && !macrosLookPlausible(per100g)) continue
     if (!macrosLookPlausible(per100g)) continue
     const note = String(raw?.note ?? '').trim() || undefined
-    const brand = String(raw?.brand ?? '').trim() || undefined
+    const brand = String(raw?.brand ?? '').trim() || brandFallback || undefined
     items.push({
       name,
       per100g,
@@ -185,11 +182,11 @@ export function normalizeFoodLabelResult(
     })
   }
 
-  return { ...(place ? { place } : {}), items }
+  return { items }
 }
 
 export type ParseFoodsFromPhotoOptions = {
-  placeHint?: string
+  brandHint?: string
   /** Progress for UI: compress | ocr | parse */
   onProgress?: (stage: 'compress' | 'ocr' | 'parse') => void
 }
@@ -219,9 +216,9 @@ export async function parseFoodsFromPhoto(
   const ocrText = await recognizeImageText(dataUrl)
 
   options?.onProgress?.('parse')
-  const prompt = buildParseFoodLabelPrompt(ocrText, options?.placeHint)
+  const prompt = buildParseFoodLabelPrompt(ocrText, options?.brandHint)
   const parsed = await deepseekJson<LlmFoodLabelResult>(prompt)
-  const normalized = normalizeFoodLabelResult(parsed, { placeHint: options?.placeHint })
+  const normalized = normalizeFoodLabelResult(parsed, { brandHint: options?.brandHint })
   if (normalized.items.length === 0) {
     throw new Error('Не удалось найти продукты на фото — попробуйте другое фото')
   }

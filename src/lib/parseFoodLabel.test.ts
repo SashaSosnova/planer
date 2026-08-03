@@ -7,7 +7,7 @@ import {
 } from './parseFoodLabel'
 
 describe('buildParseFoodLabelPrompt', () => {
-  it('includes OCR text, brand hint and portion fields', () => {
+  it('includes source text, brand hint and portion fields', () => {
     const prompt = buildParseFoodLabelPrompt('Творог 5% белки 16', 'Пятёрочка')
     expect(prompt).toContain('Творог 5%')
     expect(prompt).toContain('Пятёрочка')
@@ -15,6 +15,7 @@ describe('buildParseFoodLabelPrompt', () => {
     expect(prompt).toContain('macrosBasis')
     expect(prompt).toContain('НЕ калории')
     expect(prompt).toContain('На 100 г')
+    expect(prompt).toContain('вставка пользователя')
   })
 })
 

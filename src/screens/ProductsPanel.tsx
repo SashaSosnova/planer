@@ -13,6 +13,7 @@ type KbjuBasis = 'per100' | 'portion'
 import {
   isFoodPhotoParseConfigured,
   parseFoodsFromPhoto,
+  parseFoodsFromText,
   type FoodLabelCandidate,
 } from '../lib/parseFoodLabel'
 import { scalePer100g } from '../lib/nutrition'
@@ -72,6 +73,7 @@ type FormFieldsProps = {
   onCancel: () => void
   onGallery?: () => void
   onCamera?: () => void
+  onText?: () => void
 }
 
 function formatPreview(m: MacroSet): string {
@@ -101,6 +103,7 @@ function ProductFormCard({
   onCancel,
   onGallery,
   onCamera,
+  onText,
 }: FormFieldsProps) {
   const portionGrams = parsePortionGrams(portion)
   const entered = parseKbjuLine(kbju)
@@ -236,6 +239,16 @@ function ProductFormCard({
             Камера
           </button>
         )}
+        {showPhoto && onText && (
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={busy || photoBusy}
+            onClick={onText}
+          >
+            Текст
+          </button>
+        )}
       </div>
       {photoStage && <p className="form-msg muted">{photoStage}</p>}
       {error && <p className="form-msg error">{error}</p>}
@@ -259,6 +272,8 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
 
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoStage, setPhotoStage] = useState<string | null>(null)
+  const [textImport, setTextImport] = useState(false)
+  const [importText, setImportText] = useState('')
   const [reviewRows, setReviewRows] = useState<ReviewRow[] | null>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
@@ -310,6 +325,8 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setAdding(false)
     setReviewRows(null)
     setPhotoStage(null)
+    setTextImport(false)
+    setImportText('')
     clearForm()
   }
 
@@ -322,8 +339,21 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setEditId(null)
     clearForm()
     setReviewRows(null)
+    setTextImport(false)
+    setImportText('')
     setAdding(true)
   }
+
+  const candidatesToReview = (items: FoodLabelCandidate[]): ReviewRow[] =>
+    items.map((item, i) => ({
+      ...item,
+      key: `${i}-${item.name}`,
+      selected: true,
+      kbju: formatKbjuLine(item.per100g),
+      portion:
+        item.portionGrams != null && item.portionGrams > 0 ? String(item.portionGrams) : '',
+      brand: item.brand ?? brand.trim(),
+    }))
 
   const startEdit = (food: FoodItem) => {
     if (editId === food.id) {
@@ -402,25 +432,14 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setError(null)
     setInfo(null)
     setReviewRows(null)
+    setTextImport(false)
     setPhotoStage('Сжимаю фото…')
     try {
       const result = await parseFoodsFromPhoto(file, {
         brandHint: brand.trim() || undefined,
         onProgress: (stage) => setPhotoStage(stageLabel(stage)),
       })
-      setReviewRows(
-        result.items.map((item, i) => ({
-          ...item,
-          key: `${i}-${item.name}`,
-          selected: true,
-          kbju: formatKbjuLine(item.per100g),
-          portion:
-            item.portionGrams != null && item.portionGrams > 0
-              ? String(item.portionGrams)
-              : '',
-          brand: item.brand ?? brand.trim(),
-        })),
-      )
+      setReviewRows(candidatesToReview(result.items))
       setPhotoStage(null)
       setInfo(`Найдено: ${result.items.length}. Проверьте и добавьте.`)
     } catch (err) {
@@ -430,6 +449,37 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
       setPhotoBusy(false)
       if (galleryRef.current) galleryRef.current.value = ''
       if (cameraRef.current) cameraRef.current.value = ''
+    }
+  }
+
+  const onParseImportText = async () => {
+    if (!isFoodPhotoParseConfigured()) {
+      setError('DeepSeek не настроен — добавьте VITE_DEEPSEEK_API_KEY')
+      return
+    }
+    if (!importText.trim()) {
+      setError('Вставьте текст с продуктами')
+      return
+    }
+    setPhotoBusy(true)
+    setError(null)
+    setInfo(null)
+    setReviewRows(null)
+    setPhotoStage('Разбираю продукты…')
+    try {
+      const result = await parseFoodsFromText(importText, {
+        brandHint: brand.trim() || undefined,
+        onProgress: () => setPhotoStage('Разбираю продукты…'),
+      })
+      setReviewRows(candidatesToReview(result.items))
+      setTextImport(false)
+      setPhotoStage(null)
+      setInfo(`Найдено: ${result.items.length}. Проверьте и добавьте.`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось разобрать текст')
+      setPhotoStage(null)
+    } finally {
+      setPhotoBusy(false)
     }
   }
 
@@ -528,7 +578,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         onChange={(e) => void onPickPhoto(e.target.files?.[0] ?? null)}
       />
 
-      {adding && !reviewRows && (
+      {adding && !reviewRows && !textImport && (
         <ProductFormCard
           {...formProps}
           title="Новый продукт"
@@ -537,13 +587,80 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           onCancel={closeAdd}
           onGallery={() => galleryRef.current?.click()}
           onCamera={() => cameraRef.current?.click()}
+          onText={() => {
+            setError(null)
+            setInfo(null)
+            setPhotoStage(null)
+            setTextImport(true)
+          }}
         />
+      )}
+
+      {adding && !reviewRows && textImport && (
+        <div className="panel product-form-card">
+          <h2 className="subhead" style={{ marginTop: 0 }}>
+            Продукты текстом
+          </h2>
+          <p className="muted small" style={{ margin: '0 0 8px' }}>
+            Вставьте список: название, КБЖУ, при желании марка и порция.
+          </p>
+          <label className="field">
+            <input
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              placeholder="Марка / кафе / магазин (для всех, необязательно)"
+              aria-label="Марка"
+              autoComplete="off"
+            />
+          </label>
+          <label className="field">
+            <span className="visually-hidden">Текст продуктов</span>
+            <textarea
+              rows={10}
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder={
+                'Творог 5% Простоквашино\n70 16 0.5 1.5 на 100 г\n\nКуриная грудка\n110 23 1.5 0\nпорция 150 г'
+              }
+              disabled={photoBusy}
+            />
+          </label>
+          <div className="btn-row">
+            <button
+              type="button"
+              className="primary-btn"
+              disabled={photoBusy || !importText.trim()}
+              onClick={() => void onParseImportText()}
+            >
+              {photoBusy ? 'Читаю…' : 'Разобрать'}
+            </button>
+            <button
+              type="button"
+              className="ghost-btn"
+              disabled={photoBusy}
+              onClick={() => {
+                setTextImport(false)
+                setError(null)
+                setInfo(null)
+                setPhotoStage(null)
+              }}
+            >
+              Назад
+            </button>
+            <button type="button" className="ghost-btn" disabled={photoBusy} onClick={closeAdd}>
+              Отмена
+            </button>
+          </div>
+          {photoStage && <p className="form-msg muted">{photoStage}</p>}
+          {error && <p className="form-msg error">{error}</p>}
+          {info && <p className="form-msg">{info}</p>}
+        </div>
       )}
 
       {adding && reviewRows && (
         <div className="panel product-form-card">
           <h2 className="subhead" style={{ marginTop: 0 }}>
-            С фото — проверка
+            Проверка
           </h2>
           <ul className="photo-import-list">
             {reviewRows.map((row) => (
@@ -649,6 +766,8 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                 setReviewRows(null)
                 setInfo(null)
                 setError(null)
+                // Keep pasted text so user can tweak and re-parse
+                if (importText.trim()) setTextImport(true)
               }}
             >
               Назад

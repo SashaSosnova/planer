@@ -234,10 +234,8 @@ const SWEET_EXCLUDE = new RegExp(
   'i',
 )
 
-/** ~10% of the daily calorie goal, clamped — room for treats without eating the whole deficit. */
-export const SWEET_BUDGET_RATIO = 0.1
-export const SWEET_BUDGET_MIN_KCAL = 80
-export const SWEET_BUDGET_MAX_KCAL = 220
+/** Fixed daily treat budget — independent of calorie goal. */
+export const SWEET_BUDGET_KCAL = 300
 
 function normalize(name: string): string {
   return name.toLowerCase().replace(/ё/g, 'е')
@@ -250,11 +248,9 @@ export function isSweetName(name: string): boolean {
   return SWEET_RE.test(n)
 }
 
-/** How many kcal of today's goal can go to sweets. */
-export function calcSweetBudgetKcal(dailyKcalGoal: number): number {
-  if (!(dailyKcalGoal > 0)) return SWEET_BUDGET_MIN_KCAL
-  const raw = Math.round(dailyKcalGoal * SWEET_BUDGET_RATIO)
-  return Math.min(SWEET_BUDGET_MAX_KCAL, Math.max(SWEET_BUDGET_MIN_KCAL, raw))
+/** Daily sweets budget in kcal (fixed). */
+export function calcSweetBudgetKcal(_dailyKcalGoal?: number): number {
+  return SWEET_BUDGET_KCAL
 }
 
 /**

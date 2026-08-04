@@ -103,11 +103,10 @@ describe('isSweetName', () => {
 })
 
 describe('calcSweetBudgetKcal', () => {
-  it('is about 10% of the daily goal within clamps', () => {
-    expect(calcSweetBudgetKcal(1400)).toBe(140)
-    expect(calcSweetBudgetKcal(1561)).toBe(156)
-    expect(calcSweetBudgetKcal(500)).toBe(80)
-    expect(calcSweetBudgetKcal(3000)).toBe(220)
+  it('is a fixed 300 kcal', () => {
+    expect(calcSweetBudgetKcal(1400)).toBe(300)
+    expect(calcSweetBudgetKcal(500)).toBe(300)
+    expect(calcSweetBudgetKcal()).toBe(300)
   })
 })
 

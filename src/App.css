@@ -2171,10 +2171,7 @@ button.food-row-open:focus-visible {
 .progress-card--compact .muted.small {
   font-size: 0.72rem;
   line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .progress-card-btn {
@@ -2197,6 +2194,7 @@ button.food-row-open:focus-visible {
   justify-content: space-between;
   align-items: baseline;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .progress-card-label {
@@ -2237,10 +2235,13 @@ button.food-row-open:focus-visible {
 }
 
 .progress-card-delta {
+  min-width: 0;
+  flex: 1 1 auto;
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
   text-align: left;
+  overflow-wrap: anywhere;
 }
 
 .progress-card-delta.down {

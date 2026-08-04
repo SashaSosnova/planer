@@ -26,12 +26,79 @@ describe('isSweetName', () => {
     expect(isSweetName('мороженое пломбир')).toBe(true)
     expect(isSweetName('печенье овсяное')).toBe(true)
     expect(isSweetName('торт Наполеон')).toBe(true)
+    expect(isSweetName('бисквитный рулет')).toBe(true)
+  })
+
+  it('detects a wide range of sweets and pastry', () => {
+    const sweets = [
+      'бисквитный рулет',
+      'рулет с маком',
+      'медовик',
+      'эклер с кремом',
+      'профитроли',
+      'безе',
+      'меренга',
+      'пудинг ванильный',
+      'панна котта',
+      'крем-брюле',
+      'пахлава',
+      'baklava',
+      'шарлотка',
+      'штрудель яблочный',
+      'кулич',
+      'ромовая баба',
+      'тарталетки',
+      'синнабон',
+      'чуррос',
+      'заварной крем',
+      'трубочки с кремом',
+      'яблочный пирог',
+      'пирог с вишней',
+      'глазированный сырок',
+      'сырок',
+      'сырники',
+      'зефир',
+      'пастила',
+      'мармелад',
+      'халва',
+      'лукум',
+      'козинаки',
+      'ирис',
+      'леденцы',
+      'сгущенка',
+      'варенье вишневое',
+      'джем',
+      'нутелла',
+      'мед',
+      'какао',
+      'милкшейк',
+      'сладкая вата',
+      'попкорн карамельный',
+      'сладкое',
+      'батончик Snickers',
+      'Raffaello',
+      'Milka',
+      'печенюшки',
+      'коврижка',
+      'булочка с корицей',
+    ]
+    for (const name of sweets) {
+      expect(isSweetName(name), name).toBe(true)
+    }
   })
 
   it('skips savory false positives', () => {
     expect(isSweetName('перец сладкий')).toBe(false)
     expect(isSweetName('куриная грудка')).toBe(false)
     expect(isSweetName('салат цезарь')).toBe(false)
+    expect(isSweetName('мясной рулет')).toBe(false)
+    expect(isSweetName('рулет из курицы')).toBe(false)
+    expect(isSweetName('капустный рулет')).toBe(false)
+    expect(isSweetName('кисло-сладкий соус')).toBe(false)
+    expect(isSweetName('сладкий картофель')).toBe(false)
+    expect(isSweetName('какао-порошок')).toBe(false)
+    expect(isSweetName('пирог с капустой')).toBe(false)
+    expect(isSweetName('булочка с сыром')).toBe(false)
   })
 })
 

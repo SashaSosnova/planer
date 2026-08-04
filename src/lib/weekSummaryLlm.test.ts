@@ -43,7 +43,7 @@ describe('week summary cache', () => {
 
   it('returns frozen text and never calls LLM again', async () => {
     localStorage.setItem(
-      'planer-week-summaries-v3',
+      'planer-week-summaries-v4',
       JSON.stringify({
         '2026-07-06': { text: 'Уже сохранённый итог недели.', savedAt: '2026-07-13T08:00:00.000Z' },
       }),
@@ -78,18 +78,24 @@ describe('week summary cache', () => {
     expect(a).toBe(localWeekNutritionNote(w))
   })
 
-  it('migrates legacy v2 cache without fingerprint checks', async () => {
+  it('does not reuse old v3 cache after version bump', async () => {
     localStorage.setItem(
-      'planer-week-summaries-v2',
+      'planer-week-summaries-v3',
       JSON.stringify({
-        '2026-07-06': { text: 'Старый кэш.', fingerprint: 'stale' },
+        '2026-07-06': { text: 'Средняя активность низкая, шагов мало.', savedAt: '2026-07-13T08:00:00.000Z' },
       }),
     )
-    const spy = vi.spyOn(await import('./deepseek'), 'deepseekJson')
-    const text = await getWeekNutritionSummary(week())
-    expect(text).toBe('Старый кэш.')
-    expect(spy).not.toHaveBeenCalled()
-    expect(localStorage.getItem('planer-week-summaries-v2')).toBeNull()
-    expect(getCachedWeekSummary('2026-07-06')).toBe('Старый кэш.')
+    vi.spyOn(await import('./deepseek'), 'isDeepseekConfigured').mockReturnValue(false)
+    const w = week({ avgSteps: 18231 })
+    const text = await getWeekNutritionSummary(w)
+    expect(text).toBe(localWeekNutritionNote(w))
+    expect(text).not.toMatch(/шагов мало/)
+    expect(text).toMatch(/Шаги/)
+  })
+
+  it('mentions average steps in the local note', () => {
+    const note = localWeekNutritionNote(week({ avgSteps: 18231 }))
+    expect(note).toMatch(/18[\s\u00a0]?231/)
+    expect(note).toMatch(/Шаги/)
   })
 })

@@ -204,6 +204,7 @@ export default function App() {
             data={data}
             dailyKcalGoal={dailyKcalGoal}
             maintainKcalGoal={maintainKcalGoal}
+            targetWeightKg={settings.targetWeightKg}
             proteinGoal={proteinGoal}
             profileReady={profileReady}
             cycleLengthDays={cycleLengthDays}
@@ -235,7 +236,6 @@ export default function App() {
               return entry
             }}
             onSaveSteps={saveSteps}
-            onSaveDayNote={saveDayNote}
           />
         </div>
 

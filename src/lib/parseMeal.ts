@@ -7,6 +7,11 @@ import { isComplexMealText } from './mealComplexity'
 import { isLlmConfigured, parseMealWithLlm } from './parseMealLlm'
 import { extractMealGrams, parseMealLocal } from './parseMealLocal'
 import { coerceMealType, defaultMealTypeForNow, extractMealTypeFromText } from './labels'
+import {
+  defaultFoodGrams,
+  mealTextHasExplicitGrams,
+  resolveParsedGrams,
+} from './foodPortion'
 import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
 import { sanitizeMealItems } from './sanitize'
 
@@ -24,11 +29,13 @@ function tryWholeLibraryMatch(
 
   const collapsed = text.replace(/\s+/g, ' ').trim()
   const { name, grams: parsedGrams } = extractMealGrams(collapsed)
-  const grams = parsedGrams ?? 100
-  if (!name || !Number.isFinite(grams) || grams <= 0) return null
+  if (!name) return null
 
   const food = findBestFood(name, foods, 70)
   if (!food) return null
+
+  const grams = parsedGrams ?? defaultFoodGrams(food)
+  if (!Number.isFinite(grams) || grams <= 0) return null
 
   const macros = scalePer100g(food.per100g, grams)
   const item = {
@@ -117,9 +124,9 @@ export function finalizeDraft(
 ): ParsedMealDraft {
   const queryName = userText ? extractMealGrams(userText.replace(/\s+/g, ' ').trim()).name : ''
   const singleItem = items.length === 1
+  const textHasWeights = userText ? mealTextHasExplicitGrams(userText) : true
 
   const resolved = items.map((item) => {
-    const grams = item.grams > 0 ? item.grams : 100
     const query = singleItem && queryName ? queryName : item.name
     const userLabel = (singleItem && queryName ? queryName : item.name) || 'Блюдо'
 
@@ -132,16 +139,27 @@ export function finalizeDraft(
           queryName || undefined,
           singleItem,
         )
-        if (viaId) return toLibraryItem(viaId, grams)
+        if (viaId) {
+          return toLibraryItem(
+            viaId,
+            resolveParsedGrams(item.grams, viaId, textHasWeights),
+          )
+        }
       }
 
       // 2) LLM often returns the right name without foodId / as estimate — rematch.
       const viaName = findBestFood(query, foods, 70)
-      if (viaName) return toLibraryItem(viaName, grams)
+      if (viaName) {
+        return toLibraryItem(
+          viaName,
+          resolveParsedGrams(item.grams, viaName, textHasWeights),
+        )
+      }
 
       // 3) Wrong catalog id / model renamed product («творог» → «Творожный сыр»).
       // Drop foodId and prefer the user's wording for a single-item phrase.
       if (item.foodId || (singleItem && queryName)) {
+        const grams = item.grams > 0 ? item.grams : 100
         const keepModelMacros =
           item.source !== 'library' &&
           ((item.kcal ?? 0) > 0 ||
@@ -165,6 +183,7 @@ export function finalizeDraft(
       }
     }
 
+    const grams = item.grams > 0 ? item.grams : 100
     return {
       name: item.name,
       grams,
@@ -229,6 +248,9 @@ export async function parseMeal(
           aliases: f.aliases,
           per100g: f.per100g,
           kind: f.kind,
+          ...(f.portionGrams != null && f.portionGrams > 0
+            ? { portionGrams: f.portionGrams }
+            : {}),
         })),
       })
       return finalizeDraft(

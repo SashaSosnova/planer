@@ -20,8 +20,18 @@ import type {
   WeightEntry,
 } from '../types'
 import { hasCareSkin } from './careSchedule'
+import {
+  cleanJournalLine,
+  cleanJournalLines,
+  DAY_JOURNAL_TEXT_MAX,
+  isDayMood,
+  isJournalDraftEmpty,
+  migrateLegacyNote,
+  draftToNoteFields,
+} from './dayJournal'
 
-export const DAY_NOTE_MAX = 280
+/** Max length of DayNote.text snapshot (structured journal fields). */
+export const DAY_NOTE_MAX = DAY_JOURNAL_TEXT_MAX
 
 /** Finite number ≥ 0, otherwise fallback. */
 export function nonNeg(n: unknown, fallback = 0): number {
@@ -190,18 +200,51 @@ export function sanitizeDayNote(raw: unknown): DayNote | null {
   const id = String(n.id ?? '')
   const date = String(n.date ?? '')
   if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null
-  const text = String(n.text ?? '').trim().slice(0, DAY_NOTE_MAX)
-  if (!text) return null
-  const createdAt = Number(n.createdAt) || Date.now()
-  const updatedAt = Number(n.updatedAt) || createdAt
-  const question = String(n.question ?? '').trim()
+
+  const mood = isDayMood(n.mood) ? n.mood : undefined
+  const grateful = cleanJournalLines(n.grateful)
+  const greatDay = cleanJournalLine(n.greatDay as string)
+  const affirmation = cleanJournalLine(n.affirmation as string)
+  const highlights = cleanJournalLines(n.highlights)
+  const kindness = cleanJournalLine(n.kindness as string)
+  const betterTomorrow = cleanJournalLine(n.betterTomorrow as string)
+  const question = String(n.question ?? '').trim().slice(0, 200)
+  let text = String(n.text ?? '').trim().slice(0, DAY_NOTE_MAX)
+
+  const partial: DayNote = {
+    id,
+    date,
+    text: text || '·',
+    createdAt: Number(n.createdAt) || Date.now(),
+    updatedAt: Number(n.updatedAt) || Number(n.createdAt) || Date.now(),
+    ...(mood ? { mood } : {}),
+    ...(grateful.length ? { grateful } : {}),
+    ...(greatDay ? { greatDay } : {}),
+    ...(affirmation ? { affirmation } : {}),
+    ...(highlights.length ? { highlights } : {}),
+    ...(kindness ? { kindness } : {}),
+    ...(betterTomorrow ? { betterTomorrow } : {}),
+    ...(question ? { question } : {}),
+  }
+
+  const draft = migrateLegacyNote(partial)
+  if (isJournalDraftEmpty(draft) && !text) return null
+
+  const fields = draftToNoteFields(draft)
   return {
     id,
     date,
-    text,
-    createdAt,
-    updatedAt,
-    ...(question ? { question: question.slice(0, 200) } : {}),
+    text: (fields.text || text).slice(0, DAY_NOTE_MAX) || '·',
+    createdAt: partial.createdAt,
+    updatedAt: partial.updatedAt,
+    ...(fields.mood ? { mood: fields.mood } : {}),
+    ...(fields.grateful ? { grateful: fields.grateful } : {}),
+    ...(fields.greatDay ? { greatDay: fields.greatDay } : {}),
+    ...(fields.affirmation ? { affirmation: fields.affirmation } : {}),
+    ...(fields.highlights ? { highlights: fields.highlights } : {}),
+    ...(fields.kindness ? { kindness: fields.kindness } : {}),
+    ...(fields.betterTomorrow ? { betterTomorrow: fields.betterTomorrow } : {}),
+    ...(question ? { question } : {}),
   }
 }
 

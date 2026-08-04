@@ -7,6 +7,36 @@ export function defaultFoodGrams(food: Pick<FoodItem, 'portionGrams'>): number {
   return g != null && g > 0 ? g : 100
 }
 
+/** True if the meal text already names a weight (г / мл / кг). */
+export function mealTextHasExplicitGrams(text: string): boolean {
+  // Avoid \\b — ASCII-only and breaks Cyrillic «г».
+  return /\d+(?:[.,]\d+)?\s*(?:кг|kg|грамм(?:а|ов)?|гр|г|мл|ml)(?=\s|$|[^\p{L}])/iu.test(
+    text,
+  )
+}
+
+/**
+ * Grams after parse: keep explicit weights; if the model/local path left a
+ * generic stub (100/200/300) and the catalog has a portion — use the portion.
+ */
+export function resolveParsedGrams(
+  parsedGrams: number | null | undefined,
+  food: Pick<FoodItem, 'portionGrams'> | null | undefined,
+  textHasWeights: boolean,
+): number {
+  const portion = food ? defaultFoodGrams(food) : 100
+  if (!(parsedGrams != null && parsedGrams > 0)) return portion
+  if (
+    !textHasWeights &&
+    food?.portionGrams != null &&
+    food.portionGrams > 0 &&
+    (parsedGrams === 100 || parsedGrams === 200 || parsedGrams === 300)
+  ) {
+    return food.portionGrams
+  }
+  return parsedGrams
+}
+
 /** КБЖУ, введённые на порцию → на 100 г (хранение в справочнике). */
 export function per100FromPortionMacros(portionMacros: MacroSet, portionGrams: number): MacroSet {
   if (!(portionGrams > 0)) {

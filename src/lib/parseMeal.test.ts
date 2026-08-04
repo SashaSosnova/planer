@@ -20,6 +20,38 @@ const tvorozhnySyr: FoodRef = {
 }
 
 describe('finalizeDraft (cloud library guard)', () => {
+  it('replaces stub 100/200 g with catalog portion when text has no weights', () => {
+    const sandwich: FoodRef = {
+      id: 's1',
+      name: 'Бутерброд',
+      aliases: ['бутерброд'],
+      per100g: { kcal: 250, protein: 12, fat: 15, carbs: 20 },
+      kind: 'dish',
+      portionGrams: 180,
+    }
+    const coffee: FoodRef = {
+      id: 'c1',
+      name: 'Кофе',
+      aliases: ['кофе'],
+      per100g: { kcal: 2, protein: 0.1, fat: 0, carbs: 0.3 },
+      kind: 'ingredient',
+      portionGrams: 250,
+    }
+    const draft = finalizeDraft(
+      'breakfast',
+      [
+        { name: 'Бутерброд', grams: 100, foodId: 's1', source: 'library' },
+        { name: 'Кофе', grams: 200, foodId: 'c1', source: 'library' },
+      ],
+      [sandwich, coffee],
+      false,
+      undefined,
+      'deepseek',
+      'бутерброд и кофе',
+    )
+    expect(draft.items.map((i) => i.grams)).toEqual([180, 250])
+  })
+
   it('rejects LLM foodId Творожный сыр for query творога when Творог exists', () => {
     const draft = finalizeDraft(
       'snack',

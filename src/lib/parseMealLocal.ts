@@ -1,5 +1,6 @@
 import type { FoodRef, MealItem, MealType, ParsedMealDraft } from '../types'
 import { stripEatingOutMarkers, textSuggestsEatingOut } from './eatingOut'
+import { defaultFoodGrams } from './foodPortion'
 import { findBestFood } from './foodMatch'
 import { defaultMealTypeForNow } from './labels'
 import { isComplexMealText } from './mealComplexity'
@@ -163,7 +164,8 @@ function expandWithParts(seg: Segment): Segment[] {
     {
       raw: baseName,
       name: baseName,
-      grams: defaultGramsForBase(baseName),
+      // null → toItem uses catalog portionGrams when available
+      grams: null,
     },
     {
       raw: `${addon.name} ${addon.grams} г`,
@@ -181,9 +183,26 @@ function splitList(text: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * «бутерброд и кофе» → two items. Skip long / weighted phrases
+ * («мясо и картошка 300 г», dish titles).
+ */
+function splitSimpleAndList(text: string): string[] | null {
+  if (/[,;\n]/.test(text)) return null
+  const parts = text
+    .split(/\s+и\s+/i)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  if (parts.length < 2 || parts.length > 4) return null
+  if (parts.some((p) => p.length > 36 || /\d/.test(p))) return null
+  return parts
+}
+
 function splitSegments(text: string): Segment[] {
+  const andParts = splitSimpleAndList(text)
+  const chunks = andParts ?? splitList(text)
   const segments: Segment[] = []
-  for (const raw of splitList(text)) {
+  for (const raw of chunks) {
     const { name, grams } = extractGrams(raw)
     segments.push(...expandWithParts({ raw, name, grams }))
   }
@@ -192,28 +211,35 @@ function splitSegments(text: string): Segment[] {
 
 function toItem(
   name: string,
-  grams: number,
+  grams: number | null,
   foods: FoodRef[],
   eatingOut: boolean,
 ): MealItem {
   if (!eatingOut) {
     const matched = findBestFood(name, foods)
     if (matched) {
-      const macros = scalePer100g(matched.per100g, grams)
+      const g = grams != null && grams > 0 ? grams : defaultFoodGrams(matched)
+      const macros = scalePer100g(matched.per100g, g)
       return {
         name: matched.name,
-        grams,
+        grams: g,
         foodId: matched.id,
         ...macros,
         source: 'library',
       }
     }
   }
+  const g =
+    grams != null && grams > 0
+      ? grams
+      : eatingOut
+        ? restaurantPortionGrams(name)
+        : defaultGramsForBase(name)
   const per100 = guessFallbackCategory(name)
-  const macros = scalePer100g(per100, grams)
+  const macros = scalePer100g(per100, g)
   return {
     name,
-    grams,
+    grams: g,
     ...macros,
     source: 'estimate',
   }
@@ -238,7 +264,7 @@ function tryMatchWholeFood(
   const matched = findBestFood(name, foods, 70)
   if (!matched) return null
 
-  const g = grams ?? DEFAULT_GRAMS
+  const g = grams ?? defaultFoodGrams(matched)
   const macros = scalePer100g(matched.per100g, g)
   const item: MealItem = {
     name: matched.name,
@@ -319,12 +345,9 @@ export function parseMealLocal(
       })
     : splitSegments(cleaned)
 
-  const items: MealItem[] = segments.map((seg) => {
-    const grams =
-      seg.grams ??
-      (eatingOut ? restaurantPortionGrams(seg.name) : defaultGramsForBase(seg.name))
-    return toItem(seg.name, grams, foods, eatingOut)
-  })
+  const items: MealItem[] = segments.map((seg) =>
+    toItem(seg.name, seg.grams, foods, eatingOut),
+  )
 
   const expanded =
     !eatingOut &&

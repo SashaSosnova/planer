@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalorieRing } from '../components/CalorieRing'
+import { DayScale } from '../components/DayScale'
 import { PromptDialog } from '../components/PromptDialog'
 import { cyclePhaseLabel, getCycleInfo } from '../lib/cycle'
-import { cycleInsightsFromAppData } from '../lib/cycleCalorieInsights'
-import { dayPromptForDate } from '../lib/dayPrompts'
 import { formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
+import { calcSweetBudgetKcal } from '../lib/sweets'
 import { AppsGridIcon } from '../components/AppsGridIcon'
 import {
   CareMenuIcon,
@@ -19,9 +19,8 @@ import {
 } from '../components/MoreMenuIcons'
 import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
 import { PlusIcon } from '../components/PlusIcon'
-import { DAY_NOTE_MAX } from '../lib/sanitize'
-import { buildWeightCheckin } from '../lib/weightCheckin'
-import type { AppData, DayNote, MealType } from '../types'
+import { buildWeightProgress } from '../lib/weightProgress'
+import type { AppData, MealType } from '../types'
 
 type PromptKind = 'weight' | 'steps' | null
 
@@ -29,6 +28,7 @@ type Props = {
   data: AppData
   dailyKcalGoal: number
   maintainKcalGoal: number
+  targetWeightKg?: number | null
   proteinGoal: number | null
   profileReady: boolean
   cycleLengthDays: number
@@ -50,11 +50,6 @@ type Props = {
   backEnabled?: boolean
   onSaveWeight: (date: string, kg: number) => Promise<unknown>
   onSaveSteps: (date: string, count: number) => Promise<unknown>
-  onSaveDayNote: (input: {
-    date: string
-    text: string
-    question?: string
-  }) => Promise<DayNote | null>
 }
 
 function num(v: string): number | undefined {
@@ -66,6 +61,7 @@ export function TodayScreen({
   data,
   dailyKcalGoal,
   maintainKcalGoal,
+  targetWeightKg,
   proteinGoal,
   profileReady,
   cycleLengthDays,
@@ -85,30 +81,21 @@ export function TodayScreen({
   backEnabled = true,
   onSaveWeight,
   onSaveSteps,
-  onSaveDayNote,
 }: Props) {
   const date = todayIso()
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
   const medDay = (data.medDays ?? []).find((m) => m.date === date)
-  const savedNote = (data.dayNotes ?? []).find((n) => n.date === date)?.text ?? ''
 
   const [prompt, setPrompt] = useState<PromptKind>(null)
   const [busy, setBusy] = useState(false)
   const [promptError, setPromptError] = useState<string | null>(null)
   const [moreOpen, setMoreOpen] = useState(false)
-  const [noteDraft, setNoteDraft] = useState(savedNote)
-  const [noteSaving, setNoteSaving] = useState(false)
-  const [noteFocused, setNoteFocused] = useState(false)
   const moreOpenRef = useRef(moreOpen)
   moreOpenRef.current = moreOpen
   const promptRef = useRef(prompt)
   promptRef.current = prompt
   const moreRef = useRef<HTMLDivElement | null>(null)
-
-  useEffect(() => {
-    setNoteDraft(savedNote)
-  }, [savedNote, date])
 
   useEffect(() => {
     if (!registerBackHandler || !backEnabled) return
@@ -141,51 +128,37 @@ export function TodayScreen({
   }
 
   const today = useMemo(() => statsForDate(data, date), [data, date])
+  const sweetBudget = useMemo(
+    () => calcSweetBudgetKcal(dailyKcalGoal),
+    [dailyKcalGoal],
+  )
 
-  const weightCheckin = useMemo(
+  const weightProgress = useMemo(
     () =>
-      buildWeightCheckin({
-        weights: data.weights,
-        meals: data.meals,
+      buildWeightProgress({
+        data,
+        today: date,
+        maintainKcal: maintainKcalGoal,
         dailyKcalGoal,
+        targetKg: targetWeightKg,
+        cycleLengthDays,
+        periodLengthDays,
       }),
-    [data.weights, data.meals, dailyKcalGoal],
+    [
+      data,
+      date,
+      maintainKcalGoal,
+      dailyKcalGoal,
+      targetWeightKg,
+      cycleLengthDays,
+      periodLengthDays,
+    ],
   )
 
   const cycle = useMemo(
     () => getCycleInfo(data.periodStarts, date, cycleLengthDays, periodLengthDays),
     [data.periodStarts, date, cycleLengthDays, periodLengthDays],
   )
-  const cycleInsights = useMemo(
-    () =>
-      cycleInsightsFromAppData(data, dailyKcalGoal, {
-        cycleLengthDays,
-        periodLengthDays,
-        today: date,
-      }),
-    [data, dailyKcalGoal, cycleLengthDays, periodLengthDays, date],
-  )
-  const cycleTip = cycleInsights.tip
-
-  const dayPrompt = useMemo(() => dayPromptForDate(date), [date])
-  const noteAnswered = Boolean(savedNote.trim())
-  const noteDirty = noteDraft.trim() !== savedNote.trim()
-
-  const saveNote = async () => {
-    if (!noteDirty || noteSaving) return
-    const text = noteDraft.trim()
-    if (!text) return
-    setNoteSaving(true)
-    try {
-      await onSaveDayNote({
-        date,
-        text,
-        question: dayPrompt.question,
-      })
-    } finally {
-      setNoteSaving(false)
-    }
-  }
 
   const openWeight = () => {
     if (weight) onOpenWeightHistory()
@@ -251,6 +224,15 @@ export function TodayScreen({
           <h1>{formatRuDate(date)}</h1>
         </div>
         <div className="btn-row tight nowrap">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onOpenDiary}
+            aria-label="Дневник"
+            title="Дневник"
+          >
+            <DiaryMenuIcon />
+          </button>
           <div className="more-anchor" ref={moreRef}>
             <button
               type="button"
@@ -283,15 +265,6 @@ export function TodayScreen({
                   >
                     <CareMenuIcon />
                     <span>Уход</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
-                    onClick={() => runMore(onOpenDiary)}
-                  >
-                    <DiaryMenuIcon />
-                    <span>Дневник</span>
                   </button>
                   <button
                     type="button"
@@ -348,28 +321,32 @@ export function TodayScreen({
         </p>
       )}
 
-      {weightCheckin && (
-        <div className="progress-card">
+      {(weightProgress || (cycle.phase !== 'unknown' && cycle.dayInCycle != null)) && (
+        <div className="progress-card progress-card--compact">
           <div className="progress-card-top">
-            <span>Прогресс</span>
-            <strong className={`progress-card-delta ${weightCheckin.tone}`}>
-              {weightCheckin.hero}
-            </strong>
+            {weightProgress ? (
+              <strong className={`progress-card-delta ${weightProgress.tone}`}>
+                {weightProgress.hero}
+              </strong>
+            ) : (
+              <span className="progress-card-label">Цикл</span>
+            )}
+            {cycle.phase !== 'unknown' && cycle.dayInCycle != null && (
+              <button
+                type="button"
+                className="progress-card-cycle"
+                onClick={onOpenCycle}
+              >
+                день {cycle.dayInCycle} · {cyclePhaseLabel(cycle.phase)}
+              </button>
+            )}
           </div>
-          <p className="muted small">{weightCheckin.note}</p>
+          {(weightProgress?.note || cycle.weightNote) && (
+            <p className="muted small">
+              {[cycle.weightNote, weightProgress?.note].filter(Boolean).join(' · ')}
+            </p>
+          )}
         </div>
-      )}
-
-      {cycle.phase !== 'unknown' && cycle.dayInCycle != null && (
-        <button type="button" className="progress-card progress-card-btn" onClick={onOpenCycle}>
-          <div className="progress-card-top">
-            <span>Цикл</span>
-            <span className="progress-card-value">
-              день {cycle.dayInCycle} из {cycleLengthDays} · {cyclePhaseLabel(cycle.phase)}
-            </span>
-          </div>
-          {cycleTip && <p className="muted small">{cycleTip}</p>}
-        </button>
       )}
 
       <div className="today-hero">
@@ -390,56 +367,36 @@ export function TodayScreen({
               <strong>{steps ? steps.count.toLocaleString('ru-RU') : '—'}</strong>
             </button>
           </div>
-          <p className="bju-line muted small">
-            Белки {Math.round(today.totals.protein)}
-            {proteinGoal != null ? ` / ${proteinGoal}` : ''} · Жиры{' '}
-            {Math.round(today.totals.fat)} · Углеводы {Math.round(today.totals.carbs)}
-          </p>
-          <p className="bju-line muted small">
-            Овощи {today.vegGrams} / {VEG_GOAL_G} г
-          </p>
         </div>
       </div>
 
-      {!noteAnswered && (
-        <div className="day-note-block">
-          <p className="day-note-question">{dayPrompt.question}</p>
-          <textarea
-            className="day-note-input fixed"
-            value={noteDraft}
-            maxLength={DAY_NOTE_MAX}
-            rows={2}
-            placeholder="Ответ…"
-            aria-label={dayPrompt.question}
-            disabled={noteSaving}
-            onChange={(e) => setNoteDraft(e.target.value.slice(0, DAY_NOTE_MAX))}
-            onFocus={() => setNoteFocused(true)}
-            onBlur={() => {
-              setNoteFocused(false)
-              void saveNote()
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                ;(e.target as HTMLTextAreaElement).blur()
-              }
-            }}
-          />
-          {noteFocused && noteDraft.trim() && (
-            <div className="day-note-actions">
-              <button
-                type="button"
-                className="primary-btn"
-                disabled={noteSaving || !noteDirty}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => void saveNote()}
-              >
-                {noteSaving ? 'Сохраняю…' : 'Отправить'}
-              </button>
-            </div>
+      <div className="day-scales-card">
+        <div className="day-scales">
+          {proteinGoal != null && (
+            <DayScale
+              label="Белки"
+              current={today.totals.protein}
+              goal={proteinGoal}
+              unit="г"
+              mode="toward"
+            />
           )}
+          <DayScale
+            label="Овощи"
+            current={today.vegGrams}
+            goal={VEG_GOAL_G}
+            unit="г"
+            mode="toward"
+          />
+          <DayScale
+            label="Сладкое"
+            current={today.sweetKcal}
+            goal={sweetBudget}
+            unit="ккал"
+            mode="budget"
+          />
         </div>
-      )}
+      </div>
 
       <section className="meal-section" aria-label="Приёмы пищи">
         {today.meals.length > 0 ? (

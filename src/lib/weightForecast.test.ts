@@ -3,6 +3,7 @@ import {
   analyzeCalorieWeightResponse,
   computeWeightForecast,
   energyWeeklyRate,
+  estimateNextMorning,
   scaleWeeklyRate,
 } from './weightForecast'
 import type { Meal } from '../types'
@@ -20,6 +21,54 @@ function meal(date: string, kcal: number): Meal {
     createdAt: 1,
   }
 }
+
+describe('estimateNextMorning', () => {
+  it('maps yesterday deficit vs maintain to negative delta', () => {
+    const est = estimateNextMorning({
+      weights: [{ id: 'w', date: '2026-07-15', kg: 64.3, createdAt: 1 }],
+      meals: [meal('2026-07-14', 1230)],
+      maintainKcal: 2000,
+      today: '2026-07-15',
+    })
+    expect(est).not.toBeNull()
+    expect(est!.yesterday).toBe('2026-07-14')
+    expect(est!.yesterdayKcal).toBe(1230)
+    expect(est!.baseKg).toBe(64.3)
+    // (1230 - 2000) / 7700 ≈ -0.1
+    expect(est!.expectedDeltaKg).toBeCloseTo(-0.1, 1)
+    expect(est!.expectedKg).toBeCloseTo(64.2, 1)
+  })
+
+  it('returns null when yesterday has no meals', () => {
+    expect(
+      estimateNextMorning({
+        weights: [{ id: 'w', date: '2026-07-15', kg: 64, createdAt: 1 }],
+        meals: [meal('2026-07-15', 1500)],
+        maintainKcal: 2000,
+        today: '2026-07-15',
+      }),
+    ).toBeNull()
+  })
+
+  it('returns null without maintain or weight', () => {
+    expect(
+      estimateNextMorning({
+        weights: [{ id: 'w', date: '2026-07-15', kg: 64, createdAt: 1 }],
+        meals: [meal('2026-07-14', 1500)],
+        maintainKcal: 0,
+        today: '2026-07-15',
+      }),
+    ).toBeNull()
+    expect(
+      estimateNextMorning({
+        weights: [],
+        meals: [meal('2026-07-14', 1500)],
+        maintainKcal: 2000,
+        today: '2026-07-15',
+      }),
+    ).toBeNull()
+  })
+})
 
 describe('scaleWeeklyRate', () => {
   it('estimates loss from weekly weigh-ins', () => {

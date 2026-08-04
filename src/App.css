@@ -251,6 +251,82 @@
   line-height: 1.35;
 }
 
+.day-scales-card {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--surface);
+}
+
+.day-scales {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.day-scale {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.day-scale-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+}
+
+.day-scale-label {
+  color: var(--muted);
+  font-weight: 550;
+}
+
+.day-scale-value {
+  color: var(--ink);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.day-scale-track {
+  height: 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 80%, var(--surface));
+  overflow: hidden;
+}
+
+.day-scale-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.day-scale.mode-toward.zone-low .day-scale-fill {
+  background: color-mix(in srgb, var(--accent) 55%, var(--line));
+}
+
+.day-scale.mode-toward.zone-ok .day-scale-fill {
+  background: var(--ok);
+}
+
+.day-scale.mode-budget.zone-ok .day-scale-fill {
+  background: var(--accent);
+}
+
+.day-scale.mode-budget.zone-warn .day-scale-fill {
+  background: var(--warm);
+}
+
+.day-scale.mode-budget.zone-over .day-scale-fill {
+  background: color-mix(in srgb, var(--warm) 70%, #c44);
+}
+
 .today-meta-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2082,6 +2158,25 @@ button.food-row-open:focus-visible {
   padding: 14px;
 }
 
+.progress-card--compact {
+  gap: 3px;
+  padding: 8px 12px;
+  border-radius: calc(var(--radius) - 2px);
+}
+
+.progress-card--compact .progress-card-delta {
+  font-size: 1.05rem;
+}
+
+.progress-card--compact .muted.small {
+  font-size: 0.72rem;
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .progress-card-btn {
   width: 100%;
   cursor: pointer;
@@ -2104,6 +2199,12 @@ button.food-row-open:focus-visible {
   gap: 10px;
 }
 
+.progress-card-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
 .progress-card-top > span:first-child {
   color: var(--muted);
   font-size: 0.8rem;
@@ -2117,11 +2218,29 @@ button.food-row-open:focus-visible {
   text-align: right;
 }
 
+.progress-card-cycle {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-align: right;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.progress-card-cycle:hover {
+  color: var(--accent);
+}
+
 .progress-card-delta {
   font-size: 1.25rem;
   font-weight: 700;
   letter-spacing: -0.02em;
-  text-align: right;
+  text-align: left;
 }
 
 .progress-card-delta.down {
@@ -2352,6 +2471,162 @@ button.food-row-open:focus-visible {
 
 .meal-section .meal-list {
   gap: 8px;
+}
+
+.journal-date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.journal-date-nav strong {
+  font-size: 1rem;
+}
+
+.journal-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.journal-mood {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.journal-mood-btn {
+  margin: 0;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.journal-mood-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.journal-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.journal-section-title {
+  margin: 0;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.journal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.journal-q {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink);
+}
+
+.journal-input {
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.88rem;
+  box-sizing: border-box;
+}
+
+.journal-input.journal-list {
+  resize: vertical;
+  min-height: 4.8em;
+  line-height: 1.45;
+}
+
+.journal-save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.journal-save-row .primary-btn {
+  padding: 8px 14px;
+  font-size: 0.88rem;
+}
+
+.journal-saved {
+  margin: 0;
+}
+
+.journal-history {
+  margin-top: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.journal-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.journal-history-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.journal-history-date {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.journal-history-preview {
+  font-size: 0.78rem;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .day-note-block {
@@ -3013,6 +3288,20 @@ button.food-row-open:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.brand-chip:hover,
+.brand-chip:focus-visible {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  outline: none;
+}
+
+.brand-chip.active {
+  background: var(--warm-soft);
+  border-color: #e2c4b0;
+  color: var(--warm);
 }
 
 .photo-import-list {

@@ -112,6 +112,9 @@ export function AddMealScreen({
         aliases: f.aliases,
         per100g: f.per100g,
         kind: f.kind,
+        ...(f.portionGrams != null && f.portionGrams > 0
+          ? { portionGrams: f.portionGrams }
+          : {}),
       })),
     [data.foods],
   )

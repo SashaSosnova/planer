@@ -73,6 +73,30 @@ describe('parseMealLocal', () => {
     expect(draft.items.some((i) => /молок/i.test(i.name))).toBe(true)
   })
 
+  it('uses catalog portionGrams when weight omitted', () => {
+    const sandwich: FoodRef = {
+      id: 's1',
+      name: 'Бутерброд',
+      aliases: ['бутерброд'],
+      per100g: { kcal: 250, protein: 12, fat: 15, carbs: 20 },
+      kind: 'dish',
+      portionGrams: 180,
+    }
+    const coffee: FoodRef = {
+      id: 'c1',
+      name: 'Кофе',
+      aliases: ['кофе'],
+      per100g: { kcal: 2, protein: 0.1, fat: 0, carbs: 0.3 },
+      kind: 'ingredient',
+      portionGrams: 250,
+    }
+    const draft = parseMealLocal('бутерброд и кофе', [sandwich, coffee])
+    expect(draft.items.map((i) => ({ name: i.name, grams: i.grams, id: i.foodId }))).toEqual([
+      { name: 'Бутерброд', grams: 180, id: 's1' },
+      { name: 'Кофе', grams: 250, id: 'c1' },
+    ])
+  })
+
   it('uses defaults when coffee with milk has no weight', () => {
     const draft = parseMealLocal('кофе с молоком', [])
     expect(draft.items).toHaveLength(2)

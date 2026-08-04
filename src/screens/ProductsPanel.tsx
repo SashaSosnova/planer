@@ -269,6 +269,8 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [info, setInfo] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  /** Tap brand chip → show only that brand / cafe (no top chip strip). */
+  const [brandFilter, setBrandFilter] = useState<string | null>(null)
 
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoStage, setPhotoStage] = useState<string | null>(null)
@@ -286,16 +288,27 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     [data.foods],
   )
 
+  const toggleBrandFilter = (brandName: string) => {
+    const next = brandName.trim()
+    if (!next) return
+    setBrandFilter((prev) => (prev?.toLowerCase() === next.toLowerCase() ? null : next))
+  }
+
   const visibleProducts = useMemo(() => {
+    let list = products
+    if (brandFilter) {
+      const b = brandFilter.toLowerCase()
+      list = list.filter((f) => (f.brand?.trim().toLowerCase() ?? '') === b)
+    }
     const q = query.trim().toLowerCase()
-    if (!q) return products
-    return products.filter(
+    if (!q) return list
+    return list.filter(
       (f) =>
         f.name.toLowerCase().includes(q) ||
         f.aliases.some((a) => a.toLowerCase().includes(q)) ||
         (f.brand?.toLowerCase().includes(q) ?? false),
     )
-  }, [products, query])
+  }, [products, query, brandFilter])
 
   const clearForm = () => {
     setName('')
@@ -513,8 +526,16 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         saved += 1
       }
       if (saved === 0) throw new Error('Нет корректных строк для сохранения')
+      const brands = [
+        ...new Set(
+          selected
+            .map((r) => r.brand.trim())
+            .filter(Boolean),
+        ),
+      ]
       closeAdd()
       setInfo(`Добавлено продуктов: ${saved}`)
+      if (brands.length === 1) setBrandFilter(brands[0]!)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения')
     } finally {
@@ -796,14 +817,29 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         </label>
       )}
 
+      {brandFilter && (
+        <div className="place-chip-row" role="status">
+          <button
+            type="button"
+            className="place-chip active"
+            onClick={() => setBrandFilter(null)}
+            title="Сбросить фильтр по марке"
+          >
+            {brandFilter} ×
+          </button>
+        </div>
+      )}
+
       <ul className="food-list">
         {visibleProducts.length === 0 && (
           <li className="muted">
             {products.length === 0
               ? 'Пока пусто — нажмите +.'
-              : query.trim()
-                ? `Ничего не найдено по «${query.trim()}».`
-                : 'Пока пусто — нажмите +.'}
+              : brandFilter
+                ? `Нет продуктов марки «${brandFilter}».`
+                : query.trim()
+                  ? `Ничего не найдено по «${query.trim()}».`
+                  : 'Пока пусто — нажмите +.'}
           </li>
         )}
         {visibleProducts.map((food) => (
@@ -812,7 +848,20 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
               <div className="food-row-body">
                 <div className="food-row-title">
                   <strong>{food.name}</strong>
-                  {food.brand && <span className="brand-chip">{food.brand}</span>}
+                  {food.brand && (
+                    <button
+                      type="button"
+                      className={`brand-chip${
+                        brandFilter?.toLowerCase() === food.brand.trim().toLowerCase()
+                          ? ' active'
+                          : ''
+                      }`}
+                      onClick={() => toggleBrandFilter(food.brand!)}
+                      title={`Показать все от «${food.brand}»`}
+                    >
+                      {food.brand}
+                    </button>
+                  )}
                 </div>
                 <p className="muted small">
                   {food.per100g.kcal} ккал · Б {food.per100g.protein} · Ж {food.per100g.fat} · У{' '}

@@ -3,6 +3,7 @@ import type { FoodRef } from '../types'
 import { generateAliases } from './foodAliases'
 import { findBestFood, scoreFoodMatch } from './foodMatch'
 import {
+  acceptCookedGramsEstimate,
   dedupeRecipeIngredients,
   extractIngredientLine,
   extractRecipeIngredientHints,
@@ -225,6 +226,24 @@ describe('resolveRecipeIngredient', () => {
     const line = resolveRecipeIngredient('Говядина', 600, [stew], stew.id, 0.75)
     expect(line.name).toBe('Говядина')
     expect(line.foodId).toBeUndefined()
+  })
+})
+
+describe('extractIngredientLine cooking markers', () => {
+  it('keeps (жарить) after grams in the ingredient name', () => {
+    expect(extractIngredientLine('Яйцо куриное 55 г (жарить)')).toEqual({
+      name: 'Яйцо куриное (жарить)',
+      grams: 55,
+    })
+  })
+})
+
+describe('acceptCookedGramsEstimate', () => {
+  it('rejects LLM dish weights that compress ingredient grams', () => {
+    // 30 г хлеба ×1 → 18.1 г when total cooked ≈ 60% of yield sum
+    expect(acceptCookedGramsEstimate(60, 100)).toBeNull()
+    expect(acceptCookedGramsEstimate(95, 100)).toBe(95)
+    expect(acceptCookedGramsEstimate(null, 100)).toBeNull()
   })
 })
 

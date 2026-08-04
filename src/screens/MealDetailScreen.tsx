@@ -275,6 +275,9 @@ export function MealDetailScreen({
               aliases: f.aliases,
               per100g: f.per100g,
               kind: f.kind,
+              ...(f.portionGrams != null && f.portionGrams > 0
+                ? { portionGrams: f.portionGrams }
+                : {}),
             }))
             const result = await parseMeal(line, foodsRef, mealType)
             setItems((prev) => [...prev, ...result.items])

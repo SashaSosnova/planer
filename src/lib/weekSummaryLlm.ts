@@ -1,9 +1,11 @@
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
 import type { WeekStats } from './dayStats'
 
-/** Permanent per-week reports (written once when the week first closes). */
-const CACHE_KEY = 'planer-week-summaries-v3'
-const LEGACY_CACHE_KEY = 'planer-week-summaries-v2'
+/**
+ * Permanent per-week reports (written once when the week first closes).
+ * Bump version to drop bad frozen copy (e.g. “мало шагов” before steps were synced).
+ */
+const CACHE_KEY = 'planer-week-summaries-v4'
 
 type Cached = {
   text: string
@@ -18,29 +20,9 @@ function loadCache(): Record<string, Cached> {
     const raw = localStorage.getItem(CACHE_KEY)
     if (raw) return JSON.parse(raw) as Record<string, Cached>
   } catch {
-    // fall through to legacy
+    // ignore
   }
-  return migrateLegacyCache()
-}
-
-function migrateLegacyCache(): Record<string, Cached> {
-  try {
-    const raw = localStorage.getItem(LEGACY_CACHE_KEY)
-    if (!raw) return {}
-    const legacy = JSON.parse(raw) as Record<string, { text?: string }>
-    const next: Record<string, Cached> = {}
-    for (const [weekStart, entry] of Object.entries(legacy)) {
-      const text = entry?.text?.trim()
-      if (text) next[weekStart] = { text, savedAt: new Date().toISOString() }
-    }
-    if (Object.keys(next).length) {
-      saveCache(next)
-      localStorage.removeItem(LEGACY_CACHE_KEY)
-    }
-    return next
-  } catch {
-    return {}
-  }
+  return {}
 }
 
 function saveCache(map: Record<string, Cached>): void {
@@ -61,6 +43,9 @@ export function localWeekNutritionNote(week: WeekStats): string {
   const c = Math.round(week.totals.carbs / daysWithFood)
   const outDays = week.days.filter((d) => d.meals.some((m) => m.eatingOut)).length
   const parts = [`В среднем ${avg} ккал/день (Б ${p} · Ж ${f} · У ${c}).`]
+  if (week.avgSteps != null && week.avgSteps > 0) {
+    parts.push(`Шаги ≈ ${week.avgSteps.toLocaleString('ru-RU')}/день.`)
+  }
   if (outDays > 0) parts.push(`Вне дома: ${outDays} дн.`)
   if (week.weightDelta != null) {
     const sign = week.weightDelta > 0 ? '+' : ''
@@ -93,6 +78,16 @@ export async function getWeekNutritionSummary(week: WeekStats): Promise<string> 
 
     if (isDeepseekConfigured() && week.mealSnippets.length > 0) {
       try {
+        const stepsLine =
+          week.avgSteps != null && week.avgSteps > 0
+            ? `Средние шаги: ${week.avgSteps}/день${
+                week.avgSteps >= 8000
+                  ? ' (это высокая активность — НЕ пиши, что шагов мало или активность низкая)'
+                  : week.avgSteps < 4000
+                    ? ' (низковато)'
+                    : ''
+              }`
+            : 'Средние шаги: нет данных (не выдумывай про активность)'
         const parsed = await deepseekJson<{ summary: string }>(`Краткая сводка питания за неделю для трекера похудения.
 Это итоговый отчёт за закрытую неделю — пиши коротко и по делу.
 
@@ -100,12 +95,12 @@ export async function getWeekNutritionSummary(week: WeekStats): Promise<string> 
 Итого ккал: ${Math.round(week.totals.kcal)} из цели ${week.kcalGoal}
 Белки/жиры/углеводы: ${Math.round(week.totals.protein)} / ${Math.round(week.totals.fat)} / ${Math.round(week.totals.carbs)}
 Изменение веса: ${week.weightDelta != null ? `${week.weightDelta} кг` : 'нет данных'}
-Средние шаги: ${week.avgSteps ?? 'нет данных'}
+${stepsLine}
 
 Приёмы пищи:
 ${week.mealSnippets.slice(0, 40).join('\n')}
 
-Верни JSON: { "summary": "2–3 коротких предложения на русском: что ели чаще, баланс БЖУ, привычки вне дома, без нравоучений" }`)
+Верни JSON: { "summary": "2–3 коротких предложения на русском: что ели чаще, баланс БЖУ, привычки вне дома; шаги упоминай только по цифре выше, без нравоучений" }`)
         const summary = String(parsed.summary ?? '').trim()
         if (summary) text = summary
       } catch {

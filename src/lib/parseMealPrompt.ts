@@ -15,6 +15,9 @@ export function buildParseMealPrompt(input: {
         aliases: f.aliases,
         per100g: f.per100g,
         kind: f.kind ?? 'ingredient',
+        ...(f.portionGrams != null && f.portionGrams > 0
+          ? { portionGrams: f.portionGrams }
+          : {}),
       }))
 
   const homeRules = `
@@ -23,6 +26,7 @@ export function buildParseMealPrompt(input: {
 - Короткие списки через запятую («хлеб 20 г, форель 10 г») — отдельные позиции.
 - «кофе с молоком 2,5%» → кофе + молоко 2,5% (~60 г) — только для простых добавок.
 - Есть в каталоге — foodId, needsEstimate=false.
+- Если в тексте НЕТ граммов, а у позиции каталога есть portionGrams — ставь grams = portionGrams (типичная порция). Не подставляй 100 г по умолчанию.
 `
 
   const outRules = `

@@ -13,6 +13,15 @@ export type RecipeIngredientHint = {
   grams: number | null
 }
 
+/** «(жарить)», «жарить» after grams — keep; «соломкой» — drop. */
+function cookingMarkerSuffix(afterWeight: string): string {
+  const t = afterWeight.trim()
+  if (!t) return ''
+  if (/^[（(][^)）]+[)）]/u.test(t)) return t
+  if (/^(жарить|обжарить|варить|запечь|тушить|жарен|варен|варён)/iu.test(t)) return t
+  return ''
+}
+
 /**
  * Parse «Говядина 600 г соломкой», «Сметана 200 г», «Лук 2 шт».
  * Grams may be mid-line; kitchen measures get rough estimates.
@@ -30,10 +39,13 @@ export function extractIngredientLine(raw: string): RecipeIngredientHint {
     let grams = Number(weight[1]!.replace(',', '.'))
     const unit = weight[2]!.toLowerCase()
     if (unit === 'кг' || unit === 'kg') grams *= 1000
-    const name = s
+    const before = s
       .slice(0, weight.index)
       .replace(/[-–—:]\s*$/u, '')
       .trim()
+    // Keep only cooking markers after grams («(жарить)»), not cut style («соломкой»).
+    const after = cookingMarkerSuffix(s.slice(weight.index + weight[0].length))
+    const name = [before, after].filter(Boolean).join(' ').trim()
     if (name && grams > 0) return { name, grams }
   }
 
@@ -321,7 +333,7 @@ async function parseRecipeWithLlm(text: string, foods: FoodRef[]): Promise<Recip
 }
 
 Правила:
-- gramsRaw — вес ДО готовки.
+- gramsRaw — вес ДО готовки (как указал пользователь; не занижай).
 - Каталог — только простые продукты. foodId ставь ТОЛЬКО при точном совпадении.
   «Макароны сухие» / «паста» ≠ готовое блюдо вроде «Паста с кабачком и курицей».
   «Сметана» ≠ «салат со сметаной». «Говядина» ≠ любое блюдо с говядиной.
@@ -329,8 +341,18 @@ async function parseRecipeWithLlm(text: string, foods: FoodRef[]): Promise<Recip
 - Не подменяй ингредиент названием другого блюда из каталога.
 - Сохраняй смысл названий пользователя («Говядина», не «салат»).
 - «Соль, сладкая паприка» — РАЗДЕЛИ на отдельные позиции; не дублируй одну приправу дважды.
-- yieldFactor обязателен для каждого.
-- cookedGramsEstimate — суммарный вес готового блюда, если можешь оценить; иначе null.
+- yieldFactor обязателен для каждого. Считай ПО ИНГРЕДИЕНТУ: что жарится/варится — с потерей/набуханием; что кладётся готовым — ×1.
+- Как понять, что готовится:
+  • блоки «На сковороде:» / «Жарить:» — все строки до следующего блока готовятся;
+  • блок «После:» / «Сверху:» / «Без готовки:» — все строки ×1;
+  • или пометка в строке: «Яйцо 55 г (жарить)»;
+  • слова жарить, обжарить, варить, запечь, тушить, варёный, жареный, яичница.
+  Пример бутерброда на сковороде: хлеб+ветчина+яйцо+масло → с потерей влаги (яйцо ~0.85–0.9, хлеб ~0.95);
+  кетчуп/майонез/помидор/сыр сверху после готовки → ×1.
+- Холодная сборка БЕЗ пометок и без блоков готовки: у всех yieldFactor = 1.
+- Не применяй «овощи ужариваются» к помидору/огурцу, если их не жарят.
+- cookedGramsEstimate — суммарный вес готового ТОЛЬКО если блюдо реально готовится целиком и вес заметно меняется.
+  Для сборки (бутерброд/салат) — null: вес = сумма (сырой×выход) по строкам. Не занижай «на глаз».
 
 Каталог:
 ${JSON.stringify(catalog)}
@@ -384,13 +406,32 @@ ${text}`
   const unique = dedupeRecipeIngredients(ingredients)
   if (unique.length === 0) throw new Error('DeepSeek не вернул ингредиенты')
 
-  const cookedOverride = nonNeg(parsed.cookedGramsEstimate, 0)
+  const name = String(parsed.name || 'Блюдо').trim() || 'Блюдо'
+  const fromYields = computeRecipe({ name, ingredients: unique, notes: parsed.notes })
+  // Pan override is for a real finished weight. LLM guesses that diverge from
+  // Σ(сырой×выход) compress every «→ N г готового» line (e.g. 30 г хлеба → 18 г).
+  const cookedOverride = acceptCookedGramsEstimate(
+    parsed.cookedGramsEstimate,
+    fromYields.estimatedCookedGrams,
+  )
   return computeRecipe({
-    name: String(parsed.name || 'Блюдо').trim() || 'Блюдо',
+    name,
     ingredients: unique,
-    cookedGramsOverride: cookedOverride > 0 ? cookedOverride : null,
+    cookedGramsOverride: cookedOverride,
     notes: parsed.notes,
   })
+}
+
+/** Accept LLM dish weight only when it stays close to sum of ingredient yields. */
+export function acceptCookedGramsEstimate(
+  estimate: number | null | undefined,
+  estimatedFromYields: number,
+): number | null {
+  const llmEst = nonNeg(estimate, 0)
+  if (!(llmEst > 0) || !(estimatedFromYields > 0)) return null
+  const ratio = llmEst / estimatedFromYields
+  if (ratio < 0.85 || ratio > 1.2) return null
+  return llmEst
 }
 
 export async function parseRecipe(text: string, foods: FoodRef[]): Promise<RecipeDraft> {

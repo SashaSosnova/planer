@@ -7,18 +7,21 @@ import {
   computeRecipe,
   dishPer100g,
   draftFromFoodItem,
-  ingredientCookedGramsForDish,
+  ingredientCookedGramsFromYield,
   ingredientPer100CookedForDish,
   ingredientPer100RawFromDishCooked,
   recipeEditorText,
   recipeToFoodItem,
 } from '../lib/recipeCalc'
+import { scalePer100g } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, RecipeDraft, RecipeIngredientLine } from '../types'
 
 const RECIPE_PLACEHOLDER =
-  'Первая строка — название блюда.\nДальше ингредиенты: продукт — граммы до готовки (каждый с новой строки).'
+  'Название блюда.\nНа сковороде:\nХлеб 30 г\nЯйцо 55 г\nПосле:\nКетчуп 3 г\nПомидор 15 г'
 
 type MacrosBasis = 'cooked' | 'raw'
+/** How the dish is added to a meal: 100 g or a saved serving. */
+type ServingBasis = 'per100' | 'portion'
 
 type Props = {
   data: AppData
@@ -38,10 +41,18 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
   const [cookedOverride, setCookedOverride] = useState('')
   const cookedOverrideRef = useRef(cookedOverride)
   cookedOverrideRef.current = cookedOverride
+  /** True when «Готовый» came from the user or a saved dish — keep it across yield edits. */
+  const cookedOverrideLockedRef = useRef(false)
+  /** Meal-add + hero: 100 g cooked, or the whole finished weight as one portion. */
+  const [servingBasis, setServingBasis] = useState<ServingBasis>('portion')
   const [editingCooked, setEditingCooked] = useState(false)
   const [macrosEdit, setMacrosEdit] = useState<{ index: number; basis: MacrosBasis } | null>(
     null,
   )
+  /** Expanded ingredient card (compact list like meals). */
+  const [editingIngredientIndex, setEditingIngredientIndex] = useState<number | null>(null)
+  /** Free-text recipe — shown for new dishes or when recalculating. */
+  const [showRecipeText, setShowRecipeText] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
@@ -72,6 +83,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
         aliases: f.aliases,
         per100g: f.per100g,
         kind: f.kind,
+        ...(f.portionGrams != null && f.portionGrams > 0
+          ? { portionGrams: f.portionGrams }
+          : {}),
       })),
     [data.foods],
   )
@@ -82,8 +96,12 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setError(null)
     setDraft(null)
     setCookedOverride('')
+    cookedOverrideLockedRef.current = false
+    setServingBasis('portion')
     setEditingCooked(false)
     setMacrosEdit(null)
+    setEditingIngredientIndex(null)
+    setShowRecipeText(true)
     setRecipeText('')
   }
 
@@ -94,8 +112,12 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setError(null)
     setDraft(next)
     setCookedOverride(String(next.totalCookedGrams))
+    cookedOverrideLockedRef.current = true
+    setServingBasis(food.portionGrams != null && food.portionGrams > 0 ? 'portion' : 'per100')
     setEditingCooked(false)
     setMacrosEdit(null)
+    setEditingIngredientIndex(null)
+    setShowRecipeText(false)
     setRecipeText(recipeEditorText(food))
   }
 
@@ -104,8 +126,12 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setEditId(null)
     setDraft(null)
     setError(null)
+    cookedOverrideLockedRef.current = false
+    setServingBasis('portion')
     setEditingCooked(false)
     setMacrosEdit(null)
+    setEditingIngredientIndex(null)
+    setShowRecipeText(true)
   }
 
   const runRecipeParse = async () => {
@@ -115,13 +141,23 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       const result = await parseRecipe(recipeText, foodsRef)
       setDraft(result)
       setCookedOverride(String(result.totalCookedGrams))
+      // Fresh parse: follow yields unless the user later edits «Готовый».
+      cookedOverrideLockedRef.current = false
       setEditingCooked(false)
       setMacrosEdit(null)
+      setEditingIngredientIndex(null)
+      setShowRecipeText(false)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось разобрать рецепт')
     } finally {
       setBusy(false)
     }
+  }
+
+  const lockedCookedOverride = (): number | null => {
+    if (!cookedOverrideLockedRef.current) return null
+    const override = Number(String(cookedOverrideRef.current).replace(',', '.'))
+    return Number.isFinite(override) && override > 0 ? override : null
   }
 
   const updateIngredient = (index: number, patch: Partial<RecipeIngredientLine>) => {
@@ -130,13 +166,18 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       const ingredients = prev.ingredients.map((ing, i) =>
         i === index ? { ...ing, ...patch } : ing,
       )
-      const override = Number(String(cookedOverrideRef.current).replace(',', '.'))
-      return computeRecipe({
+      const next = computeRecipe({
         name: prev.name,
         ingredients,
-        cookedGramsOverride: Number.isFinite(override) && override > 0 ? override : null,
+        cookedGramsOverride: lockedCookedOverride(),
         notes: prev.notes,
       })
+      if (!cookedOverrideLockedRef.current) {
+        const value = String(next.totalCookedGrams)
+        cookedOverrideRef.current = value
+        setCookedOverride(value)
+      }
+      return next
     })
   }
 
@@ -145,6 +186,7 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     const value = String(n)
     setCookedOverride(value)
     cookedOverrideRef.current = value
+    cookedOverrideLockedRef.current = true
     setDraft((prev) => {
       if (!prev) return prev
       return computeRecipe({
@@ -189,13 +231,18 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
             }
           : row,
       )
-      const override = Number(String(cookedOverrideRef.current).replace(',', '.'))
-      return computeRecipe({
+      const next = computeRecipe({
         name: prev.name,
         ingredients,
-        cookedGramsOverride: Number.isFinite(override) && override > 0 ? override : null,
+        cookedGramsOverride: lockedCookedOverride(),
         notes: prev.notes,
       })
+      if (!cookedOverrideLockedRef.current) {
+        const value = String(next.totalCookedGrams)
+        cookedOverrideRef.current = value
+        setCookedOverride(value)
+      }
+      return next
     })
   }
 
@@ -205,10 +252,12 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       setError('Укажите название блюда')
       return
     }
+    const portionGrams =
+      servingBasis === 'portion' && draft.totalCookedGrams > 0 ? draft.totalCookedGrams : null
     setBusy(true)
     setError(null)
     try {
-      await onSave(recipeToFoodItem(draft, editId ?? undefined, recipeText))
+      await onSave(recipeToFoodItem(draft, editId ?? undefined, recipeText, portionGrams))
       backToList()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения')
@@ -224,28 +273,11 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
           ← К списку рецептов
         </button>
         <h2 className="subhead">{editId ? 'Изменить блюдо' : 'Новое блюдо'}</h2>
-        <p className="muted small">
-          Ингредиенты с весом до готовки → КБЖУ готового с учётом набухания/ужарки
-        </p>
-
-        <label className="field">
-          <span>Рецепт текстом</span>
-          <textarea
-            rows={8}
-            value={recipeText}
-            onChange={(e) => setRecipeText(e.target.value)}
-            placeholder={RECIPE_PLACEHOLDER}
-          />
-        </label>
-
-        <button
-          type="button"
-          className="primary-btn"
-          disabled={busy || !recipeText.trim()}
-          onClick={() => void runRecipeParse()}
-        >
-          {busy ? 'Считаю…' : 'Рассчитать блюдо'}
-        </button>
+        {!draft && (
+          <p className="muted small">
+            Ингредиенты с весом до готовки → КБЖУ готового с учётом набухания/ужарки
+          </p>
+        )}
 
         {error && <p className="form-msg error">{error}</p>}
 
@@ -263,10 +295,35 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
               />
             </label>
 
+            <div className="meal-type-chips-inline" role="group" aria-label="Как считать блюдо">
+              <button
+                type="button"
+                className={`meal-type-chip${servingBasis === 'per100' ? ' active' : ''}`}
+                onClick={() => setServingBasis('per100')}
+              >
+                на 100 г
+              </button>
+              <button
+                type="button"
+                className={`meal-type-chip${servingBasis === 'portion' ? ' active' : ''}`}
+                onClick={() => setServingBasis('portion')}
+              >
+                на порцию
+              </button>
+            </div>
+
             <div className="recipe-per100-hero">
-              <span className="recipe-per100-hero-label">На 100 г готового</span>
+              <span className="recipe-per100-hero-label">
+                {servingBasis === 'portion'
+                  ? `На порцию (${draft.totalCookedGrams} г)`
+                  : 'На 100 г готового'}
+              </span>
               <strong className="recipe-per100-hero-value">
-                {formatMacros(dishPer100g(draft.totalMacros, draft.totalCookedGrams))}
+                {formatMacros(
+                  servingBasis === 'portion'
+                    ? draft.totalMacros
+                    : dishPer100g(draft.totalMacros, draft.totalCookedGrams),
+                )}
               </strong>
             </div>
 
@@ -295,14 +352,49 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
               )}
               <span className="recipe-summary-sep">·</span>
               Всего {Math.round(draft.totalMacros.kcal)} ккал
+              <span className="recipe-summary-sep">·</span>
+              {servingBasis === 'portion' ? 'в приём — вся порция' : 'в приём — 100 г'}
             </p>
 
             <ul className="draft-list">
               {draft.ingredients.map((ing, index) => {
                 const per100Cooked = ingredientPer100CookedForDish(ing, draft)
-                const cookedGrams = ingredientCookedGramsForDish(ing, draft)
+                // Show сырой×выход — pan override only affects dish density / «на 100 г».
+                const cookedGrams = ingredientCookedGramsFromYield(ing)
+                const portionMacros = scalePer100g(ing.per100g, ing.gramsRaw)
                 const editing = macrosEdit?.index === index ? macrosEdit.basis : null
                 const fromLibrary = ing.source === 'library'
+                const expanded = editingIngredientIndex === index
+                const label = ing.name.trim() || 'ингредиент'
+
+                if (!expanded) {
+                  return (
+                    <li key={`${ing.name}-${index}`} className="draft-item draft-item-compact">
+                      <button
+                        type="button"
+                        className="draft-compact-main draft-compact-open"
+                        onClick={() => {
+                          setEditingIngredientIndex(index)
+                          setMacrosEdit(null)
+                        }}
+                        aria-label={`Редактировать ${label}`}
+                      >
+                        <div className="draft-compact-text">
+                          <div className="draft-compact-title">
+                            <strong className="draft-compact-name">
+                              {ing.name.trim() || 'Без названия'}
+                            </strong>
+                            {!fromLibrary && <span className="badge">примерно</span>}
+                          </div>
+                          <p className="muted small">
+                            {ing.gramsRaw} г · ×{ing.yieldFactor} → {cookedGrams} г ·{' '}
+                            {formatMacros(portionMacros)}
+                          </p>
+                        </div>
+                      </button>
+                    </li>
+                  )
+                }
 
                 return (
                   <li key={`${ing.name}-${index}`} className="draft-item">
@@ -399,6 +491,21 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                         </label>
                       </div>
                     )}
+
+                    <div className="draft-item-footer">
+                      <div className="draft-item-footer-actions">
+                        <button
+                          type="button"
+                          className="primary-btn draft-done-btn"
+                          onClick={() => {
+                            setEditingIngredientIndex(null)
+                            setMacrosEdit(null)
+                          }}
+                        >
+                          Готово
+                        </button>
+                      </div>
+                    </div>
                   </li>
                 )
               })}
@@ -419,8 +526,12 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                   className="ghost-btn"
                   onClick={() => {
                     setDraft(null)
+                    cookedOverrideLockedRef.current = false
+                    setServingBasis('portion')
                     setEditingCooked(false)
                     setMacrosEdit(null)
+                    setEditingIngredientIndex(null)
+                    setShowRecipeText(true)
                   }}
                 >
                   Сбросить расчёт
@@ -428,6 +539,50 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
               )}
             </div>
           </div>
+        )}
+
+        {draft && !showRecipeText && (
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => setShowRecipeText(true)}
+          >
+            Пересчитать из текста
+          </button>
+        )}
+
+        {showRecipeText && (
+          <>
+            <label className="field">
+              <span>Рецепт текстом</span>
+              <textarea
+                rows={draft ? 6 : 8}
+                value={recipeText}
+                onChange={(e) => setRecipeText(e.target.value)}
+                placeholder={RECIPE_PLACEHOLDER}
+              />
+            </label>
+            <div className="btn-row">
+              <button
+                type="button"
+                className="primary-btn"
+                disabled={busy || !recipeText.trim()}
+                onClick={() => void runRecipeParse()}
+              >
+                {busy ? 'Считаю…' : draft ? 'Рассчитать заново' : 'Рассчитать блюдо'}
+              </button>
+              {draft && (
+                <button
+                  type="button"
+                  className="ghost-btn"
+                  disabled={busy}
+                  onClick={() => setShowRecipeText(false)}
+                >
+                  Скрыть
+                </button>
+              )}
+            </div>
+          </>
         )}
       </div>
     )
@@ -477,7 +632,16 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
               <strong>{food.name}</strong>
               <p className="muted small">
                 {food.per100g.kcal} ккал · Б {food.per100g.protein} · Ж {food.per100g.fat} · У{' '}
-                {food.per100g.carbs}
+                {food.per100g.carbs} / 100 г
+                {food.portionGrams != null && food.portionGrams > 0 && (
+                  <>
+                    <br />
+                    {(() => {
+                      const p = scalePer100g(food.per100g, food.portionGrams)
+                      return `порция ${food.portionGrams} г → ${Math.round(p.kcal)} ккал · Б ${p.protein} · Ж ${p.fat} · У ${p.carbs}`
+                    })()}
+                  </>
+                )}
               </p>
             </button>
             <div className="btn-row tight nowrap food-row-actions">

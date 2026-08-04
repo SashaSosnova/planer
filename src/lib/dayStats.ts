@@ -1,6 +1,7 @@
 import type { AppData, MacroSet, Meal } from '../types'
 import { emptyMacros, sumMacros } from './nutrition'
 import { todayIso } from './date'
+import { sweetKcalFromMeals } from './sweets'
 import { vegGramsFromMeals } from './vegetables'
 import {
   formatWeekRange,
@@ -17,6 +18,8 @@ export type DayStats = {
   totals: MacroSet
   /** Grams of vegetable-like items (auto-detected by name). */
   vegGrams: number
+  /** Kcal from sweet/treat items (auto-detected by name). */
+  sweetKcal: number
   approximate: boolean
   weightKg?: number
   steps?: number
@@ -52,7 +55,8 @@ export function statsForDate(data: AppData, date: string): DayStats {
     label: shortRuWeekday(date),
     meals,
     totals,
-    vegGrams: vegGramsFromMeals(meals),
+    vegGrams: vegGramsFromMeals(meals, data.foods),
+    sweetKcal: sweetKcalFromMeals(meals),
     approximate: meals.some((m) => m.isApproximate || m.eatingOut),
     weightKg: weight?.kg,
     steps: steps?.count,

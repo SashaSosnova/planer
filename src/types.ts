@@ -53,8 +53,9 @@ export type FoodItem = {
   /** Марка / кафе / магазин / сеть (поиск по справочнику) */
   brand?: string
   /**
-   * Типичная порция в граммах. В справочнике КБЖУ хранятся на 100 г;
-   * порция подставляется при добавлении в приём (иначе 100 г).
+   * Типичная порция в граммах. В справочнике КБЖУ хранятся на 100 г.
+   * Для блюд с режимом «на порцию» = вес готового; подставляется в приём.
+   * Иначе при добавлении — 100 г.
    */
   portionGrams?: number
 }
@@ -111,13 +112,33 @@ export type StepsEntry = {
   createdAt: number
 }
 
-/** One-sentence day note («twitter diary») */
+/** Soft day mood anchor (optional, not from the 6‑minute book). */
+export type DayMood = 'hard' | 'meh' | 'ok' | 'good' | 'easy'
+
+/**
+ * Six-minute diary entry for one calendar day.
+ * `text` is a legacy/preview snapshot built from the structured fields.
+ */
 export type DayNote = {
   id: string
   date: string
+  /** Preview / search snapshot (always set when the note exists). */
   text: string
-  /** Question shown when the note was saved (frozen for diary) */
+  /** @deprecated Old rotating prompt — kept for stored data only */
   question?: string
+  mood?: DayMood
+  /** Morning: «Я благодарю за то, что…» (list) */
+  grateful?: string[]
+  /** Morning: what will make today great */
+  greatDay?: string
+  /** Morning: positive affirmation */
+  affirmation?: string
+  /** Evening: wonderful things that happened (list) */
+  highlights?: string[]
+  /** Evening: something good done for others */
+  kindness?: string
+  /** Evening: what to do better tomorrow */
+  betterTomorrow?: string
   createdAt: number
   updatedAt: number
 }
@@ -194,6 +215,8 @@ export type FoodRef = {
   aliases: string[]
   per100g: MacroSet
   kind?: FoodKind
+  /** Typical serving — used when meal text has no grams */
+  portionGrams?: number
 }
 
 /** How the draft was produced — shown in UI after «Рассчитать». */

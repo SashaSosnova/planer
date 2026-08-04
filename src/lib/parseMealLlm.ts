@@ -2,6 +2,7 @@ import type { FoodRef, MealType, ParsedMealDraft } from '../types'
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
 import { coerceMealType, defaultMealTypeForNow } from './labels'
 import { buildParseMealPrompt } from './parseMealPrompt'
+import { defaultFoodGrams } from './foodPortion'
 import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
 import { nonNeg, sanitizeMealItems } from './sanitize'
 
@@ -47,11 +48,16 @@ export function mapLlmResultToDraft(
 
   let usedZeroFallback = false
   const mapped = (parsed.items ?? []).map((item) => {
-    const grams = Number(item.grams) > 0 ? Number(item.grams) : 300
     const name = String(item.name || 'Блюдо')
     const food = item.foodId ? foodMap.get(item.foodId) : undefined
     const useLibrary =
       Boolean(food) && !out && item.needsEstimate !== true && item.source !== 'estimate'
+    const grams =
+      Number(item.grams) > 0
+        ? Number(item.grams)
+        : food
+          ? defaultFoodGrams(food)
+          : 300
 
     if (useLibrary && food) {
       const macros = scalePer100g(food.per100g, grams)

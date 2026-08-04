@@ -57,13 +57,18 @@ export function ingredientPer100CookedForDish(
   return scaleMacros(ingredientPer100Cooked(ing), cookedDensityScale(draft))
 }
 
+/** Cooked grams from yield alone: сырой × выход (no pan redistribution). */
+export function ingredientCookedGramsFromYield(ing: RecipeIngredientLine): number {
+  const y = ing.yieldFactor > 0 ? ing.yieldFactor : 1
+  return round1(ing.gramsRaw * y)
+}
+
 /** Cooked grams of one ingredient after redistributing pan weight across yields. */
 export function ingredientCookedGramsForDish(
   ing: RecipeIngredientLine,
   draft: Pick<RecipeDraft, 'estimatedCookedGrams' | 'totalCookedGrams'>,
 ): number {
-  const y = ing.yieldFactor > 0 ? ing.yieldFactor : 1
-  const estimated = ing.gramsRaw * y
+  const estimated = ingredientCookedGramsFromYield(ing)
   const scale = cookedDensityScale(draft)
   return round1(scale > 0 ? estimated / scale : estimated)
 }
@@ -139,14 +144,21 @@ export function recipeToFoodItem(
   existingId?: string,
   /** Editor textarea — must be saved so reopen shows the text you calculated from */
   sourceText?: string,
+  /** Typical serving when adding the dish to a meal (defaults to 100 g if omitted). */
+  portionGrams?: number | null,
 ): Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string } {
   const text = sourceText?.trim()
+  const portion =
+    portionGrams != null && Number.isFinite(portionGrams) && portionGrams > 0
+      ? Math.round(portionGrams * 10) / 10
+      : undefined
   return {
     id: existingId,
     name: recipe.name.trim(),
     aliases: [],
     per100g: recipe.per100g,
     kind: 'dish',
+    ...(portion != null ? { portionGrams: portion } : {}),
     recipe: {
       ingredients: recipe.ingredients,
       totalRawGrams: recipe.totalRawGrams,

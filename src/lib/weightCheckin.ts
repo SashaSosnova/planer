@@ -6,15 +6,9 @@ export type WeightCheckin = {
   /** Hero label, e.g. «−0,6 кг» or «64,5 кг» for the first point */
   hero: string
   tone: 'up' | 'down' | 'flat'
-  /** Dry one-liner about prior menu vs the scale delta */
+  /** Short factual note — no salt/water guesses */
   note: string
 }
-
-const SALTY_RE =
-  /пицц|суши|ролл|сыр|колбас|сосиск|бекон|ветчин|соус|чипсы|начос|бургер|хот[\s-]?дог|шаурма|шаверма|лапша\s*бп|доширак|солен|маринад|оливк|фета|пармезан|брынз|креветк|икра|копчен/i
-
-const ALCOHOL_RE =
-  /вино|пиво|шампанск|коктейл|водк|виски|коньяк|ром|джин|ликёр|ликер|алкогол|просекко|саке/i
 
 function fmtKg(n: number): string {
   return Math.abs(n).toFixed(1).replace('.', ',')
@@ -43,18 +37,9 @@ function mealsBetweenWeighIns(
   return meals.filter((m) => m.date >= fromDateInclusive && m.date < toDateExclusive)
 }
 
-function mealText(m: Meal): string {
-  return `${m.rawText} ${m.items.map((i) => i.name).join(' ')}`
-}
-
 type MenuSignals = {
   hasMeals: boolean
   dayCount: number
-  avgKcal: number
-  avgCarbs: number
-  eatingOut: boolean
-  salty: boolean
-  alcohol: boolean
   surplus: boolean
   deficit: boolean
 }
@@ -67,15 +52,6 @@ function analyzeMenu(
   const dayCount = Math.max(dates.length, 1)
   const totals = meals.length ? sumMacros(meals.map((m) => m.totals)) : null
   const avgKcal = totals ? totals.kcal / dayCount : 0
-  const avgCarbs = totals ? totals.carbs / dayCount : 0
-  const carbKcalShare = avgKcal > 0 ? (avgCarbs * 4) / avgKcal : 0
-
-  const eatingOut = meals.some((m) => m.eatingOut || m.isApproximate)
-  const salty =
-    meals.some((m) => SALTY_RE.test(mealText(m))) ||
-    (carbKcalShare >= 0.45 && avgCarbs >= 180)
-  const alcohol = meals.some((m) => ALCOHOL_RE.test(mealText(m)))
-  const highCarbs = carbKcalShare >= 0.45 || avgCarbs >= 220
 
   const goal =
     dailyKcalGoal != null && Number.isFinite(dailyKcalGoal) && dailyKcalGoal > 0
@@ -87,23 +63,9 @@ function analyzeMenu(
   return {
     hasMeals: meals.length > 0,
     dayCount: dates.length,
-    avgKcal,
-    avgCarbs,
-    eatingOut,
-    salty: salty || highCarbs,
-    alcohol,
     surplus,
     deficit,
   }
-}
-
-function waterishFactors(s: MenuSignals): string[] {
-  const parts: string[] = []
-  if (s.eatingOut) parts.push('вне дома')
-  if (s.alcohol) parts.push('алкоголь')
-  if (s.salty) parts.push('много углеводов/солёного')
-  else if (s.surplus) parts.push('профицит ккал')
-  return parts
 }
 
 function buildNote(deltaKg: number, signals: MenuSignals): string {
@@ -112,43 +74,24 @@ function buildNote(deltaKg: number, signals: MenuSignals): string {
   }
 
   const when = signals.dayCount > 1 ? 'За дни до взвешивания' : 'Вчера'
-  const water = waterishFactors(signals)
-  const waterBit = water.length > 0 ? water.join(' + ') : null
 
-  // Flat
   if (Math.abs(deltaKg) < 0.15) {
-    if (waterBit) return `${when}: ${waterBit} — на весах без заметного сдвига.`
-    if (signals.deficit) return `${when}: дефицит ккал — вес без заметного сдвига.`
     return 'Без изменений относительно прошлого взвешивания.'
   }
 
-  // Up
   if (deltaKg > 0) {
-    if (waterBit) {
-      return `${when}: ${waterBit} — типичный плюс воды/гликогена на утро.`
-    }
-    if (signals.deficit) {
-      return `${when}: по меню дефицит — скорее вода, не еда.`
-    }
-    if (signals.surplus) {
-      return `${when}: профицит ккал — плюс на весах ожидаем.`
-    }
-    return `${when}: явного триггера в меню нет — чаще вода или недосып.`
+    if (signals.surplus) return `${when}: профицит ккал к цели.`
+    if (signals.deficit) return `${when}: по меню был дефицит ккал.`
+    return 'Плюс относительно прошлого взвешивания.'
   }
 
-  // Down
-  if (signals.deficit) {
-    return `${when}: дефицит ккал — минус согласуется с меню.`
-  }
-  if (waterBit || signals.surplus) {
-    const why = waterBit ?? 'профицит ккал'
-    return `${when}: ${why}, но вес ниже — скорее ушла вода.`
-  }
-  return `${when}: минус на весах; по меню без явного дефицита.`
+  if (signals.deficit) return `${when}: дефицит ккал к цели.`
+  if (signals.surplus) return `${when}: по меню был профицит ккал.`
+  return 'Минус относительно прошлого взвешивания.'
 }
 
 /**
- * Dry check-in: delta vs previous weigh-in + short prior-menu note.
+ * Dry check-in: delta vs previous weigh-in + short factual note.
  */
 export function buildWeightCheckin(input: {
   weights: WeightEntry[]

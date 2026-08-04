@@ -6,10 +6,17 @@ import { newId } from '../lib/date'
 import { generateAliases } from '../lib/foodAliases'
 import { sumMacros } from '../lib/nutrition'
 import {
+  draftToNoteFields,
+  emptyJournalDraft,
+  isJournalDraftEmpty,
+  migrateLegacyNote,
+  type DayJournalDraft,
+} from '../lib/dayJournal'
+import {
   assertNonNegMacros,
-  DAY_NOTE_MAX,
   dedupeMeasurements,
   dedupePeriodStarts,
+  sanitizeDayNote,
   sanitizeMacros,
   sanitizeMealItems,
 } from '../lib/sanitize'
@@ -506,12 +513,30 @@ export function useAppData() {
   )
 
   const saveDayNote = useCallback(
-    async (input: { date: string; text: string; question?: string }) => {
+    async (input: {
+      date: string
+      /** Full journal draft — preferred path. */
+      draft?: DayJournalDraft
+      /** Legacy one-shot text when `draft` is omitted. */
+      text?: string
+      question?: string
+    }) => {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(input.date)) throw new Error('Некорректная дата')
-      const text = input.text.trim().slice(0, DAY_NOTE_MAX)
       const existing = (data.dayNotes ?? []).find((n) => n.date === input.date)
 
-      if (!text) {
+      let draft: DayJournalDraft
+      if (input.draft) {
+        draft = input.draft
+      } else if (input.text != null) {
+        draft = existing ? migrateLegacyNote(existing) : emptyJournalDraft()
+        const line = input.text.trim()
+        if (line) draft = { ...draft, highlights: [line] }
+        else draft = emptyJournalDraft()
+      } else {
+        draft = existing ? migrateLegacyNote(existing) : emptyJournalDraft()
+      }
+
+      if (isJournalDraftEmpty(draft)) {
         if (existing && useCloud && uid) await removeDoc(uid, 'dayNotes', existing.id)
         persistLocal((prev) => ({
           ...prev,
@@ -520,16 +545,20 @@ export function useAppData() {
         return null
       }
 
-      const question = (input.question ?? existing?.question ?? '').trim().slice(0, 200)
+      const fields = draftToNoteFields(draft)
       const now = Date.now()
-      const entry: DayNote = {
+      const entry = sanitizeDayNote({
         id: existing?.id ?? newId(),
         date: input.date,
-        text,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
-        ...(question ? { question } : {}),
-      }
+        ...fields,
+        ...(input.question || existing?.question
+          ? { question: (input.question ?? existing?.question ?? '').trim().slice(0, 200) }
+          : {}),
+      })
+      if (!entry) return null
+
       if (useCloud && uid) await upsertDoc(uid, 'dayNotes', entry.id, { ...entry })
       persistLocal((prev) => ({
         ...prev,

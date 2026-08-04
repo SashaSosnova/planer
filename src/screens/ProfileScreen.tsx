@@ -22,6 +22,7 @@ import {
 } from '../lib/cycle'
 import { formatRuDate, todayIso } from '../lib/date'
 import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
+import { calcSweetBudgetKcal } from '../lib/sweets'
 import type { AppSettings } from '../lib/settings'
 import type { AppData } from '../types'
 
@@ -524,6 +525,7 @@ export function ProfileScreen({
                   savedTargetKg != null ? `цель ${savedTargetKg} кг` : null,
                   proteinGoal != null ? `белок ${proteinGoal} г` : null,
                   `овощи ${VEG_GOAL_G} г`,
+                  `сладкое до ${calcSweetBudgetKcal(liveGoal)} ккал`,
                 ]
                   .filter(Boolean)
                   .join(' · ')}
@@ -598,6 +600,7 @@ export function ProfileScreen({
               Новая норма: <strong>{previewGoal} ккал/день</strong>
               {proteinGoal != null ? ` · белок ${proteinGoal} г` : ''}
               {` · овощи ${VEG_GOAL_G} г`}
+              {` · сладкое до ${calcSweetBudgetKcal(previewGoal)} ккал`}
             </p>
           )}
 

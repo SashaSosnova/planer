@@ -1,9 +1,7 @@
 import type { AppData, Meal, PeriodStart } from '../types'
 import { cyclePhaseTip, getCycleInfo, type CyclePhase } from './cycle'
 import { todayIso } from './date'
-
-const SWEET_RE =
-  /шоколад|мороже|слойк|киндер|kinder|торт|чизкейк|конфет|зефир|вафл|батончик|сгущён|сгущен|м&м|m&m|драже|эклер|печенье|булоч|круассан|пирож|десерт|сахар|мёд|мед\b|джем|нутелл|bueno|kitkat/i
+import { isSweetName, sweetKcalFromMeals } from './sweets'
 
 export type PhaseInsight = {
   phase: CyclePhase
@@ -22,9 +20,9 @@ export type CycleCalorieInsights = {
 }
 
 function dayHasSweet(meals: Meal[]): boolean {
-  return meals.some((m) => {
+  return sweetKcalFromMeals(meals) > 0 || meals.some((m) => {
     const blob = `${m.rawText} ${m.items.map((i) => i.name).join(' ')}`
-    return SWEET_RE.test(blob)
+    return isSweetName(blob)
   })
 }
 

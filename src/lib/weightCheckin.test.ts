@@ -52,7 +52,7 @@ describe('buildWeightCheckin', () => {
     expect(c?.note).toMatch(/не заполнено/)
   })
 
-  it('links eating out + carbs to morning gain', () => {
+  it('notes surplus on a gain without salt/water guesses', () => {
     const c = buildWeightCheckin({
       weights: [
         { id: '1', date: '2026-07-29', kg: 68.0, createdAt: 1 },
@@ -82,10 +82,11 @@ describe('buildWeightCheckin', () => {
     })
     expect(c?.hero).toBe('+0,8 кг')
     expect(c?.tone).toBe('up')
-    expect(c?.note).toMatch(/вне дома|углевод|вод/i)
+    expect(c?.note).toMatch(/профицит/i)
+    expect(c?.note).not.toMatch(/солён|вод/i)
   })
 
-  it('treats gain after deficit as water, not food', () => {
+  it('notes deficit on a gain without inventing water', () => {
     const c = buildWeightCheckin({
       weights: [
         { id: '1', date: '2026-07-29', kg: 70.0, createdAt: 1 },
@@ -98,33 +99,14 @@ describe('buildWeightCheckin', () => {
           date: '2026-07-29',
           rawText: 'курица и салат',
           totals: { kcal: 1200, protein: 100, fat: 40, carbs: 60 },
-          items: [
-            {
-              name: 'Курица',
-              grams: 200,
-              kcal: 800,
-              protein: 80,
-              fat: 30,
-              carbs: 0,
-              source: 'library',
-            },
-            {
-              name: 'Салат',
-              grams: 200,
-              kcal: 400,
-              protein: 20,
-              fat: 10,
-              carbs: 60,
-              source: 'library',
-            },
-          ],
         }),
       ],
     })
-    expect(c?.note).toMatch(/дефицит|вода/i)
+    expect(c?.note).toMatch(/дефицит/i)
+    expect(c?.note).not.toMatch(/вод/i)
   })
 
-  it('notes deficit agreement on a drop', () => {
+  it('notes deficit on a drop', () => {
     const c = buildWeightCheckin({
       weights: [
         { id: '1', date: '2026-07-29', kg: 70.0, createdAt: 1 },
@@ -141,6 +123,37 @@ describe('buildWeightCheckin', () => {
       ],
     })
     expect(c?.hero).toBe('−0,5 кг')
-    expect(c?.note).toMatch(/дефицит|согласуется/i)
+    expect(c?.note).toMatch(/дефицит/i)
+  })
+
+  it('stays neutral on a drop without strong kcal signal', () => {
+    const c = buildWeightCheckin({
+      weights: [
+        { id: '1', date: '2026-07-29', kg: 70.0, createdAt: 1 },
+        { id: '2', date: '2026-07-30', kg: 69.4, createdAt: 2 },
+      ],
+      dailyKcalGoal: 1800,
+      meals: [
+        meal({
+          id: 'm1',
+          date: '2026-07-29',
+          rawText: 'бутерброд с ветчиной',
+          totals: { kcal: 1750, protein: 70, fat: 60, carbs: 180 },
+          items: [
+            {
+              name: 'Бутерброд с ветчиной',
+              grams: 200,
+              kcal: 1750,
+              protein: 70,
+              fat: 60,
+              carbs: 180,
+              source: 'library',
+            },
+          ],
+        }),
+      ],
+    })
+    expect(c?.note).toBe('Минус относительно прошлого взвешивания.')
+    expect(c?.note).not.toMatch(/солён|вод/i)
   })
 })

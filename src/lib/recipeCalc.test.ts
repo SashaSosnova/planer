@@ -4,6 +4,7 @@ import {
   computeRecipe,
   draftFromFoodItem,
   ingredientCookedGramsForDish,
+  ingredientCookedGramsFromYield,
   ingredientPer100Cooked,
   ingredientPer100CookedForDish,
   ingredientPer100RawFromCooked,
@@ -16,6 +17,18 @@ describe('guessYieldFactor', () => {
   it('returns higher yield for pasta and lower for chicken', () => {
     expect(guessYieldFactor('спагетти').factor).toBe(2.3)
     expect(guessYieldFactor('куриная грудка').factor).toBe(0.75)
+  })
+
+  it('keeps cold sandwich ingredients at yield 1', () => {
+    expect(guessYieldFactor('Батон городской').factor).toBe(1)
+    expect(guessYieldFactor('ветчина ореховая').factor).toBe(1)
+    expect(guessYieldFactor('кетчуп').factor).toBe(1)
+  })
+
+  it('detects fried egg from cooking markers on the line', () => {
+    expect(guessYieldFactor('Яйцо куриное (жарить)').factor).toBe(0.88)
+    expect(guessYieldFactor('яйцо жареное').factor).toBe(0.88)
+    expect(guessYieldFactor('яичница').factor).toBe(0.88)
   })
 })
 
@@ -79,6 +92,24 @@ describe('computeRecipe', () => {
     expect(again.totalCookedGrams).toBe(500)
     expect(again.ingredients[0]!.name).toBe('Макароны сухие')
     expect(recipeTextFromDraft(again)).toContain('Макароны сухие 200 гр')
+  })
+
+  it('saves portionGrams for meal defaults', () => {
+    const recipe = computeRecipe({
+      name: 'Бутерброд',
+      ingredients: [
+        {
+          name: 'батон',
+          gramsRaw: 30,
+          per100g: { kcal: 260, protein: 8, fat: 2, carbs: 52 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+      ],
+    })
+    const food = recipeToFoodItem(recipe, undefined, undefined, recipe.totalCookedGrams)
+    expect(food.portionGrams).toBe(30)
+    expect(food.kind).toBe('dish')
   })
 
   it('persists editor sourceText so reopen shows the edited recipe text', () => {
@@ -145,6 +176,32 @@ describe('computeRecipe', () => {
     expect(heavier.totalMacros).toEqual(base.totalMacros)
     expect(heavier.per100g.kcal).toBeCloseTo(base.per100g.kcal / 2, 1)
     expect(heavier.per100g.protein).toBeCloseTo(base.per100g.protein / 2, 1)
+  })
+
+  it('keeps yield-line grams equal to raw×yield even when pan weight differs', () => {
+    const recipe = computeRecipe({
+      name: 'Блюдо',
+      cookedGramsOverride: 205,
+      ingredients: [
+        {
+          name: 'Масло растительное',
+          gramsRaw: 20,
+          per100g: { kcal: 900, protein: 0, fat: 100, carbs: 0 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+        {
+          name: 'Хлеб',
+          gramsRaw: 180,
+          per100g: { kcal: 260, protein: 8, fat: 2, carbs: 52 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+      ],
+    })
+    expect(ingredientCookedGramsFromYield(recipe.ingredients[0]!)).toBe(20)
+    // Pan override still redistributes for density math
+    expect(ingredientCookedGramsForDish(recipe.ingredients[0]!, recipe)).toBe(20.5)
   })
 
   it('scales ingredient cooked cards when pan weight changes', () => {

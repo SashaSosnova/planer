@@ -6,12 +6,11 @@ import type {
   StepsEntry,
   WeightEntry,
 } from '../types'
-import { getCycleInfo } from './cycle'
 import { todayIso } from './date'
 import { round1 } from './nutrition'
 
 /** Classic rule-of-thumb: ~7700 kcal ≈ 1 kg body fat (rough). */
-const KCAL_PER_KG = 7700
+export const KCAL_PER_KG = 7700
 /** Assumed steps already baked into activity/TDEE; extras nudge energy estimate. */
 const STEPS_BASELINE = 6000
 const KCAL_PER_STEP = 0.04
@@ -43,6 +42,56 @@ export type WeightForecast = {
   summary: string
   /** Soft extras shown under the main line */
   notes: string[]
+}
+
+/** Rough next-morning change from yesterday's kcal vs maintain (water/glycogen not modeled). */
+export type NextMorningEstimate = {
+  baseKg: number
+  expectedDeltaKg: number
+  expectedKg: number
+  yesterdayKcal: number
+  maintainKcal: number
+  yesterday: string
+}
+
+/**
+ * Expectation for tomorrow morning from yesterday's calorie balance.
+ * Returns null when there is no weight, no maintain, or no meals logged yesterday.
+ */
+export function estimateNextMorning(input: {
+  weights: WeightEntry[]
+  meals: Meal[]
+  maintainKcal: number
+  today?: string
+}): NextMorningEstimate | null {
+  const today = input.today ?? todayIso()
+  const maintainKcal = Math.round(input.maintainKcal)
+  if (!(maintainKcal > 0)) return null
+
+  const sorted = [...input.weights]
+    .filter((w) => w.date <= today && Number.isFinite(w.kg) && w.kg >= 30 && w.kg <= 400)
+    .sort((a, b) => a.date.localeCompare(b.date))
+  const latest = sorted[sorted.length - 1]
+  if (!latest) return null
+
+  const yesterday = addDaysIso(today, -1)
+  const yesterdayMeals = input.meals.filter((m) => m.date === yesterday)
+  if (yesterdayMeals.length === 0) return null
+
+  const yesterdayKcal = Math.round(
+    yesterdayMeals.reduce((sum, meal) => sum + (Number(meal.totals?.kcal) || 0), 0),
+  )
+  if (yesterdayKcal <= 0) return null
+
+  const expectedDeltaKg = round1((yesterdayKcal - maintainKcal) / KCAL_PER_KG)
+  return {
+    baseKg: round1(latest.kg),
+    expectedDeltaKg,
+    expectedKg: round1(latest.kg + expectedDeltaKg),
+    yesterdayKcal,
+    maintainKcal,
+    yesterday,
+  }
 }
 
 export type ForecastInput = {
@@ -293,13 +342,6 @@ export function computeWeightForecast(
 
   const weeklyRateKg = blendRates(scale.rate, energy.rate)
 
-  const cycle = getCycleInfo(
-    input.periodStarts ?? [],
-    today,
-    input.cycleLengthDays,
-    input.periodLengthDays,
-  )
-
   const waistDelta = waistTrendCm(input.measurements ?? [])
 
   let confidence: 'low' | 'ok' = 'low'
@@ -330,7 +372,6 @@ export function computeWeightForecast(
   }
 
   const notes: string[] = []
-  if (cycle.weightNote) notes.push(cycle.weightNote)
   if (waistDelta != null && waistDelta <= -1) {
     notes.push(
       `Талия −${Math.abs(waistDelta).toFixed(1).replace('.', ',')} см — объёмы уходят, даже если весы капризничают.`,
@@ -352,7 +393,6 @@ export function computeWeightForecast(
     currentKg,
     weeklyRateKg,
     planRateKg,
-    inOneWeek,
     targetKg: target,
     weeksToTarget,
     confidence,
@@ -418,7 +458,6 @@ function buildSummary(f: {
   currentKg: number
   weeklyRateKg: number | null
   planRateKg: number | null
-  inOneWeek: number | null
   targetKg: number | null
   weeksToTarget: number | null
   confidence: 'low' | 'ok'
@@ -447,8 +486,10 @@ function buildSummary(f: {
     if (Math.abs(left) < 0.15) parts.push('у цели')
   }
 
-  if (f.inOneWeek != null) {
-    parts.push(`через неделю ≈ ${f.inOneWeek.toFixed(1).replace('.', ',')} кг`)
+  // Same rate as «Темп» — don't mix with on-plan inOneWeek (can look flat while tempo ≠ 0).
+  if (Math.abs(tempoRate) >= 0.05) {
+    const weekAhead = round1(f.currentKg + tempoRate)
+    parts.push(`через неделю ≈ ${weekAhead.toFixed(1).replace('.', ',')} кг`)
   }
 
   const towardRate = f.planRateKg ?? f.weeklyRateKg

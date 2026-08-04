@@ -9,6 +9,7 @@ function day(partial: Partial<DayStats>): DayStats {
     meals: [],
     totals: { kcal: 0, protein: 0, fat: 0, carbs: 0 },
     vegGrams: 0,
+    sweetKcal: 0,
     approximate: false,
     hasData: true,
     ...partial,

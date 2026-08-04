@@ -40,7 +40,6 @@ import type {
   CareSkinTags,
   CareSlot,
   CareWeekday,
-  DayNote,
   FoodItem,
   MacroSet,
   Meal,

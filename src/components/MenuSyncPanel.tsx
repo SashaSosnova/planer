@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { AppData } from '../types'
 import { downloadJson } from '../lib/downloadJson'
+import { findMenuDishDuplicates } from '../lib/menuDishDedupe'
 import {
   exportMenuMacros,
   exportProductCatalog,
@@ -14,9 +15,10 @@ type Props = {
     raw: unknown,
     onProgress?: (msg: string) => void,
   ) => Promise<MenuImportResult>
+  onDedupeDishes?: () => Promise<{ removed: number; groups: ReturnType<typeof findMenuDishDuplicates> }>
 }
 
-export function MenuSyncPanel({ data, onImportRecipes }: Props) {
+export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -25,6 +27,8 @@ export function MenuSyncPanel({ data, onImportRecipes }: Props) {
 
   const ingredientCount = data.foods.filter((f) => f.kind !== 'dish').length
   const linkedDishes = data.foods.filter((f) => f.kind === 'dish' && f.menuId).length
+  const dupeGroups = useMemo(() => findMenuDishDuplicates(data.foods), [data.foods])
+  const dupeCount = dupeGroups.reduce((n, g) => n + g.removeIds.length, 0)
 
   const exportCatalog = () => {
     const catalog = exportProductCatalog(data.foods)
@@ -56,7 +60,8 @@ export function MenuSyncPanel({ data, onImportRecipes }: Props) {
       setLastImport(result)
       setMsg(
         `Готово: ${result.created} новых, ${result.updated} обновлено` +
-          (result.errors ? `, ${result.errors} ошибок` : ''),
+          (result.errors ? `, ${result.errors} ошибок` : '') +
+          (result.removedDupes ? `, удалено дубликатов: ${result.removedDupes}` : ''),
       )
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось импортировать')
@@ -71,7 +76,7 @@ export function MenuSyncPanel({ data, onImportRecipes }: Props) {
     setError(null)
     setMsg('Загружаю dishes.json…')
     try {
-      const res = await fetch(MENU_DISHES_URL)
+      const res = await fetch(`${MENU_DISHES_URL}?t=${Date.now()}`)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const raw = (await res.json()) as unknown
       await runImport(raw)
@@ -82,6 +87,20 @@ export function MenuSyncPanel({ data, onImportRecipes }: Props) {
           : 'Не удалось загрузить',
       )
       setMsg(null)
+      setBusy(false)
+    }
+  }
+
+  const runDedupe = async () => {
+    setBusy(true)
+    setError(null)
+    setMsg(null)
+    try {
+      const { removed } = await onDedupeDishes()
+      setMsg(removed > 0 ? `Удалено дубликатов: ${removed}` : 'Дубликатов блюд не найдено')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить дубликаты')
+    } finally {
       setBusy(false)
     }
   }
@@ -149,6 +168,26 @@ export function MenuSyncPanel({ data, onImportRecipes }: Props) {
           </button>
         </div>
       </div>
+
+      {dupeCount > 0 && onDedupeDishes && (
+        <div className="menu-sync-block">
+          <h3 className="menu-sync-title">Дубликаты блюд</h3>
+          <p className="muted small">
+            Найдено лишних копий: {dupeCount} (групп: {dupeGroups.length}). Останется версия с
+            menuId и полным рецептом.
+          </p>
+          <ul className="menu-sync-report muted small">
+            {dupeGroups.map((g) => (
+              <li key={g.key}>
+                <strong>{g.keepName}</strong> — лишних: {g.removeIds.length}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="ghost-btn" disabled={busy} onClick={() => void runDedupe()}>
+            Удалить дубликаты блюд
+          </button>
+        </div>
+      )}
 
       <div className="menu-sync-block">
         <h3 className="menu-sync-title">3. КБЖУ → menu</h3>

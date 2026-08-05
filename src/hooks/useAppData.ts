@@ -30,11 +30,18 @@ import {
   SEED_CARE_PRODUCTS_KEY,
 } from '../lib/seedCareProducts'
 import {
+  hasSeededSpiceProducts,
+  markSeededSpiceProducts,
+  mergeSeedSpiceProducts,
+  SEED_SPICE_PRODUCTS_KEY,
+} from '../lib/seedSpiceProducts'
+import {
   buildMenuImportPlan,
   parseMenuDishesBundle,
   summarizeMenuImport,
   type MenuImportResult,
 } from '../lib/menuSync'
+import { dedupeMenuDishes, findMenuDishDuplicates } from '../lib/menuDishDedupe'
 import { parseTelegramImportBundle } from '../lib/tgImport'
 import { applyKnownWeightFixes } from '../lib/weightCleanup'
 import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/cloudSync'
@@ -108,6 +115,7 @@ export function useAppData() {
   /** Food/recipe ids deleted this session — same protection against snapshot races. */
   const suppressedFoodIds = useRef(new Set<string>())
   const careProductsSeedStarted = useRef(false)
+  const spiceProductsSeedStarted = useRef(false)
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -131,10 +139,12 @@ export function useAppData() {
         setData(empty)
         cloudHydrated.current = new Set(CLOUD_KEYS)
         careProductsSeedStarted.current = false
+        spiceProductsSeedStarted.current = false
         suppressedFoodIds.current = new Set()
         suppressedMeasureDates.current = new Set()
         try {
           localStorage.removeItem(SEED_CARE_PRODUCTS_KEY)
+          localStorage.removeItem(SEED_SPICE_PRODUCTS_KEY)
         } catch {
           /* ignore */
         }
@@ -725,6 +735,27 @@ export function useAppData() {
     })()
   }, [ready, data.careProducts, persistLocal, uid, useCloud])
 
+  // Seed basic spices for menu recipe sync (salt, oregano, bay leaf, paprika, basil).
+  useEffect(() => {
+    if (!ready) return
+    if (spiceProductsSeedStarted.current) return
+    if (hasSeededSpiceProducts()) return
+    spiceProductsSeedStarted.current = true
+    const { added } = mergeSeedSpiceProducts(data.foods)
+    markSeededSpiceProducts()
+    if (added.length === 0) return
+    void (async () => {
+      if (useCloud && uid) {
+        await Promise.all(added.map((f) => upsertDoc(uid, 'foods', f.id, { ...f })))
+      }
+      persistLocal((prev) => {
+        const merged = mergeSeedSpiceProducts(prev.foods)
+        if (merged.added.length === 0) return prev
+        return { ...prev, foods: merged.foods }
+      })
+    })()
+  }, [ready, data.foods, persistLocal, uid, useCloud])
+
   const saveCareProduct = useCallback(
     async (
       input: Omit<CareProduct, 'id' | 'createdAt' | 'updatedAt'> & {
@@ -1008,7 +1039,15 @@ export function useAppData() {
       onProgress?: (msg: string) => void,
     ): Promise<MenuImportResult> => {
       const dishes = parseMenuDishesBundle(raw)
-      const plan = buildMenuImportPlan(dishes, data.foods)
+      const spiceMerge = mergeSeedSpiceProducts(data.foods)
+      if (spiceMerge.added.length > 0) {
+        markSeededSpiceProducts()
+        for (const spice of spiceMerge.added) {
+          if (useCloud && uid) await upsertDoc(uid, 'foods', spice.id, { ...spice })
+        }
+        persistLocal((prev) => ({ ...prev, foods: spiceMerge.foods }))
+      }
+      const plan = buildMenuImportPlan(dishes, spiceMerge.foods)
       const results: MenuImportResult['results'] = []
 
       for (const entry of plan) {
@@ -1038,10 +1077,47 @@ export function useAppData() {
       }
 
       const { created, updated, errors } = summarizeMenuImport(results)
-      return { results, created, updated, errors }
+
+      let removedIds: string[] = []
+      persistLocal((prev) => {
+        const merged = dedupeMenuDishes(prev.foods)
+        removedIds = merged.removedIds
+        if (merged.removedIds.length === 0) return prev
+        return { ...prev, foods: merged.foods }
+      })
+      if (removedIds.length > 0) {
+        for (const id of removedIds) suppressedFoodIds.current.add(id)
+        if (useCloud && uid) {
+          await Promise.all(removedIds.map((id) => removeDoc(uid, 'foods', id)))
+        }
+      }
+
+      return { results, created, updated, errors, removedDupes: removedIds.length }
     },
-    [data.foods, saveFood],
+    [data.foods, persistLocal, saveFood, uid, useCloud],
   )
+
+  const dedupeMenuDishesCatalog = useCallback(async (): Promise<{
+    removed: number
+    groups: ReturnType<typeof findMenuDishDuplicates>
+  }> => {
+    let removedIds: string[] = []
+    let groups: ReturnType<typeof findMenuDishDuplicates> = []
+    persistLocal((prev) => {
+      const merged = dedupeMenuDishes(prev.foods)
+      removedIds = merged.removedIds
+      groups = merged.groups
+      if (merged.removedIds.length === 0) return prev
+      return { ...prev, foods: merged.foods }
+    })
+    if (removedIds.length > 0) {
+      for (const id of removedIds) suppressedFoodIds.current.add(id)
+      if (useCloud && uid) {
+        await Promise.all(removedIds.map((id) => removeDoc(uid, 'foods', id)))
+      }
+    }
+    return { removed: removedIds.length, groups }
+  }, [persistLocal, uid, useCloud])
 
   const mode = useMemo(
     () => (useCloud ? 'cloud' : isFirebaseConfigured() ? 'connecting' : 'local'),
@@ -1076,5 +1152,6 @@ export function useAppData() {
     resetLocal,
     importDiaryBundle,
     importMenuRecipes,
+    dedupeMenuDishesCatalog,
   }
 }

@@ -56,6 +56,25 @@ describe('parseMenuDishesBundle', () => {
       parseMenuDishesBundle({ dishes: [{ id: 'x', name: 'X', ingredients: [] }] }),
     ).toThrow(/нет ни одного блюда/)
   })
+
+  it('skips leftovers and deleted salads', () => {
+    const dishes = parseMenuDishesBundle({
+      dishes: [
+        dish,
+        {
+          id: 'leftovers_roast',
+          name: 'Остатки жаркого',
+          ingredients: ['Филе 200 г'],
+        },
+        {
+          id: 'salad_carrot_korean',
+          name: 'Морковь по-корейски',
+          ingredients: ['Морковь 100 г'],
+        },
+      ],
+    })
+    expect(dishes).toEqual([dish])
+  })
 })
 
 describe('buildMenuRecipeText', () => {

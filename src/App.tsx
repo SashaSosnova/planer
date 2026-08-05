@@ -69,6 +69,7 @@ export default function App() {
     setCareSlotChecks,
     saveCareDaySkin,
     importMenuRecipes,
+    dedupeMenuDishesCatalog,
   } = useAppData()
 
   const latestWeightKg = useMemo(() => {
@@ -308,6 +309,7 @@ export default function App() {
             onSaveFood={saveFood}
             onDeleteFood={deleteFood}
             onImportMenuRecipes={importMenuRecipes}
+            onDedupeMenuDishes={dedupeMenuDishesCatalog}
           />
         )}
 

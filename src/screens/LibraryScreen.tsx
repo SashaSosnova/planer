@@ -16,6 +16,10 @@ type Props = {
     raw: unknown,
     onProgress?: (msg: string) => void,
   ) => Promise<MenuImportResult>
+  onDedupeMenuDishes?: () => Promise<{
+    removed: number
+    groups: import('../lib/menuDishDedupe').MenuDishDupeGroup[]
+  }>
   initialTab?: LibraryTab
   backLabel?: string
 }
@@ -26,6 +30,7 @@ export function LibraryScreen({
   onSaveFood,
   onDeleteFood,
   onImportMenuRecipes,
+  onDedupeMenuDishes,
   initialTab = 'products',
   backLabel = '← Назад',
 }: Props) {
@@ -70,7 +75,13 @@ export function LibraryScreen({
       {tab === 'recipes' && (
         <RecipesPanel data={data} onSave={onSaveFood} onDelete={onDeleteFood} />
       )}
-      {tab === 'sync' && <MenuSyncPanel data={data} onImportRecipes={onImportMenuRecipes} />}
+      {tab === 'sync' && (
+        <MenuSyncPanel
+          data={data}
+          onImportRecipes={onImportMenuRecipes}
+          onDedupeDishes={onDedupeMenuDishes}
+        />
+      )}
     </section>
   )
 }

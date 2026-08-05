@@ -1,10 +1,26 @@
 import { inferDishCategory } from './foodCategory'
-import { parseRecipeLocal } from './parseRecipe'
+import { findExistingMenuDish } from './menuDishDedupe'
+import { parseRecipeFromIngredientLines } from './parseRecipe'
 import { recipeToFoodItem } from './recipeCalc'
 import type { FoodItem, FoodRef, MacroSet } from '../types'
 
 /** Default URL for menu repo export (dishes.json on GitHub Pages). */
 export const MENU_DISHES_URL = 'https://sashasosnova.github.io/menu/dishes.json'
+
+/** Not synced to planer — leftovers are reheating notes, not recipes for KBZHU. */
+export const MENU_SYNC_SKIP_IDS = new Set([
+  'leftovers_cutlets',
+  'leftovers_roast',
+  'leftovers_baked_chicken',
+  'leftovers_wings',
+  'leftovers_fish',
+  'leftovers_thighs',
+  'salad_carrot_korean',
+])
+
+export function filterMenuDishesForSync(dishes: MenuDishExport[]): MenuDishExport[] {
+  return dishes.filter((d) => !MENU_SYNC_SKIP_IDS.has(d.id))
+}
 
 export type MenuDishExport = {
   id: string
@@ -38,6 +54,7 @@ export type MenuImportResult = {
   created: number
   updated: number
   errors: number
+  removedDupes?: number
 }
 
 export type MenuMacrosExport = {
@@ -83,7 +100,9 @@ function parseMenuDish(raw: unknown): MenuDishExport | null {
 /** Parse menu export: `{ dishes: [...] }`, a bare array, or `{ bolognese: {...} }`. */
 export function parseMenuDishesBundle(raw: unknown): MenuDishExport[] {
   if (Array.isArray(raw)) {
-    const dishes = raw.map(parseMenuDish).filter((d): d is MenuDishExport => d != null)
+    const dishes = filterMenuDishesForSync(
+      raw.map(parseMenuDish).filter((d): d is MenuDishExport => d != null),
+    )
     if (dishes.length === 0) throw new Error('В JSON нет ни одного блюда с ингредиентами')
     return dishes
   }
@@ -92,7 +111,9 @@ export function parseMenuDishesBundle(raw: unknown): MenuDishExport[] {
   }
   const obj = raw as Record<string, unknown>
   if (Array.isArray(obj.dishes)) {
-    const dishes = obj.dishes.map(parseMenuDish).filter((d): d is MenuDishExport => d != null)
+    const dishes = filterMenuDishesForSync(
+      obj.dishes.map(parseMenuDish).filter((d): d is MenuDishExport => d != null),
+    )
     if (dishes.length === 0) throw new Error('В dishes[] нет ни одного блюда с ингредиентами')
     return dishes
   }
@@ -104,7 +125,9 @@ export function parseMenuDishesBundle(raw: unknown): MenuDishExport[] {
       return 'ingredients' in (v as object) || 'name' in (v as object)
     })
   ) {
-    const dishes = values.map(parseMenuDish).filter((d): d is MenuDishExport => d != null)
+    const dishes = filterMenuDishesForSync(
+      values.map(parseMenuDish).filter((d): d is MenuDishExport => d != null),
+    )
     if (dishes.length === 0) throw new Error('Не удалось разобрать блюда из JSON')
     return dishes
   }
@@ -174,7 +197,7 @@ export function menuDishToFoodInput(
   unmatched: string[]
 } {
   const sourceText = buildMenuRecipeText(dish)
-  const draft = parseRecipeLocal(sourceText, foods)
+  const draft = parseRecipeFromIngredientLines(dish.name, dish.ingredients, foods)
   draft.name = dish.name
   const extraNotes = buildMenuRecipeNotes(dish)
   if (extraNotes) {
@@ -205,10 +228,9 @@ export function buildMenuImportPlan(
   input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string; menuId: string }
   unmatched: string[]
 }> {
-  const byMenuId = new Map(foods.filter((f) => f.menuId).map((f) => [f.menuId!, f]))
   const refs = foodsToIngredientRefs(foods)
   return dishes.map((dish) => {
-    const existing = byMenuId.get(dish.id)
+    const existing = findExistingMenuDish(foods, dish.id, dish.name)
     const { input, unmatched } = menuDishToFoodInput(dish, refs, existing?.id)
     return { dish, existingId: existing?.id, input, unmatched }
   })

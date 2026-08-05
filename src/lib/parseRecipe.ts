@@ -262,6 +262,33 @@ export function resolveRecipeIngredient(
   }
 }
 
+/** Build recipe draft from structured ingredient lines (menu JSON). */
+export function parseRecipeFromIngredientLines(
+  dishName: string,
+  lines: string[],
+  foods: FoodRef[],
+): RecipeDraft {
+  const hints = expandRecipeHints(
+    lines.map((line) => extractIngredientLine(line)).filter((h) => h.name),
+  )
+  const ingredients: RecipeIngredientLine[] = []
+  for (const { name: ingName, grams } of hints) {
+    if (!ingName || grams == null || grams <= 0) continue
+    ingredients.push(resolveRecipeIngredient(ingName, grams, foods))
+  }
+  const unique = dedupeRecipeIngredients(ingredients)
+  if (unique.length === 0) {
+    throw new Error(
+      `Не нашла ингредиенты с граммами в «${dishName}». Формат строки: «Куриное филе 300 г»`,
+    )
+  }
+  return computeRecipe({
+    name: dishName,
+    ingredients: unique,
+    notes: 'Выход по типичным коэффициентам (набухание/ужарка). Можно поправить вручную.',
+  })
+}
+
 /** Local fallback: first line = dish name, next lines = «product - 300 гр». */
 export function parseRecipeLocal(text: string, foods: FoodRef[]): RecipeDraft {
   const lines = text
@@ -281,23 +308,7 @@ export function parseRecipeLocal(text: string, foods: FoodRef[]): RecipeDraft {
     start = 0
   }
 
-  const ingredients: RecipeIngredientLine[] = []
-  for (const line of lines.slice(start)) {
-    const { name: ingName, grams } = extractIngredientLine(line)
-    if (!ingName || grams == null || grams <= 0) continue
-    ingredients.push(resolveRecipeIngredient(ingName, grams, foods))
-  }
-
-  const unique = dedupeRecipeIngredients(ingredients)
-  if (unique.length === 0) {
-    throw new Error('Не нашла ингредиенты с граммами. Пример: «Куриное филе — 300 гр»')
-  }
-
-  return computeRecipe({
-    name,
-    ingredients: unique,
-    notes: 'Выход по типичным коэффициентам (набухание/ужарка). Можно поправить вручную.',
-  })
+  return parseRecipeFromIngredientLines(name, lines.slice(start), foods)
 }
 
 function ingredientCatalog(foods: FoodRef[]): FoodRef[] {

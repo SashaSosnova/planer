@@ -92,6 +92,7 @@ export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) 
   }
 
   const runDedupe = async () => {
+    if (!onDedupeDishes) return
     setBusy(true)
     setError(null)
     setMsg(null)

@@ -31,6 +31,21 @@ describe('macrosLookPlausible', () => {
       macrosLookPlausible({ kcal: 263, protein: 10, fat: 16, carbs: 19 }),
     ).toBe(true)
   })
+
+  it('accepts zero-calorie salt and fiber-heavy spices', () => {
+    expect(
+      macrosLookPlausible({ kcal: 0, protein: 0, fat: 0, carbs: 0 }),
+    ).toBe(true)
+    expect(
+      macrosLookPlausible({ kcal: 251, protein: 10.4, fat: 3.3, carbs: 64.8 }),
+    ).toBe(true)
+    expect(
+      macrosLookPlausible({ kcal: 282, protein: 12, fat: 14.3, carbs: 49.7 }),
+    ).toBe(true)
+    expect(
+      macrosLookPlausible({ kcal: 282, protein: 14.1, fat: 12.9, carbs: 53.7 }),
+    ).toBe(true)
+  })
 })
 
 describe('normalizeFoodLabelResult', () => {
@@ -131,6 +146,40 @@ describe('normalizeFoodLabelResult', () => {
     })
     expect(result.items.map((i) => i.name)).toEqual(['Масло'])
   })
+
+  it('keeps salt and spices from pasted list', () => {
+    const result = normalizeFoodLabelResult({
+      items: [
+        {
+          name: 'Соль',
+          macros: { kcal: 0, protein: 0, fat: 0, carbs: 0 },
+          macrosBasis: 'per100',
+        },
+        {
+          name: 'Перец чёрный молотый',
+          macros: { kcal: 251, protein: 10.4, fat: 3.3, carbs: 64.8 },
+          macrosBasis: 'per100',
+        },
+        {
+          name: 'Перец красный (чили, молотый)',
+          macros: { kcal: 282, protein: 12, fat: 14.3, carbs: 49.7 },
+          macrosBasis: 'per100',
+        },
+        {
+          name: 'Паприка молотая',
+          macros: { kcal: 282, protein: 14.1, fat: 12.9, carbs: 53.7 },
+          macrosBasis: 'per100',
+        },
+      ],
+    })
+    expect(result.items.map((i) => i.name)).toEqual([
+      'Соль',
+      'Перец чёрный молотый',
+      'Перец красный (чили, молотый)',
+      'Паприка молотая',
+    ])
+  })
+
 
   it('accepts legacy per100g field', () => {
     const result = normalizeFoodLabelResult({

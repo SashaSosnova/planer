@@ -29,6 +29,7 @@ import { CloseIcon } from '../components/CloseIcon'
 import { DateField } from '../components/DateField'
 import { MealMedChecks } from '../components/MealMedChecks'
 import type { MedDoseKey } from '../lib/medRoutine'
+import type { MenuImportResult } from '../lib/menuSync'
 import { LibraryScreen } from './LibraryScreen'
 
 const PARSE_SOURCE_LABEL: Record<MealParseSource, string> = {
@@ -61,6 +62,10 @@ type Props = {
   }) => Promise<unknown>
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
   onDeleteFood: (id: string) => Promise<void>
+  onImportMenuRecipes: (
+    raw: unknown,
+    onProgress?: (msg: string) => void,
+  ) => Promise<MenuImportResult>
   onSaveMedCheck: (input: {
     date: string
     dose: MedDoseKey
@@ -77,6 +82,7 @@ export function AddMealScreen({
   onSaveMeal,
   onSaveFood,
   onDeleteFood,
+  onImportMenuRecipes,
   onSaveMedCheck,
   registerBackHandler,
 }: Props) {
@@ -238,6 +244,7 @@ export function AddMealScreen({
         onBack={() => setView('meal')}
         onSaveFood={onSaveFood}
         onDeleteFood={onDeleteFood}
+        onImportMenuRecipes={onImportMenuRecipes}
         backLabel="← К добавлению"
       />
     )

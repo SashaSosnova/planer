@@ -29,6 +29,12 @@ import {
   RETIRED_CARE_PRODUCT_IDS,
   SEED_CARE_PRODUCTS_KEY,
 } from '../lib/seedCareProducts'
+import {
+  buildMenuImportPlan,
+  parseMenuDishesBundle,
+  summarizeMenuImport,
+  type MenuImportResult,
+} from '../lib/menuSync'
 import { parseTelegramImportBundle } from '../lib/tgImport'
 import { applyKnownWeightFixes } from '../lib/weightCleanup'
 import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/cloudSync'
@@ -267,12 +273,15 @@ export function useAppData() {
       const per100g = sanitizeMacros(input.per100g)
       assertNonNegMacros(per100g)
       const brand = input.brand?.trim()
+      const category = input.category?.trim()
       const portionRaw = input.portionGrams
       const portionGrams =
         portionRaw != null && Number.isFinite(portionRaw) && portionRaw > 0 && portionRaw <= 5000
           ? Math.round(portionRaw * 10) / 10
           : undefined
       const id = input.id ?? newId()
+      const existing = input.id ? data.foods.find((f) => f.id === input.id) : undefined
+      const menuId = input.menuId?.trim() || existing?.menuId
       suppressedFoodIds.current.delete(id)
       const item: FoodItem = {
         id,
@@ -283,7 +292,9 @@ export function useAppData() {
         updatedAt: Date.now(),
         ...(input.recipe ? { recipe: input.recipe } : {}),
         ...(brand ? { brand } : {}),
+        ...(category ? { category } : {}),
         ...(portionGrams != null ? { portionGrams } : {}),
+        ...(menuId ? { menuId } : {}),
       }
       if (useCloud && uid) {
         // merge:true keeps stale fields unless we explicitly clear them
@@ -292,7 +303,9 @@ export function useAppData() {
           ...item,
           place: null, // legacy field retired → brand
           brand: brand || null,
+          category: category || null,
           portionGrams: portionGrams ?? null,
+          menuId: menuId || null,
           recipe: recipe
             ? {
                 ...recipe,
@@ -308,7 +321,7 @@ export function useAppData() {
       }))
       return item
     },
-    [persistLocal, uid, useCloud],
+    [data.foods, persistLocal, uid, useCloud],
   )
 
   const deleteFood = useCallback(
@@ -989,6 +1002,47 @@ export function useAppData() {
     [data.meals, data.weights, persistLocal, uid, useCloud],
   )
 
+  const importMenuRecipes = useCallback(
+    async (
+      raw: unknown,
+      onProgress?: (msg: string) => void,
+    ): Promise<MenuImportResult> => {
+      const dishes = parseMenuDishesBundle(raw)
+      const plan = buildMenuImportPlan(dishes, data.foods)
+      const results: MenuImportResult['results'] = []
+
+      for (const entry of plan) {
+        onProgress?.(`${entry.dish.name}…`)
+        try {
+          await saveFood(entry.input)
+          results.push({
+            menuId: entry.dish.id,
+            name: entry.dish.name,
+            status: entry.existingId ? 'updated' : 'created',
+            matched: entry.input.recipe!.ingredients.filter((i) => i.source === 'library').length,
+            total: entry.input.recipe!.ingredients.length,
+            unmatched: entry.unmatched,
+          })
+        } catch (err) {
+          results.push({
+            menuId: entry.dish.id,
+            name: entry.dish.name,
+            status: 'error',
+            matched: 0,
+            total: entry.input.recipe?.ingredients.length ?? 0,
+            unmatched: entry.unmatched,
+            error: err instanceof Error ? err.message : 'Ошибка сохранения',
+          })
+        }
+        await yieldUi()
+      }
+
+      const { created, updated, errors } = summarizeMenuImport(results)
+      return { results, created, updated, errors }
+    },
+    [data.foods, saveFood],
+  )
+
   const mode = useMemo(
     () => (useCloud ? 'cloud' : isFirebaseConfigured() ? 'connecting' : 'local'),
     [useCloud],
@@ -1021,5 +1075,6 @@ export function useAppData() {
     saveCareDaySkin,
     resetLocal,
     importDiaryBundle,
+    importMenuRecipes,
   }
 }

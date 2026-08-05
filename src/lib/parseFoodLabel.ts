@@ -112,6 +112,8 @@ export function likelyMisTaggedPortionBasis(
 
 /** Reject price-as-kcal, mixed columns, and nonsense BJU vs kcal (Atwater). */
 export function macrosLookPlausible(m: MacroSet): boolean {
+  // Salt / water / zero-calorie seasonings — exact zeros are intentional
+  if (m.kcal === 0 && m.protein === 0 && m.fat === 0 && m.carbs === 0) return true
   if (m.kcal < 5 || m.kcal > 950) return false
   if (m.protein > 100 || m.fat > 100 || m.carbs > 120) return false
   const fromMacro = m.protein * 4 + m.fat * 9 + m.carbs * 4
@@ -121,7 +123,10 @@ export function macrosLookPlausible(m: MacroSet): boolean {
   if (fromMacro > 20 && m.kcal < fromMacro * 0.35) return false
   // Mixed «НА 100Г» kcal with «БЛЮДО» protein (165 / 25 / 4 / 20 → ~216 ккал из БЖУ)
   const gap = Math.abs(m.kcal - fromMacro)
-  if (gap > Math.max(50, m.kcal * 0.2)) return false
+  // Spices / bran / cocoa: labeled kcal often well below Atwater because carbs include fiber
+  const fiberHeavy =
+    fromMacro > m.kcal && m.carbs >= 35 && m.kcal >= fromMacro * 0.5
+  if (!fiberHeavy && gap > Math.max(50, m.kcal * 0.2)) return false
   // Prices often end up as x.4 / x.9 from «,99»
   if (m.kcal > 150 && m.kcal % 1 > 0.05 && fromMacro < m.kcal * 0.45) return false
   return true

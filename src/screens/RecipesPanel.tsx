@@ -1,7 +1,15 @@
 import { useMemo, useRef, useState } from 'react'
+import { CatalogSections } from '../components/CatalogSections'
+import { CategorySelect } from '../components/CategorySelect'
 import { DecimalInput } from '../components/DecimalInput'
 import { PlusIcon } from '../components/PlusIcon'
 import { TrashIcon } from '../components/TrashIcon'
+import {
+  groupByDishCategory,
+  inferDishCategory,
+  resolveDishCategory,
+  type DishCategoryId,
+} from '../lib/foodCategory'
 import { parseRecipe } from '../lib/parseRecipe'
 import {
   computeRecipe,
@@ -56,6 +64,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
+  const [dishCategory, setDishCategory] = useState<DishCategoryId>('other')
+  const [dishCategoryTouched, setDishCategoryTouched] = useState(false)
 
   const dishes = useMemo(
     () =>
@@ -74,6 +84,12 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
         f.aliases.some((a) => a.toLowerCase().includes(q)),
     )
   }, [dishes, query])
+
+  const dishGroups = useMemo(() => groupByDishCategory(visibleDishes), [visibleDishes])
+
+  const syncDishCategory = (name: string, ingredients?: RecipeIngredientLine[]) => {
+    if (!dishCategoryTouched) setDishCategory(inferDishCategory(name, ingredients))
+  }
 
   const foodsRef = useMemo(
     () =>
@@ -103,6 +119,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setEditingIngredientIndex(null)
     setShowRecipeText(true)
     setRecipeText('')
+    setDishCategory('other')
+    setDishCategoryTouched(false)
   }
 
   const openEdit = (food: FoodItem) => {
@@ -119,6 +137,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setEditingIngredientIndex(null)
     setShowRecipeText(false)
     setRecipeText(recipeEditorText(food))
+    setDishCategory(resolveDishCategory(food))
+    setDishCategoryTouched(Boolean(food.category))
   }
 
   const backToList = () => {
@@ -132,6 +152,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setMacrosEdit(null)
     setEditingIngredientIndex(null)
     setShowRecipeText(true)
+    setDishCategory('other')
+    setDishCategoryTouched(false)
   }
 
   const runRecipeParse = async () => {
@@ -147,6 +169,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       setMacrosEdit(null)
       setEditingIngredientIndex(null)
       setShowRecipeText(false)
+      if (!dishCategoryTouched) {
+        setDishCategory(inferDishCategory(result.name, result.ingredients))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось разобрать рецепт')
     } finally {
@@ -257,7 +282,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setBusy(true)
     setError(null)
     try {
-      await onSave(recipeToFoodItem(draft, editId ?? undefined, recipeText, portionGrams))
+      await onSave(
+        recipeToFoodItem(draft, editId ?? undefined, recipeText, portionGrams, dishCategory),
+      )
       backToList()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка сохранения')
@@ -289,11 +316,23 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                 value={draft.name}
                 onChange={(e) => {
                   const name = e.target.value
+                  const ingredients = draft.ingredients
                   setDraft((prev) => (prev ? { ...prev, name } : prev))
+                  syncDishCategory(name, ingredients)
                 }}
                 placeholder="Название блюда"
               />
             </label>
+
+            <CategorySelect
+              kind="dish"
+              value={dishCategory}
+              onChange={(id) => {
+                setDishCategoryTouched(true)
+                setDishCategory(id as DishCategoryId)
+              }}
+              disabled={busy}
+            />
 
             <div className="meal-type-chips-inline" role="group" aria-label="Как считать блюдо">
               <button
@@ -617,13 +656,19 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
           />
         </label>
       )}
-      <ul className="food-list">
-        {dishes.length === 0 && <li className="muted">Пока пусто — нажмите +.</li>}
-        {dishes.length > 0 && visibleDishes.length === 0 && (
-          <li className="muted">Ничего не найдено по «{query.trim()}».</li>
-        )}
-        {visibleDishes.map((food) => (
-          <li key={food.id} className="food-row food-row-icons">
+      <CatalogSections
+        groups={dishGroups}
+        expandAll={Boolean(query.trim())}
+        getKey={(food) => food.id}
+        empty={
+          <li className="muted">
+            {dishes.length === 0
+              ? 'Пока пусто — нажмите +.'
+              : `Ничего не найдено по «${query.trim()}».`}
+          </li>
+        }
+        renderItem={(food) => (
+          <div className="food-row food-row-icons">
             <button
               type="button"
               className="food-row-body food-row-open"
@@ -655,9 +700,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                 <TrashIcon size={18} />
               </button>
             </div>
-          </li>
-        ))}
-      </ul>
+          </div>
+        )}
+      />
     </div>
   )
 }

@@ -53,11 +53,18 @@ export type FoodItem = {
   /** Марка / кафе / магазин / сеть (поиск по справочнику) */
   brand?: string
   /**
+   * Группа каталога: отдел магазина (ingredient) или тип блюда (dish).
+   * См. FoodCategoryId / DishCategoryId в foodCategory.ts.
+   */
+  category?: string
+  /**
    * Типичная порция в граммах. В справочнике КБЖУ хранятся на 100 г.
    * Для блюд с режимом «на порцию» = вес готового; подставляется в приём.
    * Иначе при добавлении — 100 г.
    */
   portionGrams?: number
+  /** Id блюда в репозитории menu (для синхронизации рецептов). */
+  menuId?: string
 }
 
 export type MealItemSource = 'library' | 'estimate'

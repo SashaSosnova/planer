@@ -1,15 +1,21 @@
 import { useMemo, useRef, useState } from 'react'
+import { CatalogSections } from '../components/CatalogSections'
+import { CategorySelect } from '../components/CategorySelect'
 import { PencilIcon } from '../components/PencilIcon'
 import { PlusIcon } from '../components/PlusIcon'
 import { TrashIcon } from '../components/TrashIcon'
 import { generateAliases } from '../lib/foodAliases'
 import {
+  groupByFoodCategory,
+  inferFoodCategory,
+  resolveFoodCategory,
+  type FoodCategoryId,
+} from '../lib/foodCategory'
+import {
   parsePortionGrams,
   per100FromPortionMacros,
   portionMacrosFromPer100,
 } from '../lib/foodPortion'
-
-type KbjuBasis = 'per100' | 'portion'
 import {
   isFoodPhotoParseConfigured,
   parseFoodsFromPhoto,
@@ -18,6 +24,8 @@ import {
 } from '../lib/parseFoodLabel'
 import { scalePer100g } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet } from '../types'
+
+type KbjuBasis = 'per100' | 'portion'
 
 function formatKbjuLine(m: MacroSet): string {
   return `${m.kcal} ${m.protein} ${m.fat} ${m.carbs}`
@@ -42,6 +50,7 @@ type ReviewRow = FoodLabelCandidate & {
   /** Editable portion grams as text */
   portion: string
   brand: string
+  category: FoodCategoryId
 }
 
 type Props = {
@@ -55,6 +64,7 @@ type FormFieldsProps = {
   name: string
   kbju: string
   brand: string
+  category: FoodCategoryId
   portion: string
   kbjuBasis: KbjuBasis
   busy: boolean
@@ -67,6 +77,7 @@ type FormFieldsProps = {
   onName: (v: string) => void
   onKbju: (v: string) => void
   onBrand: (v: string) => void
+  onCategory: (v: FoodCategoryId) => void
   onPortion: (v: string) => void
   onKbjuBasis: (v: KbjuBasis) => void
   onSubmit: () => void
@@ -85,6 +96,7 @@ function ProductFormCard({
   name,
   kbju,
   brand,
+  category,
   portion,
   kbjuBasis,
   busy,
@@ -97,6 +109,7 @@ function ProductFormCard({
   onName,
   onKbju,
   onBrand,
+  onCategory,
   onPortion,
   onKbjuBasis,
   onSubmit,
@@ -133,6 +146,12 @@ function ProductFormCard({
           aria-label="Название"
         />
       </label>
+      <CategorySelect
+        kind="food"
+        value={category}
+        onChange={(id) => onCategory(id as FoodCategoryId)}
+        disabled={busy || photoBusy}
+      />
       <label className="field">
         <input
           value={brand}
@@ -262,6 +281,8 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const [name, setName] = useState('')
   const [kbju, setKbju] = useState('')
   const [brand, setBrand] = useState('')
+  const [category, setCategory] = useState<FoodCategoryId>('other')
+  const [categoryTouched, setCategoryTouched] = useState(false)
   const [portion, setPortion] = useState('')
   const [kbjuBasis, setKbjuBasis] = useState<KbjuBasis>('per100')
   const [editId, setEditId] = useState<string | null>(null)
@@ -310,10 +331,29 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     )
   }, [products, query, brandFilter])
 
+  const productGroups = useMemo(
+    () => groupByFoodCategory(visibleProducts),
+    [visibleProducts],
+  )
+
+  const catalogExpandAll = Boolean(query.trim() || brandFilter)
+
+  const setNameAndMaybeCategory = (next: string) => {
+    setName(next)
+    if (!categoryTouched) setCategory(inferFoodCategory(next))
+  }
+
+  const setCategoryManual = (id: FoodCategoryId) => {
+    setCategoryTouched(true)
+    setCategory(id)
+  }
+
   const clearForm = () => {
     setName('')
     setKbju('')
     setBrand('')
+    setCategory('other')
+    setCategoryTouched(false)
     setPortion('')
     setKbjuBasis('per100')
     setError(null)
@@ -366,6 +406,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
       portion:
         item.portionGrams != null && item.portionGrams > 0 ? String(item.portionGrams) : '',
       brand: item.brand ?? brand.trim(),
+      category: inferFoodCategory(item.name),
     }))
 
   const startEdit = (food: FoodItem) => {
@@ -381,6 +422,8 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     setKbju(formatKbjuLine(food.per100g))
     setPortion(food.portionGrams != null && food.portionGrams > 0 ? String(food.portionGrams) : '')
     setBrand(food.brand ?? '')
+    setCategory(resolveFoodCategory(food))
+    setCategoryTouched(Boolean(food.category))
     setError(null)
     setInfo(null)
   }
@@ -413,6 +456,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         per100g,
         kind: 'ingredient',
         brand: brand.trim() || undefined,
+        category,
         portionGrams: portionGrams ?? undefined,
       })
       if (wasEdit) {
@@ -521,6 +565,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           per100g,
           kind: 'ingredient',
           brand: row.brand.trim() || undefined,
+          category: row.category,
           portionGrams: portionGrams ?? undefined,
         })
         saved += 1
@@ -547,6 +592,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     name,
     kbju,
     brand,
+    category,
     portion,
     kbjuBasis,
     busy,
@@ -554,9 +600,10 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     error,
     info: adding || editId ? info : null,
     photoStage: adding ? photoStage : null,
-    onName: setName,
+    onName: setNameAndMaybeCategory,
     onKbju: setKbju,
     onBrand: setBrand,
+    onCategory: setCategoryManual,
     onPortion: setPortion,
     onKbjuBasis: switchKbjuBasis,
     onSubmit: () => void submit(),
@@ -706,11 +753,28 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                       const next = e.target.value
                       setReviewRows(
                         (prev) =>
-                          prev?.map((r) => (r.key === row.key ? { ...r, name: next } : r)) ?? null,
+                          prev?.map((r) =>
+                            r.key === row.key
+                              ? { ...r, name: next, category: inferFoodCategory(next) }
+                              : r,
+                          ) ?? null,
                       )
                     }}
                     aria-label="Название"
                     placeholder="Название"
+                  />
+                  <CategorySelect
+                    kind="food"
+                    value={row.category}
+                    onChange={(id) => {
+                      setReviewRows(
+                        (prev) =>
+                          prev?.map((r) =>
+                            r.key === row.key ? { ...r, category: id as FoodCategoryId } : r,
+                          ) ?? null,
+                      )
+                    }}
+                    disabled={busy || photoBusy}
                   />
                   <input
                     value={row.brand}
@@ -830,8 +894,11 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
         </div>
       )}
 
-      <ul className="food-list">
-        {visibleProducts.length === 0 && (
+      <CatalogSections
+        groups={productGroups}
+        expandAll={catalogExpandAll}
+        getKey={(food) => food.id}
+        empty={
           <li className="muted">
             {products.length === 0
               ? 'Пока пусто — нажмите +.'
@@ -841,9 +908,9 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                   ? `Ничего не найдено по «${query.trim()}».`
                   : 'Пока пусто — нажмите +.'}
           </li>
-        )}
-        {visibleProducts.map((food) => (
-          <li key={food.id} className="food-list-item">
+        }
+        renderItem={(food) => (
+          <>
             <div className={`food-row food-row-icons${editId === food.id ? ' is-editing' : ''}`}>
               <div className="food-row-body">
                 <div className="food-row-title">
@@ -910,9 +977,9 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                 onCancel={closeEdit}
               />
             )}
-          </li>
-        ))}
-      </ul>
+          </>
+        )}
+      />
     </div>
   )
 }

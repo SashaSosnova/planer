@@ -104,11 +104,13 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
   if (!name || !id) return null
   // Legacy `place` → `brand` (one field for brand / cafe / store).
   const brand = String(f.brand ?? '').trim() || String(f.place ?? '').trim()
+  const category = String(f.category ?? '').trim()
   const portionRaw = Number(f.portionGrams)
   const portionGrams =
     Number.isFinite(portionRaw) && portionRaw > 0 && portionRaw <= 5000
       ? Math.round(portionRaw * 10) / 10
       : undefined
+  const menuId = String(f.menuId ?? '').trim()
   return {
     id,
     name,
@@ -118,7 +120,9 @@ export function sanitizeFood(raw: unknown): FoodItem | null {
     recipe: f.recipe as FoodItem['recipe'],
     updatedAt: Number(f.updatedAt) || Date.now(),
     ...(brand ? { brand } : {}),
+    ...(category ? { category } : {}),
     ...(portionGrams != null ? { portionGrams } : {}),
+    ...(menuId ? { menuId } : {}),
   }
 }
 

@@ -146,12 +146,15 @@ export function recipeToFoodItem(
   sourceText?: string,
   /** Typical serving when adding the dish to a meal (defaults to 100 g if omitted). */
   portionGrams?: number | null,
+  /** Dish group (meat / poultry / sides…); omitted → inferred later in UI. */
+  category?: string | null,
 ): Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string } {
   const text = sourceText?.trim()
   const portion =
     portionGrams != null && Number.isFinite(portionGrams) && portionGrams > 0
       ? Math.round(portionGrams * 10) / 10
       : undefined
+  const cat = category?.trim()
   return {
     id: existingId,
     name: recipe.name.trim(),
@@ -159,6 +162,7 @@ export function recipeToFoodItem(
     per100g: recipe.per100g,
     kind: 'dish',
     ...(portion != null ? { portionGrams: portion } : {}),
+    ...(cat ? { category: cat } : {}),
     recipe: {
       ingredients: recipe.ingredients,
       totalRawGrams: recipe.totalRawGrams,

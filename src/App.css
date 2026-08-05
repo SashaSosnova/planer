@@ -1774,6 +1774,15 @@
   grid-template-columns: repeat(2, 1fr);
 }
 
+.mode-tabs-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.mode-tabs-3 .mode-tab {
+  padding: 10px 6px;
+  font-size: 0.88rem;
+}
+
 .mode-tabs-4 {
   grid-template-columns: repeat(4, 1fr);
 }
@@ -1781,6 +1790,27 @@
 .mode-tabs-4 .mode-tab {
   padding: 10px 4px;
   font-size: 0.85rem;
+}
+
+.menu-sync-block + .menu-sync-block {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border, #e8e8e8);
+}
+
+.menu-sync-title {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.menu-sync-report {
+  margin: 12px 0 0;
+  padding-left: 1.1rem;
+}
+
+.menu-sync-report li + li {
+  margin-top: 4px;
 }
 
 .llm-plug {
@@ -3227,6 +3257,70 @@ button.food-row-open:focus-visible {
 }
 
 .catalog-search input {
+  width: 100%;
+}
+
+/* —— Collapsible catalog sections —— */
+.catalog-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.catalog-section {
+  margin: 0;
+}
+
+.catalog-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 2px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.catalog-section-head:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.catalog-section-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.catalog-section-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.catalog-section-chevron {
+  color: var(--muted);
+  font-size: 0.75rem;
+  width: 1em;
+  text-align: center;
+}
+
+.catalog-section-list {
+  margin: 4px 0 8px;
+}
+
+.catalog-category-field {
+  margin-bottom: 8px;
+}
+
+.catalog-category-field select {
   width: 100%;
 }
 

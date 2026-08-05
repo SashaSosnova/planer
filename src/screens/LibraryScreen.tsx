@@ -1,15 +1,21 @@
 import { useState } from 'react'
+import { MenuSyncPanel } from '../components/MenuSyncPanel'
 import type { AppData, FoodItem } from '../types'
+import type { MenuImportResult } from '../lib/menuSync'
 import { ProductsPanel } from './ProductsPanel'
 import { RecipesPanel } from './RecipesPanel'
 
-type LibraryTab = 'products' | 'recipes'
+type LibraryTab = 'products' | 'recipes' | 'sync'
 
 type Props = {
   data: AppData
   onBack: () => void
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
   onDeleteFood: (id: string) => Promise<void>
+  onImportMenuRecipes: (
+    raw: unknown,
+    onProgress?: (msg: string) => void,
+  ) => Promise<MenuImportResult>
   initialTab?: LibraryTab
   backLabel?: string
 }
@@ -19,6 +25,7 @@ export function LibraryScreen({
   onBack,
   onSaveFood,
   onDeleteFood,
+  onImportMenuRecipes,
   initialTab = 'products',
   backLabel = '← Назад',
 }: Props) {
@@ -33,7 +40,7 @@ export function LibraryScreen({
         <h1>Справочник</h1>
       </header>
 
-      <div className="mode-tabs mode-tabs-2">
+      <div className="mode-tabs mode-tabs-3">
         <button
           type="button"
           className={`mode-tab${tab === 'products' ? ' active' : ''}`}
@@ -48,6 +55,13 @@ export function LibraryScreen({
         >
           Рецепты
         </button>
+        <button
+          type="button"
+          className={`mode-tab${tab === 'sync' ? ' active' : ''}`}
+          onClick={() => setTab('sync')}
+        >
+          Menu
+        </button>
       </div>
 
       {tab === 'products' && (
@@ -56,6 +70,7 @@ export function LibraryScreen({
       {tab === 'recipes' && (
         <RecipesPanel data={data} onSave={onSaveFood} onDelete={onDeleteFood} />
       )}
+      {tab === 'sync' && <MenuSyncPanel data={data} onImportRecipes={onImportMenuRecipes} />}
     </section>
   )
 }

@@ -1,7 +1,11 @@
 import type { CareDayEntry, CareProduct, CareSlot, CareSkinTags, CareWeekday } from '../types'
 import { CARE_WEEKDAY_ORDER, careWeekdayFromDate } from './careRoutine'
 import { hasCareSkinTags } from './careSkin'
-import { CARE_SLOT_ORDER } from './seedCareProducts'
+import {
+  CARE_PRODUCT_OVERLAY_V2,
+  careCatalogVersionFor,
+  careSlotOrderFor,
+} from './seedCareProducts'
 
 export function parseIsoDate(iso: string): Date | null {
   const [y, m, d] = iso.split('-').map(Number)
@@ -46,16 +50,24 @@ export function productInSlot(product: CareProduct, slot: CareSlot): boolean {
   return product.slots.includes(slot)
 }
 
-/** Active products scheduled for a weekday + slot, sorted. */
+/** Active products scheduled for a weekday + slot, sorted.
+ * Pass `date` (ISO) so past days keep the pre-v3 names/order (Likoberon etc.).
+ */
 export function productsForDaySlot(
   products: CareProduct[],
   weekday: CareWeekday,
   slot: CareSlot,
+  date?: string,
 ): CareProduct[] {
-  const order = CARE_SLOT_ORDER[slot]
+  const version = date ? careCatalogVersionFor(date, slot) : 3
+  const order = careSlotOrderFor(version)[slot]
+  const overlay = version === 2 ? CARE_PRODUCT_OVERLAY_V2 : null
   return products
     .filter((p) => !p.archived && productInSlot(p, slot) && productScheduledOn(p, weekday))
-    .slice()
+    .map((p) => {
+      const o = overlay?.[p.id]
+      return o ? { ...p, name: o.name, how: o.how } : p
+    })
     .sort((a, b) => {
       const ia = order.indexOf(a.id)
       const ib = order.indexOf(b.id)

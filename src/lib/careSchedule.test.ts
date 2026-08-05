@@ -23,26 +23,36 @@ describe('careSchedule', () => {
 
   it('schedules caramel only Mon–Fri evening; BHA only Saturday; foam every evening', () => {
     const products = buildSeedCareProducts(1)
-    const monEve = productsForDaySlot(products, 'mon', 'evening').map((p) => p.id)
-    const satEve = productsForDaySlot(products, 'sat', 'evening').map((p) => p.id)
-    const morning = productsForDaySlot(products, 'mon', 'morning').map((p) => p.id)
+    // Current catalog (no date) / from v3 evening
+    const monEve = productsForDaySlot(products, 'mon', 'evening', '2026-08-05').map((p) => p.id)
+    const satEve = productsForDaySlot(products, 'sat', 'evening', '2026-08-08').map((p) => p.id)
+    const morning = productsForDaySlot(products, 'mon', 'morning', '2026-08-06').map((p) => p.id)
     expect(monEve).toEqual([
       'caramel',
       'dermo-cleanser',
-      'dual-toner',
       'thermal',
+      'dual-toner',
       'ha',
       'nmf',
     ])
     expect(satEve).toEqual([
       'dermo-cleanser',
-      'dual-toner',
       'bha-pads',
       'thermal',
+      'dual-toner',
       'ha',
       'nmf',
     ])
     expect(satEve).not.toContain('caramel')
+    const sunEve = productsForDaySlot(products, 'sun', 'evening', '2026-08-09').map((p) => p.id)
+    expect(sunEve).toEqual([
+      'dermo-cleanser',
+      'revital',
+      'thermal',
+      'dual-toner',
+      'ha',
+      'nmf',
+    ])
     expect(morning).toEqual([
       'water',
       'thermal',
@@ -51,8 +61,30 @@ describe('careSchedule', () => {
       'nmf',
       'spf',
     ])
+    expect(
+      productsForDaySlot(products, 'mon', 'morning', '2026-08-06').find((p) => p.id === 'spf')
+        ?.name,
+    ).toMatch(/Anthelios/i)
     expect(products.map((p) => p.id)).not.toContain('squalane')
     expect(products.map((p) => p.id)).not.toContain('cerave')
+  })
+
+  it('keeps pre-v3 names and evening order for past days', () => {
+    const products = buildSeedCareProducts(1)
+    const pastEve = productsForDaySlot(products, 'mon', 'evening', '2026-08-04')
+    expect(pastEve.map((p) => p.id)).toEqual([
+      'caramel',
+      'dermo-cleanser',
+      'dual-toner',
+      'thermal',
+      'ha',
+      'nmf',
+    ])
+    const todayMorning = productsForDaySlot(products, 'wed', 'morning', '2026-08-05')
+    expect(todayMorning.find((p) => p.id === 'spf')?.name).toMatch(/Likoberon/i)
+    const tonight = productsForDaySlot(products, 'wed', 'evening', '2026-08-05')
+    expect(tonight.map((p) => p.id)[2]).toBe('thermal')
+    expect(tonight.map((p) => p.id)[3]).toBe('dual-toner')
   })
 
   it('marks product checked per slot', () => {

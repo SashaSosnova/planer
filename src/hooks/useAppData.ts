@@ -687,7 +687,7 @@ export function useAppData() {
     })()
   }, [ready, data.measurements, persistLocal, uid, useCloud])
 
-  // Seed / refresh canonical care products (v2: water + LRP foam, no CeraVe/Squalane).
+  // Seed / refresh canonical care products (v3: Anthelios SPF, evening thermal→toner, BHA pause).
   useEffect(() => {
     if (!ready) return
     if (careProductsSeedStarted.current) return

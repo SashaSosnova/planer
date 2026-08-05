@@ -73,16 +73,17 @@ export function careWeekdayFromDate(date: Date): CareWeekday {
 }
 
 export const CARE_RULES: string[] = [
-  'Caramel — только Пн–Пт вечером: смывка SPF на сухое лицо.',
-  'BHA-пэд — только по субботам и строго на Т-зону (лоб, нос, подбородок); щёки не трогать.',
+  'Caramel — только Пн–Пт вечером: смывка SPF на сухое лицо; массаж мягкий, без сильного давления на щёки. При усилении красноты — сократить до 3×/нед.',
+  'BHA-пэд — только по субботам и строго на Т-зону (лоб, нос, подбородок); щёки не трогать. После BHA — пауза 10–15 минут до следующих средств.',
   'Caramel и BHA никогда не встречаются: в субботу и воскресенье Caramel отдыхает.',
-  'Воскресенье — день маски Revital; без Caramel и без BHA.',
+  'Воскресенье — день маски Revital: после очищения сразу маска (без тонера до маски); без Caramel и без BHA. Т-зону покрывать тоньше; при красноте — 10 минут.',
   'Утром — умывание прохладной водой руками (без геля), затем термалка → тонер → сыворотка → крем → SPF.',
   'Вечером второе очищение — пенка La Roche-Posay Toleriane Dermo-Cleanser (в выходные она же основное).',
   'Вода для умывания — прохладная или чуть тёплая (не горячая). Caramel смывать тёплой.',
   'Никогда не тереть лицо полотенцем — только промокательные движения.',
-  'HA наносить на влажную кожу после термалки. NMF вечером — плотный слой на всё лицо.',
-  'SPF наносить похлопывающими движениями (не растирать), дать высохнуть 5 минут.',
+  'Вечером после очищения: термалка → тонер → HA на влажную кожу → NMF плотным слоем на всё лицо. Утром HA не используется.',
+  'SPF (Anthelios UVMune 400 Invisible Fluid) — похлопывая, не растирать; дать высохнуть 5 минут.',
+  'При сильном ухудшении: база на 2 дня (без BHA/Caramel), только NMF + термалка.',
 ]
 
 export const CARE_PRODUCT_GROUPS: CareProductGroup[] = [
@@ -101,13 +102,13 @@ export const CARE_PRODUCT_GROUPS: CareProductGroup[] = [
         id: 'caramel',
         name: 'Mesopharm CLEAR:UP CARAMEL (гель-масло)',
         when: 'Пн–Пт вечером (смывка SPF)',
-        how: 'На сухое лицо — массаж 1 минуту, смыть тёплой водой, эмульгируя.',
+        how: 'На сухое лицо — мягкий массаж до 1 минуты (без сильного давления на щёки), смыть тёплой водой, эмульгируя. При усилении красноты — сократить до 3×/нед.',
       },
       {
         id: 'dermo-cleanser',
         name: 'La Roche-Posay Toleriane Dermo-Cleanser',
         when: 'Каждый вечер',
-        how: 'Вспенить в руках, нанести на влажное лицо, помассировать 30 сек, смыть прохладной водой.',
+        how: 'Вспенить в руках, нанести на влажное лицо, помассировать 30 сек без трения, смыть прохладной или чуть тёплой водой.',
       },
     ],
   },
@@ -119,20 +120,20 @@ export const CARE_PRODUCT_GROUPS: CareProductGroup[] = [
       {
         id: 'thermal',
         name: 'Термальная вода La Roche-Posay',
-        when: 'Утро после умывания + вечер перед HA',
-        how: 'Распылить, подождать 10 секунд, промокнуть салфеткой.',
+        when: 'Утро после умывания + вечер перед тонером',
+        how: 'Распылить, подождать до 10 секунд, промокнуть салфеткой — кожа чуть влажная.',
       },
       {
         id: 'dual-toner',
         name: 'Celimax Dual Barrier Creamy Toner',
         when: 'Каждое утро + вечер',
-        how: 'Похлопывающими движениями на всё лицо.',
+        how: 'На чуть влажную кожу после термалки — похлопывающими движениями на всё лицо.',
       },
       {
         id: 'bha-pads',
         name: 'Celimax Cica BHA Blemish Toner Pad',
         when: 'Только суббота',
-        how: 'Протереть только лоб, нос, подбородок. Щёки не трогать.',
+        how: 'Протереть только лоб, нос, подбородок. Щёки не трогать. Пауза 10–15 минут до следующих средств.',
       },
     ],
   },
@@ -151,7 +152,7 @@ export const CARE_PRODUCT_GROUPS: CareProductGroup[] = [
         id: 'ha',
         name: 'The Ordinary Hyaluronic Acid 2% + B5',
         when: 'Каждый вечер',
-        how: '2–3 капли на влажную кожу всего лица после термалки.',
+        how: '2–3 капли на чуть влажную кожу после термалки и тонера.',
       },
     ],
   },
@@ -164,13 +165,13 @@ export const CARE_PRODUCT_GROUPS: CareProductGroup[] = [
         id: 'nmf',
         name: 'The Ordinary Natural Moisturizing Factors + HA',
         when: 'Утро + вечер — всё лицо',
-        how: 'Утром: тонкий слой, 3–5 мин перед SPF. Вечером: плотный слой на всё лицо.',
+        how: 'Утром: тонкий слой, 3–5 мин перед SPF. Вечером: плотный слой на всё лицо после HA.',
       },
       {
         id: 'spf',
-        name: 'Likoberon солнцезащитный крем SPF 50',
+        name: 'La Roche-Posay Anthelios UVMune 400 Invisible Fluid SPF50+',
         when: 'Каждое утро (финиш)',
-        how: 'Похлопывающими движениями на всё лицо. Не растирать. Высохнуть 5 минут.',
+        how: '½–¾ ч. л. (или 2 нажатия) после NMF. Похлопать, не растирать. Высохнуть 5 минут.',
       },
     ],
   },
@@ -183,44 +184,60 @@ export const CARE_PRODUCT_GROUPS: CareProductGroup[] = [
         id: 'revital',
         name: 'Mesopharm Revital Intense Mask',
         when: 'Воскресенье',
-        how: 'На всё лицо 15 минут → смыть тёплой водой, промокнуть. Далее — термалка, HA, крем.',
+        how: 'После очищения, до тонера. Щёки — обычный слой, Т-зона — тоньше. 15 мин (при красноте — 10). Смыть → термалка → тонер → HA → крем.',
       },
     ],
   },
 ]
 
 export const CARE_MORNING_STEPS: CareCheckStep[] = [
-  { id: 'm1', text: 'Умыться прохладной водой (руками, без геля)' },
-  { id: 'm2', text: 'Термальная вода → промокнуть салфеткой' },
-  { id: 'm3', text: 'Celimax Dual Barrier Toner — похлопать' },
-  { id: 'm4', text: 'TO Barrier Support Serum — 2–3 капли' },
-  { id: 'm5', text: 'TO NMF + HA — тонкий слой на всё лицо' },
-  { id: 'm6', text: 'Likoberon SPF 50 — похлопывая (высохнуть 5 мин)' },
+  { id: 'm1', text: 'Умыться прохладной водой руками, без геля и без трения' },
+  { id: 'm2', text: 'Термальная вода LRP — распылить, до 10 сек, промокнуть (кожа чуть влажная)' },
+  { id: 'm3', text: 'Celimax Dual Barrier Toner — похлопать на всё лицо' },
+  { id: 'm4', text: 'TO Barrier Support Serum — 2–3 капли на всё лицо' },
+  { id: 'm5', text: 'TO NMF + HA — тонкий слой на всё лицо, 3–5 мин' },
+  {
+    id: 'm6',
+    text: 'LRP Anthelios UVMune 400 Invisible Fluid SPF50+ — похлопать, высохнуть 5 мин',
+  },
 ]
 
 /** Пн–Пт: Caramel + пенка, без BHA. */
 const eveningCaramel: CareCheckStep[] = [
-  { id: 'e-caramel', text: 'Caramel — смывка SPF на сухое лицо, массаж 1 мин, смыть' },
+  {
+    id: 'e-caramel',
+    text: 'Mesopharm Caramel — на сухое лицо, мягкий массаж до 1 мин, смыть тёплой водой эмульгируя',
+  },
   { id: 'e-dermo', text: 'LRP Toleriane Dermo-Cleanser — вспенить, 30 сек, смыть' },
-  { id: 'e-toner', text: 'Celimax Toner — похлопать на всё лицо' },
-  { id: 'e-ha', text: 'Термалка → TO HA + B5 на влажную кожу' },
-  { id: 'e-nmf', text: 'TO NMF — плотный слой на всё лицо' },
+  { id: 'e-thermal', text: 'Термальная вода LRP — распылить, промокнуть (кожа чуть влажная)' },
+  { id: 'e-toner', text: 'Celimax Dual Barrier Toner — похлопать на всё лицо' },
+  { id: 'e-ha', text: 'TO HA 2% + B5 — 2–3 капли на влажную кожу' },
+  { id: 'e-nmf', text: 'TO NMF + HA — плотный слой на всё лицо' },
 ]
 
 const eveningSat: CareCheckStep[] = [
-  { id: 'e-dermo', text: 'LRP Toleriane Dermo-Cleanser — без Caramel' },
-  { id: 'e-toner', text: 'Celimax Toner — на всё лицо' },
-  { id: 'e-bha', text: 'BHA-пэд — только Т-зона (лоб, нос, подбородок)' },
-  { id: 'e-ha', text: 'Термалка → TO HA + B5 на влажную кожу' },
-  { id: 'e-nmf', text: 'TO NMF — плотный слой на всё лицо' },
+  { id: 'e-dermo', text: 'LRP Toleriane Dermo-Cleanser — основное очищение, без Caramel' },
+  {
+    id: 'e-bha',
+    text: 'Celimax Cica BHA Pad — только Т-зона (лоб, нос, подбородок); щёки не трогать',
+  },
+  { id: 'e-bha-pause', text: 'Пауза 10–15 минут' },
+  { id: 'e-thermal', text: 'Термальная вода LRP — распылить, промокнуть' },
+  { id: 'e-toner', text: 'Celimax Dual Barrier Toner — похлопать на всё лицо' },
+  { id: 'e-ha', text: 'TO HA 2% + B5 — 2–3 капли на влажную кожу' },
+  { id: 'e-nmf', text: 'TO NMF + HA — плотный слой на всё лицо' },
 ]
 
 const eveningSun: CareCheckStep[] = [
   { id: 'e-dermo', text: 'LRP Toleriane Dermo-Cleanser — без Caramel' },
-  { id: 'e-toner', text: 'Celimax Toner — на всё лицо' },
-  { id: 'e-mask', text: 'Маска Revital — на всё лицо 15 мин → смыть' },
-  { id: 'e-ha', text: 'Термалка → TO HA + B5 на влажную кожу' },
-  { id: 'e-nmf', text: 'TO NMF — плотный слой на всё лицо' },
+  {
+    id: 'e-mask',
+    text: 'Mesopharm Revital Intense Mask — 15 мин (Т-зона тоньше; при красноте 10 мин) → смыть тёплой водой, промокнуть',
+  },
+  { id: 'e-thermal', text: 'Термальная вода LRP — распылить, промокнуть' },
+  { id: 'e-toner', text: 'Celimax Dual Barrier Toner — похлопать на всё лицо' },
+  { id: 'e-ha', text: 'TO HA 2% + B5 — 2–3 капли на влажную кожу' },
+  { id: 'e-nmf', text: 'TO NMF + HA — плотный слой на всё лицо' },
 ]
 
 export const CARE_EVENING_BY_DAY: Record<CareWeekday, CareDayEvening> = {

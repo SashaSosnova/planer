@@ -33,14 +33,31 @@ describe('careRoutine', () => {
     expect(CARE_DAY_FLAGS.mon.bha).toBe(false)
   })
 
-  it('Monday evening has no BHA step', () => {
+  it('Monday evening has no BHA step; thermal before toner', () => {
     const ids = eveningForWeekday('mon').steps.map((s) => s.id)
     expect(ids).not.toContain('e-bha')
     expect(ids).toContain('e-caramel')
+    expect(ids.indexOf('e-thermal')).toBeLessThan(ids.indexOf('e-toner'))
   })
 
-  it('BHA product is Saturday-only', () => {
-    const bha = CARE_PRODUCT_GROUPS.flatMap((g) => g.products).find((p) => p.id === 'bha-pads')
+  it('Saturday: BHA then pause before thermal/toner', () => {
+    const ids = eveningForWeekday('sat').steps.map((s) => s.id)
+    expect(ids.indexOf('e-bha')).toBeLessThan(ids.indexOf('e-bha-pause'))
+    expect(ids.indexOf('e-bha-pause')).toBeLessThan(ids.indexOf('e-thermal'))
+    expect(ids.indexOf('e-thermal')).toBeLessThan(ids.indexOf('e-toner'))
+  })
+
+  it('Sunday: mask before thermal/toner', () => {
+    const ids = eveningForWeekday('sun').steps.map((s) => s.id)
+    expect(ids.indexOf('e-mask')).toBeLessThan(ids.indexOf('e-thermal'))
+    expect(ids.indexOf('e-thermal')).toBeLessThan(ids.indexOf('e-toner'))
+  })
+
+  it('BHA product is Saturday-only; SPF is Anthelios', () => {
+    const products = CARE_PRODUCT_GROUPS.flatMap((g) => g.products)
+    const bha = products.find((p) => p.id === 'bha-pads')
     expect(bha?.when.toLowerCase()).toContain('суббот')
+    const spf = products.find((p) => p.id === 'spf')
+    expect(spf?.name).toMatch(/Anthelios/i)
   })
 })

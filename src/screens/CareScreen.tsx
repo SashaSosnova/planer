@@ -359,12 +359,12 @@ export function CareScreen({
   const dayEntry = careDays.find((d) => d.date === viewDate)
 
   const morningProducts = useMemo(
-    () => productsForDaySlot(careProducts, weekday, 'morning'),
-    [careProducts, weekday],
+    () => productsForDaySlot(careProducts, weekday, 'morning', viewDate),
+    [careProducts, weekday, viewDate],
   )
   const eveningProducts = useMemo(
-    () => productsForDaySlot(careProducts, weekday, 'evening'),
-    [careProducts, weekday],
+    () => productsForDaySlot(careProducts, weekday, 'evening', viewDate),
+    [careProducts, weekday, viewDate],
   )
 
   const activeProducts = useMemo(() => activeCareProducts(careProducts), [careProducts])

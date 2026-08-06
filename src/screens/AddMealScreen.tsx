@@ -51,6 +51,8 @@ type Props = {
   /** Prefill parse field (e.g. from meal advice composition). */
   prefillText?: string
   initialMealType?: MealType
+  /** Prefill meal date (e.g. when adding from a past day). */
+  initialDate?: string
   onBack: () => void
   onSaveMeal: (input: {
     date: string
@@ -78,6 +80,7 @@ export function AddMealScreen({
   data,
   prefillText,
   initialMealType,
+  initialDate,
   onBack,
   onSaveMeal,
   onSaveFood,
@@ -87,7 +90,11 @@ export function AddMealScreen({
   registerBackHandler,
 }: Props) {
   const [view, setView] = useState<View>('meal')
-  const [date, setDate] = useState(todayIso())
+  const [date, setDate] = useState(() => {
+    const today = todayIso()
+    if (!initialDate) return today
+    return initialDate > today ? today : initialDate
+  })
   const [eatingOut, setEatingOut] = useState(false)
   const [mealType, setMealType] = useState<MealType>(initialMealType ?? 'breakfast')
   const [mealTypeTouched, setMealTypeTouched] = useState(Boolean(initialMealType))

@@ -3,13 +3,12 @@ import { CalorieRing } from '../components/CalorieRing'
 import { DayScale } from '../components/DayScale'
 import { PromptDialog } from '../components/PromptDialog'
 import { cyclePhaseLabel, getCycleInfo } from '../lib/cycle'
-import { formatRuDate, todayIso } from '../lib/date'
+import { addDaysIso, formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { calcSweetBudgetKcal } from '../lib/sweets'
-import { AppsGridIcon } from '../components/AppsGridIcon'
 import {
   CareMenuIcon,
   DiaryMenuIcon,
@@ -33,7 +32,7 @@ type Props = {
   profileReady: boolean
   cycleLengthDays: number
   periodLengthDays: number
-  onAddMeal: (opts?: { text?: string; mealType?: MealType }) => void
+  onAddMeal: (opts?: { text?: string; mealType?: MealType; date?: string }) => void
   onOpenMeal: (mealId: string) => void
   onOpenProfile: () => void
   onOpenCycle: () => void
@@ -44,6 +43,9 @@ type Props = {
   onOpenMeasures: () => void
   onOpenLibrary: () => void
   onOpenCare: () => void
+  /** Jump to this date when set (e.g. from History); clear via onFocusDateConsumed. */
+  focusDate?: string | null
+  onFocusDateConsumed?: () => void
   /** Register nested back handler; return unregister. */
   registerBackHandler?: (fn: () => boolean) => () => void
   /** When false (overlay open), Today does not own the back stack. */
@@ -77,12 +79,16 @@ export function TodayScreen({
   onOpenMeasures,
   onOpenLibrary,
   onOpenCare,
+  focusDate,
+  onFocusDateConsumed,
   registerBackHandler,
   backEnabled = true,
   onSaveWeight,
   onSaveSteps,
 }: Props) {
-  const date = todayIso()
+  const today = todayIso()
+  const [date, setDate] = useState(today)
+  const isToday = date === today
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
   const medDay = (data.medDays ?? []).find((m) => m.date === date)
@@ -90,12 +96,17 @@ export function TodayScreen({
   const [prompt, setPrompt] = useState<PromptKind>(null)
   const [busy, setBusy] = useState(false)
   const [promptError, setPromptError] = useState<string | null>(null)
-  const [moreOpen, setMoreOpen] = useState(false)
-  const moreOpenRef = useRef(moreOpen)
-  moreOpenRef.current = moreOpen
   const promptRef = useRef(prompt)
   promptRef.current = prompt
-  const moreRef = useRef<HTMLDivElement | null>(null)
+  const dateRef = useRef(date)
+  dateRef.current = date
+
+  useEffect(() => {
+    if (!focusDate) return
+    const next = focusDate > todayIso() ? todayIso() : focusDate
+    setDate(next)
+    onFocusDateConsumed?.()
+  }, [focusDate, onFocusDateConsumed])
 
   useEffect(() => {
     if (!registerBackHandler || !backEnabled) return
@@ -105,29 +116,23 @@ export function TodayScreen({
         setPromptError(null)
         return true
       }
-      if (!moreOpenRef.current) return false
-      setMoreOpen(false)
-      return true
+      if (dateRef.current < todayIso()) {
+        setDate(todayIso())
+        return true
+      }
+      return false
     })
   }, [registerBackHandler, backEnabled])
 
-  useEffect(() => {
-    if (!moreOpen) return
-    const onPointerDown = (e: PointerEvent) => {
-      if (moreRef.current && !moreRef.current.contains(e.target as Node)) {
-        setMoreOpen(false)
-      }
-    }
-    document.addEventListener('pointerdown', onPointerDown)
-    return () => document.removeEventListener('pointerdown', onPointerDown)
-  }, [moreOpen])
-
-  const runMore = (action: () => void) => {
-    setMoreOpen(false)
-    action()
+  const shiftDay = (delta: number) => {
+    setDate((d) => {
+      const next = addDaysIso(d, delta)
+      const max = todayIso()
+      return next > max ? max : next
+    })
   }
 
-  const today = useMemo(() => statsForDate(data, date), [data, date])
+  const dayStats = useMemo(() => statsForDate(data, date), [data, date])
   const sweetBudget = useMemo(
     () => calcSweetBudgetKcal(dailyKcalGoal),
     [dailyKcalGoal],
@@ -219,11 +224,7 @@ export function TodayScreen({
   return (
     <section className="screen today-screen">
       <header className="screen-header today-header">
-        <div>
-          <p className="eyebrow">Сегодня</p>
-          <h1>{formatRuDate(date)}</h1>
-        </div>
-        <div className="btn-row tight nowrap">
+        <div className="today-menu-row" role="toolbar" aria-label="Меню">
           <button
             type="button"
             className="icon-btn"
@@ -233,61 +234,42 @@ export function TodayScreen({
           >
             <DiaryMenuIcon />
           </button>
-          <div className="more-anchor" ref={moreRef}>
-            <button
-              type="button"
-              className={`icon-btn${moreOpen ? ' active' : ''}`}
-              onClick={() => setMoreOpen((v) => !v)}
-              aria-haspopup="menu"
-              aria-expanded={moreOpen}
-              aria-label="Ещё"
-              title="Ещё"
-            >
-              <AppsGridIcon size={24} />
-            </button>
-            {moreOpen && (
-              <div className="more-popover" role="menu" aria-label="Ещё">
-                <div className="more-grid">
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
-                    onClick={() => runMore(onOpenHistory)}
-                  >
-                    <HistoryMenuIcon />
-                    <span>История</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
-                    onClick={() => runMore(onOpenCare)}
-                  >
-                    <CareMenuIcon />
-                    <span>Уход</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
-                    onClick={() => runMore(onOpenMeasures)}
-                  >
-                    <MeasuresMenuIcon />
-                    <span>Обмеры</span>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className="more-grid-item"
-                    onClick={() => runMore(onOpenLibrary)}
-                  >
-                    <LibraryMenuIcon />
-                    <span>Справочник</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onOpenHistory}
+            aria-label="История"
+            title="История"
+          >
+            <HistoryMenuIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onOpenCare}
+            aria-label="Уход"
+            title="Уход"
+          >
+            <CareMenuIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onOpenMeasures}
+            aria-label="Обмеры"
+            title="Обмеры"
+          >
+            <MeasuresMenuIcon />
+          </button>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onOpenLibrary}
+            aria-label="Справочник"
+            title="Справочник"
+          >
+            <LibraryMenuIcon />
+          </button>
           <button
             type="button"
             className={`icon-btn profile-btn${profileReady ? '' : ' warn'}`}
@@ -311,6 +293,26 @@ export function TodayScreen({
                 strokeLinecap="round"
               />
             </svg>
+          </button>
+        </div>
+        <div className="today-date-nav">
+          <button
+            type="button"
+            className="link-btn today-date-shift"
+            onClick={() => shiftDay(-1)}
+            aria-label="Предыдущий день"
+          >
+            ←
+          </button>
+          <h1>{formatRuDate(date)}</h1>
+          <button
+            type="button"
+            className="link-btn today-date-shift"
+            onClick={() => shiftDay(1)}
+            aria-label="Следующий день"
+            disabled={isToday}
+          >
+            →
           </button>
         </div>
       </header>
@@ -351,7 +353,7 @@ export function TodayScreen({
 
       <div className="today-hero">
         <CalorieRing
-          eaten={today.totals.kcal}
+          eaten={dayStats.totals.kcal}
           goal={dailyKcalGoal}
           maintainGoal={maintainKcalGoal}
           size="md"
@@ -375,7 +377,7 @@ export function TodayScreen({
           {proteinGoal != null && (
             <DayScale
               label="Белки"
-              current={today.totals.protein}
+              current={dayStats.totals.protein}
               goal={proteinGoal}
               unit="г"
               mode="toward"
@@ -383,14 +385,14 @@ export function TodayScreen({
           )}
           <DayScale
             label="Овощи"
-            current={today.vegGrams}
+            current={dayStats.vegGrams}
             goal={VEG_GOAL_G}
             unit="г"
             mode="toward"
           />
           <DayScale
             label="Сладкое"
-            current={today.sweetKcal}
+            current={dayStats.sweetKcal}
             goal={sweetBudget}
             unit="ккал"
             mode="budget"
@@ -399,9 +401,9 @@ export function TodayScreen({
       </div>
 
       <section className="meal-section" aria-label="Приёмы пищи">
-        {today.meals.length > 0 ? (
+        {dayStats.meals.length > 0 ? (
           <ul className="meal-list">
-            {today.meals.map((meal) => {
+            {dayStats.meals.map((meal) => {
               const mgDose = mgDoseKeyForMealType(meal.mealType)
               const hasMg = mgDose ? Boolean(medTakenAt(medDay, mgDose)) : false
               const hasFe =
@@ -445,7 +447,7 @@ export function TodayScreen({
         <button
           type="button"
           className="meal-fab"
-          onClick={() => onAddMeal()}
+          onClick={() => onAddMeal({ date })}
           aria-label="Добавить приём"
           title="Добавить приём"
         >
@@ -455,7 +457,7 @@ export function TodayScreen({
 
       {prompt === 'weight' && (
         <PromptDialog
-          title="Вес за сегодня"
+          title={isToday ? 'Вес за сегодня' : `Вес · ${formatRuDate(date)}`}
           label="Сколько кг?"
           placeholder="например 63.8"
           inputMode="decimal"
@@ -468,7 +470,7 @@ export function TodayScreen({
 
       {prompt === 'steps' && (
         <PromptDialog
-          title="Шаги за сегодня"
+          title={isToday ? 'Шаги за сегодня' : `Шаги · ${formatRuDate(date)}`}
           label="Сколько шагов?"
           placeholder="например 7000"
           inputMode="numeric"

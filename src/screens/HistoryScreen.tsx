@@ -14,6 +14,9 @@ type Props = {
   dailyKcalGoal: number
   maintainKcalGoal: number
   onBack: () => void
+  onOpenDay: (date: string) => void
+  onOpenMeal: (mealId: string) => void
+  onAddMeal: (date: string) => void
 }
 
 export function HistoryScreen({
@@ -21,6 +24,9 @@ export function HistoryScreen({
   dailyKcalGoal,
   maintainKcalGoal,
   onBack,
+  onOpenDay,
+  onOpenMeal,
+  onAddMeal,
 }: Props) {
   const { recentDays, historyWeeks } = useMemo(
     () => buildTodayTimeline(data, dailyKcalGoal, todayIso()),
@@ -56,6 +62,7 @@ export function HistoryScreen({
               day={day}
               dailyKcalGoal={dailyKcalGoal}
               maintainKcalGoal={maintainKcalGoal}
+              onOpen={() => onOpenDay(day.date)}
             />
           ))}
           {historyWeeks.map((week) => (
@@ -63,6 +70,9 @@ export function HistoryScreen({
               key={week.weekStart}
               week={week}
               maintainKcalGoal={maintainKcalGoal}
+              onOpenDay={onOpenDay}
+              onOpenMeal={onOpenMeal}
+              onAddMeal={onAddMeal}
             />
           ))}
         </div>

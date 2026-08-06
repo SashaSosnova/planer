@@ -32,9 +32,46 @@
 
 .today-header {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.today-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 100%;
+}
+
+.today-date-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.today-date-nav h1 {
+  margin: 0;
+  min-width: 0;
+  flex: 1;
+  text-align: center;
+  font-size: clamp(1.15rem, 4.5vw, 1.55rem);
+  line-height: 1.25;
+}
+
+.today-date-shift {
+  flex-shrink: 0;
+  min-width: 40px;
+  padding: 6px 8px;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.today-date-shift:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .text-btn {
@@ -720,6 +757,19 @@
   padding: 12px;
 }
 
+.day-summary-card-btn {
+  width: 100%;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.day-summary-card-btn:active {
+  background: var(--accent-soft);
+}
+
 .day-summary-title {
   margin: 0;
   font-size: 1.05rem;
@@ -817,6 +867,12 @@
   font-weight: 600;
 }
 
+.week-day-date-btn {
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
 .week-day-meals {
   list-style: none;
   margin: 0;
@@ -827,12 +883,38 @@
 }
 
 .week-day-meals > li {
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.week-day-meals > li:not(:has(> .week-day-meal-btn)) {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 6px 8px;
   align-items: baseline;
+}
+
+.week-day-meal-btn {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px 8px;
+  align-items: baseline;
+  width: 100%;
+  margin: 0;
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  font: inherit;
   font-size: 0.9rem;
   line-height: 1.35;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.week-day-meal-btn:active {
+  background: var(--accent-soft);
 }
 
 .week-day-meal-type {
@@ -844,6 +926,12 @@
 .week-day-meal-body {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.week-day-add {
+  align-self: flex-start;
+  padding: 0;
+  font-size: 0.88rem;
 }
 
 @media (max-width: 420px) {

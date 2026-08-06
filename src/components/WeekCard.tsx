@@ -12,9 +12,18 @@ import { CalorieRing } from './CalorieRing'
 type Props = {
   week: WeekStats
   maintainKcalGoal: number
+  onOpenDay?: (date: string) => void
+  onOpenMeal?: (mealId: string) => void
+  onAddMeal?: (date: string) => void
 }
 
-export function WeekCard({ week, maintainKcalGoal }: Props) {
+export function WeekCard({
+  week,
+  maintainKcalGoal,
+  onOpenDay,
+  onOpenMeal,
+  onAddMeal,
+}: Props) {
   const cached = getCachedWeekSummary(week.weekStart)
   const [note, setNote] = useState(() => cached ?? localWeekNutritionNote(week))
   const [loadingNote, setLoadingNote] = useState(() => !cached)
@@ -112,7 +121,17 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
               {daysWithData.map((day) => (
                 <li key={day.date} className="week-day">
                   <div className="week-day-head">
-                    <span className="week-day-date">{formatRuDate(day.date)}</span>
+                    {onOpenDay ? (
+                      <button
+                        type="button"
+                        className="link-btn week-day-date-btn"
+                        onClick={() => onOpenDay(day.date)}
+                      >
+                        {formatRuDate(day.date)}
+                      </button>
+                    ) : (
+                      <span className="week-day-date">{formatRuDate(day.date)}</span>
+                    )}
                     <span className="muted small">
                       {day.meals.length > 0
                         ? `${Math.round(day.totals.kcal)} ккал`
@@ -123,18 +142,47 @@ export function WeekCard({ week, maintainKcalGoal }: Props) {
                     <ul className="week-day-meals">
                       {day.meals.map((meal) => (
                         <li key={meal.id}>
-                          <span className="week-day-meal-type">
-                            {MEAL_TYPE_LABELS[meal.mealType]}
-                          </span>
-                          <span className="week-day-meal-body">
-                            {mealPreviewText(meal) || '—'}
-                          </span>
-                          <span className="muted small">
-                            {Math.round(meal.totals.kcal)} ккал
-                          </span>
+                          {onOpenMeal ? (
+                            <button
+                              type="button"
+                              className="week-day-meal-btn"
+                              onClick={() => onOpenMeal(meal.id)}
+                            >
+                              <span className="week-day-meal-type">
+                                {MEAL_TYPE_LABELS[meal.mealType]}
+                              </span>
+                              <span className="week-day-meal-body">
+                                {mealPreviewText(meal) || '—'}
+                              </span>
+                              <span className="muted small">
+                                {Math.round(meal.totals.kcal)} ккал
+                              </span>
+                            </button>
+                          ) : (
+                            <>
+                              <span className="week-day-meal-type">
+                                {MEAL_TYPE_LABELS[meal.mealType]}
+                              </span>
+                              <span className="week-day-meal-body">
+                                {mealPreviewText(meal) || '—'}
+                              </span>
+                              <span className="muted small">
+                                {Math.round(meal.totals.kcal)} ккал
+                              </span>
+                            </>
+                          )}
                         </li>
                       ))}
                     </ul>
+                  )}
+                  {onAddMeal && (
+                    <button
+                      type="button"
+                      className="link-btn week-day-add"
+                      onClick={() => onAddMeal(day.date)}
+                    >
+                      + приём
+                    </button>
                   )}
                 </li>
               ))}

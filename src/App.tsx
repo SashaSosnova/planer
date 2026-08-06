@@ -29,7 +29,7 @@ import type { MealType } from './types'
 import './App.css'
 
 type Overlay =
-  | { type: 'add-meal'; prefillText?: string; mealType?: MealType }
+  | { type: 'add-meal'; prefillText?: string; mealType?: MealType; date?: string }
   | { type: 'edit-meal'; mealId: string }
   | { type: 'profile'; openCycleCal?: boolean }
   | { type: 'weight-history' }
@@ -43,6 +43,7 @@ type Overlay =
 
 export default function App() {
   const [overlay, setOverlay] = useState<Overlay>(null)
+  const [focusDate, setFocusDate] = useState<string | null>(null)
   const {
     data,
     ready,
@@ -216,6 +217,7 @@ export default function App() {
                 type: 'add-meal',
                 prefillText: opts?.text,
                 mealType: opts?.mealType,
+                date: opts?.date,
               })
             }
             onOpenMeal={(mealId) => setOverlay({ type: 'edit-meal', mealId })}
@@ -228,6 +230,8 @@ export default function App() {
             onOpenMeasures={() => setOverlay({ type: 'measures' })}
             onOpenLibrary={() => setOverlay({ type: 'library' })}
             onOpenCare={() => setOverlay({ type: 'care' })}
+            focusDate={focusDate}
+            onFocusDateConsumed={() => setFocusDate(null)}
             registerBackHandler={registerBackHandler}
             backEnabled={!showOverlay}
             onSaveWeight={async (date, kg) => {
@@ -246,6 +250,7 @@ export default function App() {
             data={data}
             prefillText={overlay.prefillText}
             initialMealType={overlay.mealType}
+            initialDate={overlay.date}
             onBack={closeOverlay}
             onSaveMeal={saveMeal}
             onSaveFood={saveFood}
@@ -346,6 +351,18 @@ export default function App() {
             dailyKcalGoal={dailyKcalGoal}
             maintainKcalGoal={maintainKcalGoal}
             onBack={closeOverlay}
+            onOpenDay={(date) => {
+              setFocusDate(date)
+              closeOverlay()
+            }}
+            onOpenMeal={(mealId) => {
+              const meal = data.meals.find((m) => m.id === mealId)
+              if (meal) setFocusDate(meal.date)
+              setOverlay({ type: 'edit-meal', mealId })
+            }}
+            onAddMeal={(date) =>
+              setOverlay({ type: 'add-meal', date })
+            }
           />
         )}
 

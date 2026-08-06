@@ -5,11 +5,12 @@ type Props = {
   day: DayStats
   dailyKcalGoal: number
   maintainKcalGoal: number
+  onOpen?: () => void
 }
 
-export function DaySummaryCard({ day, dailyKcalGoal, maintainKcalGoal }: Props) {
-  return (
-    <article className="day-summary-card">
+export function DaySummaryCard({ day, dailyKcalGoal, maintainKcalGoal, onOpen }: Props) {
+  const body = (
+    <>
       <h3 className="day-summary-title">{day.label}</h3>
       <div className="day-summary-top">
         <CalorieRing
@@ -35,6 +36,16 @@ export function DaySummaryCard({ day, dailyKcalGoal, maintainKcalGoal }: Props) 
           </div>
         </div>
       </div>
-    </article>
+    </>
   )
+
+  if (onOpen) {
+    return (
+      <button type="button" className="day-summary-card day-summary-card-btn" onClick={onOpen}>
+        {body}
+      </button>
+    )
+  }
+
+  return <article className="day-summary-card">{body}</article>
 }

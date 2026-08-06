@@ -1,7 +1,18 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FoodRef } from '../types'
 import { generateAliases } from './foodAliases'
 import { finalizeDraft, parseMeal } from './parseMeal'
+
+vi.mock('./parseMealLlm', async () => {
+  const actual = await vi.importActual<typeof import('./parseMealLlm')>('./parseMealLlm')
+  return {
+    ...actual,
+    isLlmConfigured: vi.fn(() => false),
+    parseMealWithLlm: vi.fn(),
+  }
+})
+
+import { isLlmConfigured, parseMealWithLlm } from './parseMealLlm'
 
 const tvorog: FoodRef = {
   id: 't1',
@@ -176,6 +187,11 @@ describe('finalizeDraft (cloud library guard)', () => {
 })
 
 describe('parseMeal', () => {
+  beforeEach(() => {
+    vi.mocked(isLlmConfigured).mockReturnValue(false)
+    vi.mocked(parseMealWithLlm).mockReset()
+  })
+
   it('rejects empty text', async () => {
     await expect(parseMeal('  ', [])).rejects.toThrow(/Введите/)
   })
@@ -185,5 +201,65 @@ describe('parseMeal', () => {
     expect(draft.items[0]!.name).toBe('Творог')
     expect(draft.items[0]!.grams).toBe(200)
     expect(draft.parseSource).toBe('library')
+    expect(parseMealWithLlm).not.toHaveBeenCalled()
+  })
+
+  it('resolves multi-item catalog lists locally without DeepSeek', async () => {
+    vi.mocked(isLlmConfigured).mockReturnValue(true)
+    const caramel: FoodRef = {
+      id: 'c1',
+      name: 'Карамель мягкая',
+      aliases: generateAliases('Карамель мягкая'),
+      per100g: { kcal: 400, protein: 0, fat: 0, carbs: 100 },
+      kind: 'ingredient',
+      portionGrams: 20,
+    }
+    const iriska: FoodRef = {
+      id: 'i1',
+      name: 'Ириска',
+      aliases: generateAliases('Ириска'),
+      per100g: { kcal: 450, protein: 2, fat: 10, carbs: 80 },
+      kind: 'ingredient',
+      portionGrams: 15,
+    }
+    const draft = await parseMeal('карамель мягкая, ириска', [caramel, iriska])
+    expect(draft.parseSource).toBe('library')
+    expect(draft.items.map((i) => i.name)).toEqual(['Карамель мягкая', 'Ириска'])
+    expect(draft.items.every((i) => i.source === 'library')).toBe(true)
+    expect(parseMealWithLlm).not.toHaveBeenCalled()
+  })
+
+  it('calls DeepSeek when a list item is missing from the catalog', async () => {
+    vi.mocked(isLlmConfigured).mockReturnValue(true)
+    vi.mocked(parseMealWithLlm).mockResolvedValue({
+      mealType: 'snack',
+      items: [
+        {
+          name: 'Творог',
+          grams: 200,
+          foodId: 't1',
+          ...tvorog.per100g,
+          source: 'library',
+        },
+        {
+          name: 'хумус из марса',
+          grams: 50,
+          kcal: 120,
+          protein: 4,
+          fat: 8,
+          carbs: 10,
+          source: 'estimate',
+        },
+      ],
+      totals: { kcal: 0, protein: 0, fat: 0, carbs: 0 },
+      isApproximate: true,
+      eatingOut: false,
+      parseSource: 'deepseek',
+    })
+
+    const draft = await parseMeal('творог 200 г, хумус из марса 50 г', [tvorog])
+    expect(parseMealWithLlm).toHaveBeenCalledOnce()
+    expect(draft.parseSource).toBe('deepseek')
+    expect(draft.items).toHaveLength(2)
   })
 })

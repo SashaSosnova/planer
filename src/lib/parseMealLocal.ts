@@ -198,12 +198,17 @@ function splitSimpleAndList(text: string): string[] | null {
   return parts
 }
 
-function splitSegments(text: string): Segment[] {
+function splitSegments(text: string, foods: FoodRef[] = []): Segment[] {
   const andParts = splitSimpleAndList(text)
   const chunks = andParts ?? splitList(text)
   const segments: Segment[] = []
   for (const raw of chunks) {
     const { name, grams } = extractGrams(raw)
+    // Keep catalog dishes like «кофе с молоком» intact instead of splitting «с …».
+    if (name && foods.length > 0 && findBestFood(name, foods, 70)) {
+      segments.push({ raw, name, grams })
+      continue
+    }
     segments.push(...expandWithParts({ raw, name, grams }))
   }
   return segments
@@ -343,7 +348,7 @@ export function parseMealLocal(
         const { name, grams } = extractGrams(raw)
         return { raw, name, grams }
       })
-    : splitSegments(cleaned)
+    : splitSegments(cleaned, foods)
 
   const items: MealItem[] = segments.map((seg) =>
     toItem(seg.name, seg.grams, foods, eatingOut),

@@ -104,6 +104,29 @@ describe('parseMealLocal', () => {
     expect(draft.items[1]!.grams).toBe(60)
   })
 
+  it('keeps catalog dish «кофе с молоком» in a list without splitting', () => {
+    const coffeeMilk: FoodRef = {
+      id: 'cm1',
+      name: 'Кофе с молоком',
+      aliases: generateAliases('Кофе с молоком'),
+      per100g: { kcal: 30, protein: 1.5, fat: 1.5, carbs: 2.5 },
+      kind: 'dish',
+      portionGrams: 250,
+    }
+    const iriska: FoodRef = {
+      id: 'i1',
+      name: 'Ириска',
+      aliases: generateAliases('Ириска'),
+      per100g: { kcal: 450, protein: 2, fat: 10, carbs: 80 },
+      kind: 'ingredient',
+      portionGrams: 15,
+    }
+    const draft = parseMealLocal('кофе с молоком, ириска', [coffeeMilk, iriska])
+    expect(draft.items).toHaveLength(2)
+    expect(draft.items.map((i) => i.name)).toEqual(['Кофе с молоком', 'Ириска'])
+    expect(draft.items.every((i) => i.source === 'library')).toBe(true)
+  })
+
   it.each(['200 г творога', '200 гр творога', '200гр творога', 'творога 200 г', 'творог 200 гр'])(
     'matches Творог for %s',
     (input) => {

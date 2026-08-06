@@ -1,5 +1,3 @@
-import { httpsCallable } from 'firebase/functions'
-import { getFirebaseFunctions, isFirebaseConfigured } from '../firebase'
 import type { FoodRef, MealType, ParsedMealDraft } from '../types'
 import { textSuggestsEatingOut } from './eatingOut'
 import { findBestFood, scoreFoodMatch } from './foodMatch'
@@ -59,27 +57,15 @@ function tryWholeLibraryMatch(
   }
 }
 
-type ParseMealRequest = {
-  text: string
-  mealType?: MealType
-  eatingOut?: boolean
-  foods: FoodRef[]
-}
-
-type ParseMealResponse = {
-  mealType: MealType
-  eatingOut?: boolean
-  items: Array<{
-    name: string
-    grams: number
-    foodId?: string | null
-    kcal?: number
-    protein?: number
-    fat?: number
-    carbs?: number
-    source: 'library' | 'estimate'
-  }>
-  notes?: string
+type ParsedItem = {
+  name: string
+  grams: number
+  foodId?: string | null
+  kcal?: number
+  protein?: number
+  fat?: number
+  carbs?: number
+  source: 'library' | 'estimate'
 }
 
 /**
@@ -87,7 +73,7 @@ type ParseMealResponse = {
  * Re-check against the user phrase; rematch or fall back to estimate.
  */
 function resolveLibraryFood(
-  item: ParseMealResponse['items'][number],
+  item: ParsedItem,
   foods: FoodRef[],
   userQuery: string | undefined,
   singleItem: boolean,
@@ -115,11 +101,11 @@ function toLibraryItem(food: FoodRef, grams: number) {
 /** Visible for tests — applies library foodId checks against the user phrase. */
 export function finalizeDraft(
   mealType: MealType,
-  items: ParseMealResponse['items'],
+  items: ParsedItem[],
   foods: FoodRef[],
   eatingOut: boolean,
   notes?: string,
-  parseSource: ParsedMealDraft['parseSource'] = 'cloud',
+  parseSource: ParsedMealDraft['parseSource'] = 'deepseek',
   userText?: string,
 ): ParsedMealDraft {
   const queryName = userText ? extractMealGrams(userText.replace(/\s+/g, ' ').trim()).name : ''
@@ -231,57 +217,25 @@ export async function parseMeal(
     if (whole) return whole
   }
 
-  // 1) Cloud Function (preferred — key stays on server)
-  if (isFirebaseConfigured()) {
-    try {
-      const callable = httpsCallable<ParseMealRequest, ParseMealResponse>(
-        getFirebaseFunctions(),
-        'parseMeal',
-      )
-      const result = await callable({
-        text: body,
-        mealType: resolvedType,
-        eatingOut,
-        foods: foods.map((f) => ({
-          id: f.id,
-          name: f.name,
-          aliases: f.aliases,
-          per100g: f.per100g,
-          kind: f.kind,
-          ...(f.portionGrams != null && f.portionGrams > 0
-            ? { portionGrams: f.portionGrams }
-            : {}),
-        })),
-      })
-      return finalizeDraft(
-        fromText.mealType ?? coerceMealType(result.data.mealType, resolvedType ?? defaultMealTypeForNow()),
-        result.data.items,
-        foods,
-        Boolean(result.data.eatingOut ?? eatingOut),
-        result.data.notes,
-        'cloud',
-        body,
-      )
-    } catch {
-      // continue
-    }
-  }
+  // Prefer local catalog matching; DeepSeek only when something is missing.
+  const local = parseMealLocal(body, foods, resolvedType, eatingOut)
+  const withType = fromText.mealType
+    ? { ...local, mealType: fromText.mealType }
+    : local
+  const allFromLibrary =
+    !eatingOut &&
+    withType.items.length > 0 &&
+    withType.items.every((i) => i.source === 'library')
 
-  // 2) DeepSeek flash — complex / eating out / any text when configured
-  if (isLlmConfigured() && (complex || eatingOut)) {
-    try {
-      const draft = await parseMealWithLlm(body, foods, resolvedType, eatingOut)
-      return finalizeDraft(
-        fromText.mealType ?? draft.mealType,
-        draft.items,
-        foods,
-        draft.eatingOut,
-        draft.notes,
-        'deepseek',
-        body,
-      )
-    } catch {
-      // continue to local
+  if (allFromLibrary) {
+    return {
+      ...withType,
+      parseSource: 'library',
+      isApproximate: false,
+      notes:
+        withType.items.length > 1
+          ? 'Все позиции найдены в справочнике.'
+          : withType.notes,
     }
   }
 
@@ -298,10 +252,9 @@ export async function parseMeal(
         body,
       )
     } catch {
-      // continue
+      // keep local estimate below
     }
   }
 
-  const local = parseMealLocal(body, foods, resolvedType, eatingOut)
-  return fromText.mealType ? { ...local, mealType: fromText.mealType } : local
+  return withType
 }

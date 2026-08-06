@@ -19,6 +19,30 @@ describe('guessYieldFactor', () => {
     expect(guessYieldFactor('куриная грудка').factor).toBe(0.75)
   })
 
+  it.each(['рис', 'Рис', 'риса', 'сухого риса', 'сухой рис', 'рисовая крупа'])(
+    'swells %s instead of default moisture loss',
+    (name) => {
+      const y = guessYieldFactor(name)
+      expect(y.factor).toBe(2.5)
+      expect(y.note).toMatch(/крупа набухает/)
+    },
+  )
+
+  it('swells buckwheat and millet', () => {
+    expect(guessYieldFactor('гречка').factor).toBe(2.2)
+    expect(guessYieldFactor('пшено').factor).toBe(2.5)
+  })
+
+  it('does not treat dry rice as pasta via «сух…»', () => {
+    expect(guessYieldFactor('сухого риса').note).not.toMatch(/макарон/)
+  })
+
+  it('keeps cooked rice and rice flour at yield 1', () => {
+    expect(guessYieldFactor('рис варёный').factor).toBe(1)
+    expect(guessYieldFactor('отварной рис').factor).toBe(1)
+    expect(guessYieldFactor('рисовая мука').factor).toBe(1)
+  })
+
   it('keeps cold sandwich ingredients at yield 1', () => {
     expect(guessYieldFactor('Батон городской').factor).toBe(1)
     expect(guessYieldFactor('ветчина ореховая').factor).toBe(1)

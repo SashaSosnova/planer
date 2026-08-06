@@ -43,9 +43,12 @@ export function extractIngredientLine(raw: string): RecipeIngredientHint {
       .slice(0, weight.index)
       .replace(/[-–—:]\s*$/u, '')
       .trim()
+    const afterWeight = s.slice(weight.index + weight[0].length)
     // Keep only cooking markers after grams («(жарить)»), not cut style («соломкой»).
-    const after = cookingMarkerSuffix(s.slice(weight.index + weight[0].length))
-    const name = [before, after].filter(Boolean).join(' ').trim()
+    // Weight-first lines («180 г сухого риса») — remainder is the product name.
+    const name = before
+      ? [before, cookingMarkerSuffix(afterWeight)].filter(Boolean).join(' ').trim()
+      : afterWeight.trim()
     if (name && grams > 0) return { name, grams }
   }
 

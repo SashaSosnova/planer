@@ -236,6 +236,13 @@ describe('extractIngredientLine cooking markers', () => {
       grams: 55,
     })
   })
+
+  it('parses weight-first dry rice lines', () => {
+    expect(extractIngredientLine('180 г сухого риса')).toEqual({
+      name: 'сухого риса',
+      grams: 180,
+    })
+  })
 })
 
 describe('acceptCookedGramsEstimate', () => {

@@ -3,8 +3,17 @@
  * Calories stay with the food; only density (per 100g cooked) changes.
  */
 const YIELD_RULES: Array<{ match: RegExp; factor: number; note: string }> = [
-  { match: /спагетт|макарон|паста|лапш|вермишел|сухи/i, factor: 2.3, note: 'макароны набухают' },
-  { match: /рис\b.*сух|сухой рис|крупа/i, factor: 2.5, note: 'крупа набухает' },
+  // Pasta — no bare «сух…» (steals «сухого риса»)
+  { match: /спагетт|макарон|паста|лапш|вермишел/i, factor: 2.3, note: 'макароны набухают' },
+  // Already cooked rice — do not swell again (\p{L} needs /u; \w is ASCII-only)
+  {
+    match: /рис\p{L}*\s*(варен|готов|отварн)|(варен|готов|отварн)\p{L}*\s*рис/iu,
+    factor: 1.0,
+    note: 'рис уже готовый',
+  },
+  { match: /рисов\p{L}*\s*мук|мук\p{L}*\s*рисов/iu, factor: 1.0, note: 'мука без набухания' },
+  // Dry / raw grains (рис, риса, сухого риса, пшено, крупа…)
+  { match: /рис|пшен|перлов|булгур|киноа|кускус|крупа/i, factor: 2.5, note: 'крупа набухает' },
   { match: /греч/i, factor: 2.2, note: 'гречка набухает' },
   { match: /овсян|геркулес/i, factor: 3.0, note: 'овсянка разваривается' },
   // Eggs before «курин…» — otherwise «яйцо куриное» matches meat

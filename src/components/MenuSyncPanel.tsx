@@ -5,6 +5,7 @@ import { findMenuDishDuplicates } from '../lib/menuDishDedupe'
 import {
   exportMenuMacros,
   exportProductCatalog,
+  findOrphanMenuDishes,
   MENU_DISHES_URL,
   type MenuImportResult,
 } from '../lib/menuSync'
@@ -16,19 +17,30 @@ type Props = {
     onProgress?: (msg: string) => void,
   ) => Promise<MenuImportResult>
   onDedupeDishes?: () => Promise<{ removed: number; groups: ReturnType<typeof findMenuDishDuplicates> }>
+  onDeleteFood: (id: string) => Promise<void>
 }
 
-export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) {
+export function MenuSyncPanel({
+  data,
+  onImportRecipes,
+  onDedupeDishes,
+  onDeleteFood,
+}: Props) {
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [lastImport, setLastImport] = useState<MenuImportResult | null>(null)
+  const [keepMenuIds, setKeepMenuIds] = useState<string[] | null>(null)
 
   const ingredientCount = data.foods.filter((f) => f.kind !== 'dish').length
   const linkedDishes = data.foods.filter((f) => f.kind === 'dish' && f.menuId).length
   const dupeGroups = useMemo(() => findMenuDishDuplicates(data.foods), [data.foods])
   const dupeCount = dupeGroups.reduce((n, g) => n + g.removeIds.length, 0)
+  const orphans = useMemo(
+    () => (keepMenuIds ? findOrphanMenuDishes(data.foods, keepMenuIds) : []),
+    [data.foods, keepMenuIds],
+  )
 
   const exportCatalog = () => {
     const catalog = exportProductCatalog(data.foods)
@@ -50,6 +62,12 @@ export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) 
     setError(null)
   }
 
+  const deleteOrphans = async (list: ReturnType<typeof findOrphanMenuDishes>) => {
+    for (const orphan of list) {
+      await onDeleteFood(orphan.id)
+    }
+  }
+
   const runImport = async (raw: unknown) => {
     setBusy(true)
     setError(null)
@@ -58,11 +76,31 @@ export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) 
     try {
       const result = await onImportRecipes(raw, (progress) => setMsg(progress))
       setLastImport(result)
-      setMsg(
+      setKeepMenuIds(result.menuIds)
+      const toRemove = result.orphans
+      let summary =
         `Готово: ${result.created} новых, ${result.updated} обновлено` +
-          (result.errors ? `, ${result.errors} ошибок` : '') +
-          (result.removedDupes ? `, удалено дубликатов: ${result.removedDupes}` : ''),
-      )
+        (result.errors ? `, ${result.errors} ошибок` : '') +
+        (result.removedDupes ? `, удалено дубликатов: ${result.removedDupes}` : '')
+
+      if (toRemove.length > 0) {
+        const ok = window.confirm(
+          `В planer есть ${toRemove.length} рецептов, которых нет в menu.\n` +
+            `Удалить их из planer? (menu не меняется)\n\n` +
+            toRemove
+              .slice(0, 12)
+              .map((o) => `• ${o.name}`)
+              .join('\n') +
+            (toRemove.length > 12 ? `\n… и ещё ${toRemove.length - 12}` : ''),
+        )
+        if (ok) {
+          await deleteOrphans(toRemove)
+          summary += `. Удалено из planer: ${toRemove.length}`
+        } else {
+          summary += `. Лишних в planer: ${toRemove.length} — можно удалить кнопкой ниже`
+        }
+      }
+      setMsg(summary)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось импортировать')
     } finally {
@@ -101,6 +139,31 @@ export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) 
       setMsg(removed > 0 ? `Удалено дубликатов: ${removed}` : 'Дубликатов блюд не найдено')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось удалить дубликаты')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const runPruneOrphans = async () => {
+    if (orphans.length === 0) return
+    const ok = window.confirm(
+      `Удалить из planer ${orphans.length} рецептов, которых нет в menu?\n` +
+        `(menu не меняется)\n\n` +
+        orphans
+          .slice(0, 12)
+          .map((o) => `• ${o.name}`)
+          .join('\n') +
+        (orphans.length > 12 ? `\n… и ещё ${orphans.length - 12}` : ''),
+    )
+    if (!ok) return
+    setBusy(true)
+    setError(null)
+    setMsg(null)
+    try {
+      await deleteOrphans(orphans)
+      setMsg(`Удалено из planer: ${orphans.length}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось удалить блюда')
     } finally {
       setBusy(false)
     }
@@ -146,7 +209,8 @@ export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) 
       <div className="menu-sync-block">
         <h3 className="menu-sync-title">2. Рецепты ← menu</h3>
         <p className="muted small">
-          Импорт списка ингредиентов: разбор по продуктам и расчёт КБЖУ.
+          Импорт списка ингредиентов: разбор по продуктам и расчёт КБЖУ. Новые добавятся,
+          существующие с menuId обновятся.
         </p>
         <div className="btn-row">
           <button type="button" className="primary-btn" disabled={busy} onClick={() => void fetchFromMenu()}>
@@ -169,6 +233,33 @@ export function MenuSyncPanel({ data, onImportRecipes, onDedupeDishes }: Props) 
           </button>
         </div>
       </div>
+
+      {orphans.length > 0 && (
+        <div className="menu-sync-block">
+          <h3 className="menu-sync-title">Лишние в planer</h3>
+          <p className="muted small">
+            Этих {orphans.length} рецептов нет в последнем импорте menu. Удаление только из
+            справочника planer.
+          </p>
+          <ul className="menu-sync-report muted small">
+            {orphans.slice(0, 20).map((o) => (
+              <li key={o.id}>
+                <strong>{o.name}</strong>
+                {o.menuId ? ` · ${o.menuId}` : ' · без menuId'}
+              </li>
+            ))}
+            {orphans.length > 20 && <li>… и ещё {orphans.length - 20}</li>}
+          </ul>
+          <button
+            type="button"
+            className="ghost-btn"
+            disabled={busy}
+            onClick={() => void runPruneOrphans()}
+          >
+            Удалить из planer ({orphans.length})
+          </button>
+        </div>
+      )}
 
       {dupeCount > 0 && onDedupeDishes && (
         <div className="menu-sync-block">

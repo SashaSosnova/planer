@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { MenuSyncPanel } from '../components/MenuSyncPanel'
+import { SyncMenuIcon } from '../components/MoreMenuIcons'
 import type { AppData, FoodItem } from '../types'
 import type { MenuImportResult } from '../lib/menuSync'
 import { ProductsPanel } from './ProductsPanel'
@@ -34,40 +35,61 @@ export function LibraryScreen({
   initialTab = 'products',
   backLabel = '← Назад',
 }: Props) {
-  const [tab, setTab] = useState<LibraryTab>(initialTab)
+  const [tab, setTab] = useState<LibraryTab>(
+    initialTab === 'sync' ? 'sync' : initialTab,
+  )
+  const [prevCatalogTab, setPrevCatalogTab] = useState<'products' | 'recipes'>(
+    initialTab === 'recipes' ? 'recipes' : 'products',
+  )
+
+  const openSync = () => {
+    if (tab === 'sync') {
+      setTab(prevCatalogTab)
+      return
+    }
+    if (tab === 'products' || tab === 'recipes') setPrevCatalogTab(tab)
+    setTab('sync')
+  }
 
   return (
     <section className="screen">
-      <header className="screen-header">
-        <button type="button" className="link-btn" onClick={onBack}>
-          {backLabel}
+      <header className="screen-header library-header">
+        <div className="library-header-main">
+          <button type="button" className="link-btn" onClick={onBack}>
+            {backLabel}
+          </button>
+          <h1>Справочник</h1>
+        </div>
+        <button
+          type="button"
+          className={`icon-btn sm${tab === 'sync' ? ' active' : ''}`}
+          onClick={openSync}
+          aria-label="Синхронизация с menu"
+          title="Синхронизация с menu"
+          aria-pressed={tab === 'sync'}
+        >
+          <SyncMenuIcon size={16} />
         </button>
-        <h1>Справочник</h1>
       </header>
 
-      <div className="mode-tabs mode-tabs-3">
-        <button
-          type="button"
-          className={`mode-tab${tab === 'products' ? ' active' : ''}`}
-          onClick={() => setTab('products')}
-        >
-          Продукты
-        </button>
-        <button
-          type="button"
-          className={`mode-tab${tab === 'recipes' ? ' active' : ''}`}
-          onClick={() => setTab('recipes')}
-        >
-          Рецепты
-        </button>
-        <button
-          type="button"
-          className={`mode-tab${tab === 'sync' ? ' active' : ''}`}
-          onClick={() => setTab('sync')}
-        >
-          Menu
-        </button>
-      </div>
+      {tab !== 'sync' && (
+        <div className="mode-tabs mode-tabs-2">
+          <button
+            type="button"
+            className={`mode-tab${tab === 'products' ? ' active' : ''}`}
+            onClick={() => setTab('products')}
+          >
+            Продукты
+          </button>
+          <button
+            type="button"
+            className={`mode-tab${tab === 'recipes' ? ' active' : ''}`}
+            onClick={() => setTab('recipes')}
+          >
+            Рецепты
+          </button>
+        </div>
+      )}
 
       {tab === 'products' && (
         <ProductsPanel data={data} onSave={onSaveFood} onDelete={onDeleteFood} />
@@ -80,6 +102,7 @@ export function LibraryScreen({
           data={data}
           onImportRecipes={onImportMenuRecipes}
           onDedupeDishes={onDedupeMenuDishes}
+          onDeleteFood={onDeleteFood}
         />
       )}
     </section>

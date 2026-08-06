@@ -22,7 +22,8 @@ export type DishCategoryId =
   | 'meat_dish'
   | 'poultry_dish'
   | 'fish_dish'
-  | 'sides'
+  | 'veg_side'
+  | 'grains'
   | 'soups'
   | 'salads'
   | 'breakfast'
@@ -53,7 +54,8 @@ export const DISH_CATEGORIES: DishCategoryDef[] = [
   { id: 'meat_dish', label: 'Из мяса' },
   { id: 'poultry_dish', label: 'Из курицы / птицы' },
   { id: 'fish_dish', label: 'Из рыбы' },
-  { id: 'sides', label: 'Гарниры' },
+  { id: 'veg_side', label: 'Овощной гарнир' },
+  { id: 'grains', label: 'Крупа' },
   { id: 'soups', label: 'Супы' },
   { id: 'salads', label: 'Салаты' },
   { id: 'breakfast', label: 'Завтраки' },
@@ -163,8 +165,10 @@ const FISH_RE =
   /рыб|лосос|форел|семг|тунец|треск|сельдь|скумбр|минтай|хек|креветк|кальмар|мидии|морепродукт|икра|судак|щук/
 const MEAT_RE =
   /говядин|свинин|баранин|телятин|фарш|колбас|сосиск|ветчин|бекон|мясо|стейк|котлет|печень\s*говя|язык/
-const SIDE_RE =
-  /гарнир|гречк|рис(?:$|[^а-я])|пюре|картофел|макарон|паста|овощ|каш[аи]|булгур|киноа|кус-кус|кускус/
+const GRAINS_RE =
+  /гречк|рис(?:$|[^а-я])|каш[аи]|булгур|киноа|кус-кус|кускус|макарон|паста|пшен|перлов|овсянк|крупа|спагетт|лапш/
+const VEG_SIDE_RE =
+  /овощн\w*\s*гарнир|гарнир\s*овощ|пюре|картофел|картошк|овощ|брокколи|цветн\w*\s*капуст|кабачок|цукини|баклажан|стручков|запеч[её]нн\w*\s*овощ|туш[её]н\w*\s*овощ|рагу\s*овощ|фасоль\s*струч/
 const SOUP_RE = /суп|борщ|щи(?:$|[^а-я])|солянка|бульон|харчо|окрошка|уха(?:$|[^а-я])|рассольник|крем-суп/
 const SALAD_RE = /салат|винегрет|цезарь/
 const BREAKFAST_RE =
@@ -195,7 +199,12 @@ export function inferDishCategory(
   if (FISH_RE.test(blob)) return 'fish_dish'
   if (MEAT_RE.test(blob)) return 'meat_dish'
 
-  if (SIDE_RE.test(title) || SIDE_RE.test(blob)) return 'sides'
+  if (GRAINS_RE.test(title) || GRAINS_RE.test(blob)) return 'grains'
+  if (VEG_SIDE_RE.test(title) || VEG_SIDE_RE.test(blob)) return 'veg_side'
+  if (/гарнир/.test(title) || /гарнир/.test(blob)) {
+    if (GRAINS_RE.test(blob)) return 'grains'
+    return 'veg_side'
+  }
 
   // Broader name cues if ingredients were empty
   if (SOUP_RE.test(blob)) return 'soups'
@@ -210,6 +219,7 @@ export function resolveDishCategory(
   food: Pick<FoodItem, 'name' | 'category' | 'recipe'>,
 ): DishCategoryId {
   if (isDishCategoryId(food.category)) return food.category
+  // Legacy «sides» / missing category → infer veg_side / grains / salads…
   return inferDishCategory(food.name, food.recipe?.ingredients)
 }
 

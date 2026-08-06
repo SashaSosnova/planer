@@ -146,7 +146,7 @@ export function recipeToFoodItem(
   sourceText?: string,
   /** Typical serving when adding the dish to a meal (defaults to 100 g if omitted). */
   portionGrams?: number | null,
-  /** Dish group (meat / poultry / sides…); omitted → inferred later in UI. */
+  /** Dish group (meat / poultry / grains…); omitted → inferred later in UI. */
   category?: string | null,
 ): Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string } {
   const text = sourceText?.trim()

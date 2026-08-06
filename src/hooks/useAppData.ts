@@ -37,9 +37,11 @@ import {
 } from '../lib/seedSpiceProducts'
 import {
   buildMenuImportPlan,
+  findOrphanMenuDishes,
   parseMenuDishesBundle,
   summarizeMenuImport,
   type MenuImportResult,
+  type OrphanMenuDish,
 } from '../lib/menuSync'
 import { dedupeMenuDishes, findMenuDishDuplicates } from '../lib/menuDishDedupe'
 import { parseTelegramImportBundle } from '../lib/tgImport'
@@ -735,7 +737,7 @@ export function useAppData() {
     })()
   }, [ready, data.careProducts, persistLocal, uid, useCloud])
 
-  // Seed basic spices for menu recipe sync (salt, oregano, bay leaf, paprika, basil).
+  // Seed catalog products for recipes (spices, veg, sauces…). Version bump re-merges missing.
   useEffect(() => {
     if (!ready) return
     if (spiceProductsSeedStarted.current) return
@@ -1077,12 +1079,16 @@ export function useAppData() {
       }
 
       const { created, updated, errors } = summarizeMenuImport(results)
+      const menuIds = dishes.map((d) => d.id)
 
       let removedIds: string[] = []
+      let orphans: OrphanMenuDish[] = []
       persistLocal((prev) => {
         const merged = dedupeMenuDishes(prev.foods)
         removedIds = merged.removedIds
-        if (merged.removedIds.length === 0) return prev
+        const foods = removedIds.length > 0 ? merged.foods : prev.foods
+        orphans = findOrphanMenuDishes(foods, menuIds)
+        if (removedIds.length === 0) return prev
         return { ...prev, foods: merged.foods }
       })
       if (removedIds.length > 0) {
@@ -1092,7 +1098,15 @@ export function useAppData() {
         }
       }
 
-      return { results, created, updated, errors, removedDupes: removedIds.length }
+      return {
+        results,
+        created,
+        updated,
+        errors,
+        removedDupes: removedIds.length,
+        menuIds,
+        orphans,
+      }
     },
     [data.foods, persistLocal, saveFood, uid, useCloud],
   )

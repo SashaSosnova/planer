@@ -2115,6 +2115,29 @@ button.food-row-open:focus-visible {
   color: var(--accent);
 }
 
+.library-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.library-header-main {
+  min-width: 0;
+}
+
+.library-header .icon-btn.sm {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  margin-top: 2px;
+}
+
+.library-header .icon-btn.sm svg {
+  width: 16px;
+  height: 16px;
+}
+
 .meal-card-btn {
   width: 100%;
   text-align: left;

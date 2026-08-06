@@ -5,6 +5,7 @@ import {
   buildMenuRecipeText,
   exportMenuMacros,
   exportProductCatalog,
+  findOrphanMenuDishes,
   menuDishToFoodInput,
   parseMenuDishesBundle,
 } from './menuSync'
@@ -57,15 +58,10 @@ describe('parseMenuDishesBundle', () => {
     ).toThrow(/нет ни одного блюда/)
   })
 
-  it('skips leftovers and deleted salads', () => {
+  it('skips deleted salads', () => {
     const dishes = parseMenuDishesBundle({
       dishes: [
         dish,
-        {
-          id: 'leftovers_roast',
-          name: 'Остатки жаркого',
-          ingredients: ['Филе 200 г'],
-        },
         {
           id: 'salad_carrot_korean',
           name: 'Морковь по-корейски',
@@ -156,5 +152,46 @@ describe('exportMenuMacros', () => {
       fat: 6,
       carbs: 5,
     })
+  })
+})
+
+describe('findOrphanMenuDishes', () => {
+  it('lists every planer dish not present in the menu keep set', () => {
+    const orphans = findOrphanMenuDishes(
+      [
+        {
+          id: 'keep',
+          name: 'Болоньезе',
+          aliases: [],
+          per100g: PER100,
+          kind: 'dish',
+          menuId: 'bolognese',
+          updatedAt: 1,
+        },
+        {
+          id: 'gone',
+          name: 'Старый салат',
+          aliases: [],
+          per100g: PER100,
+          kind: 'dish',
+          menuId: 'old_salad',
+          updatedAt: 1,
+        },
+        {
+          id: 'manual',
+          name: 'Своё блюдо',
+          aliases: [],
+          per100g: PER100,
+          kind: 'dish',
+          updatedAt: 1,
+        },
+        ingredient('beef', 'Говядина'),
+      ],
+      ['bolognese'],
+    )
+    expect(orphans).toEqual([
+      { id: 'manual', menuId: '', name: 'Своё блюдо' },
+      { id: 'gone', menuId: 'old_salad', name: 'Старый салат' },
+    ])
   })
 })

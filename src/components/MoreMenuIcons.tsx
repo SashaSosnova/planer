@@ -82,6 +82,27 @@ export function LibraryMenuIcon({ size = 24 }: IconProps) {
   )
 }
 
+/** Синхронизация с menu — две стрелки по кругу */
+export function SyncMenuIcon({ size = 24 }: IconProps) {
+  return (
+    <svg {...svgProps(size)}>
+      <path
+        d="M4.5 12a7.5 7.5 0 0 1 12.4-5.7M19.5 12a7.5 7.5 0 0 1-12.4 5.7"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <path
+        d="M16.2 3.8v3.6h3.6M7.8 20.2v-3.6H4.2"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
+
 /** Уход — капля / уход за кожей */
 export function CareMenuIcon({ size = 24 }: IconProps) {
   return (

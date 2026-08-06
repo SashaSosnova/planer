@@ -7,16 +7,8 @@ import type { FoodItem, FoodRef, MacroSet } from '../types'
 /** Default URL for menu repo export (dishes.json on GitHub Pages). */
 export const MENU_DISHES_URL = 'https://sashasosnova.github.io/menu/dishes.json'
 
-/** Not synced to planer — leftovers are reheating notes, not recipes for KBZHU. */
-export const MENU_SYNC_SKIP_IDS = new Set([
-  'leftovers_cutlets',
-  'leftovers_roast',
-  'leftovers_baked_chicken',
-  'leftovers_wings',
-  'leftovers_fish',
-  'leftovers_thighs',
-  'salad_carrot_korean',
-])
+/** Ids from menu export that should not become recipes in planer. */
+export const MENU_SYNC_SKIP_IDS = new Set(['salad_carrot_korean'])
 
 export function filterMenuDishesForSync(dishes: MenuDishExport[]): MenuDishExport[] {
   return dishes.filter((d) => !MENU_SYNC_SKIP_IDS.has(d.id))
@@ -49,12 +41,22 @@ export type MenuImportLineResult = {
   error?: string
 }
 
+export type OrphanMenuDish = {
+  id: string
+  menuId: string
+  name: string
+}
+
 export type MenuImportResult = {
   results: MenuImportLineResult[]
   created: number
   updated: number
   errors: number
   removedDupes?: number
+  /** menuId list from the imported bundle (for orphan prune). */
+  menuIds: string[]
+  /** Planer dishes absent from this import (computed on post-import catalog). */
+  orphans: OrphanMenuDish[]
 }
 
 export type MenuMacrosExport = {
@@ -248,4 +250,30 @@ export function summarizeMenuImport(
     else errors++
   }
   return { created, updated, errors }
+}
+
+/**
+ * Planer dishes that are not in the latest menu import keep-set.
+ * Keeps only dishes whose menuId is in the import; everything else (including
+ * manual recipes without menuId) is treated as removable from planer.
+ */
+export function findOrphanMenuDishes(
+  foods: FoodItem[],
+  keepMenuIds: Iterable<string>,
+): OrphanMenuDish[] {
+  const keep = new Set(
+    [...keepMenuIds].map((id) => id.trim()).filter(Boolean),
+  )
+  return foods
+    .filter((f) => f.kind === 'dish')
+    .filter((f) => {
+      const mid = f.menuId?.trim() ?? ''
+      return !mid || !keep.has(mid)
+    })
+    .map((f) => ({
+      id: f.id,
+      menuId: f.menuId?.trim() ?? '',
+      name: f.name,
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
 }

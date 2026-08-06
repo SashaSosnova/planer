@@ -58,7 +58,9 @@ describe('inferDishCategory', () => {
     ).toBe('meat_dish')
     expect(
       inferDishCategory('Гарнир', [{ name: 'Гречка' }, { name: 'Масло' }]),
-    ).toBe('sides')
+    ).toBe('grains')
+    expect(inferDishCategory('Овощной гарнир')).toBe('veg_side')
+    expect(inferDishCategory('Гречка с маслом')).toBe('grains')
   })
 })
 
@@ -89,7 +91,23 @@ describe('group helpers', () => {
     const groups = groupByDishCategory([
       { name: 'Гречка с маслом', recipe: { ingredients: [{ name: 'Гречка', gramsRaw: 80, per100g: { kcal: 300, protein: 10, fat: 2, carbs: 60 }, source: 'library', yieldFactor: 2.5 }], totalRawGrams: 80, totalCookedGrams: 200, totalMacros: { kcal: 240, protein: 8, fat: 2, carbs: 48 } } },
       { name: 'Куриный суп' },
+      { name: 'Салат цезарь' },
     ])
-    expect(groups.map((g) => g.id)).toEqual(['sides', 'soups'])
+    expect(groups.map((g) => g.id)).toEqual(['grains', 'soups', 'salads'])
+  })
+
+  it('re-infers legacy sides category', () => {
+    expect(
+      resolveDishCategory({
+        name: 'Гречка с маслом',
+        category: 'sides',
+        recipe: {
+          ingredients: [{ name: 'Гречка', gramsRaw: 80, per100g: { kcal: 300, protein: 10, fat: 2, carbs: 60 }, source: 'library', yieldFactor: 2.5 }],
+          totalRawGrams: 80,
+          totalCookedGrams: 200,
+          totalMacros: { kcal: 240, protein: 8, fat: 2, carbs: 48 },
+        },
+      }),
+    ).toBe('grains')
   })
 })

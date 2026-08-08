@@ -12,12 +12,12 @@ export const MEASURE_FIELDS = [
 export type MeasureKey = (typeof MEASURE_FIELDS)[number]['key']
 
 export const MEASURE_COLORS: Record<MeasureKey, string> = {
-  chest: '#0f4c5c',
-  waist: '#b85c38',
-  belly: '#c4921a',
-  hips: '#2f7d4c',
-  thigh: '#5a7178',
-  bicep: '#6b3fa0',
+  chest: '#7d5f9c',
+  waist: '#e6d59a',
+  belly: '#c9a03a',
+  hips: '#5e8a48',
+  thigh: '#71687a',
+  bicep: '#9a7db0',
 }
 
 export function measureFilled(m: MeasurementEntry | undefined): boolean {

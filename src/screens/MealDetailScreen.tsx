@@ -114,7 +114,7 @@ export function MealDetailScreen({
           setError(null)
           return false
         }
-        setError('Уточните продукты в справочнике или оцените КБЖУ')
+        setError('Уточните продукты в каталоге или оцените КБЖУ')
         setSaveState('error')
         return false
       }
@@ -196,7 +196,7 @@ export function MealDetailScreen({
     }
     const kept = latestRef.current.items.filter((i) => i.name.trim())
     if (mealItemsHaveUnresolved(kept, data.foods)) {
-      setError('Уточните продукты в справочнике или оцените КБЖУ')
+      setError('Уточните продукты в каталоге или оцените КБЖУ')
       setSaveState('error')
       return
     }

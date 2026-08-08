@@ -46,7 +46,7 @@ import type { MenuImportResult } from '../lib/menuSync'
 import { LibraryScreen } from './LibraryScreen'
 
 const PARSE_SOURCE_LABEL: Record<MealParseSource, string> = {
-  library: 'справочник',
+  library: 'каталог',
   deepseek: 'AI',
   local: 'локально',
   cloud: 'AI',
@@ -260,7 +260,7 @@ export function AddMealScreen({
       return
     }
     if (mealItemsHaveUnresolved(kept, data.foods)) {
-      setError('Уточните продукты в справочнике или оцените КБЖУ перед сохранением')
+      setError('Уточните продукты в каталоге или оцените КБЖУ перед сохранением')
       return
     }
     setBusy(true)
@@ -321,7 +321,7 @@ export function AddMealScreen({
             )
           : prev,
       )
-      setInfo(`«${saved.name}» добавлен в справочник`)
+      setInfo(`«${saved.name}» добавлен в каталог`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось сохранить продукт')
     } finally {
@@ -393,7 +393,7 @@ export function AddMealScreen({
           <h1>Добавить приём</h1>
         </div>
         <button type="button" className="link-btn add-library-link" onClick={() => setView('library')}>
-          Справочник
+          Каталог
         </button>
       </header>
 

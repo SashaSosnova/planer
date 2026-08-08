@@ -9,9 +9,9 @@ export function PlusIcon({ size = 18 }: { size?: number }) {
       style={{ width: size, height: size, display: 'block', flexShrink: 0 }}
     >
       <path
-        d="M12 5v14M5 12h14"
+        d="M12 5.5v13M5.5 12h13"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="2.4"
         strokeLinecap="round"
       />
     </svg>

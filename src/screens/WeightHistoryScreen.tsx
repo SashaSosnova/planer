@@ -38,7 +38,7 @@ export function WeightHistoryScreen({ data, onBack, onSave, onDelete }: Props) {
     const points = [...history]
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((w) => ({ date: w.date, value: w.kg }))
-    return [{ id: 'weight', label: 'Вес', color: '#0f4c5c', points }]
+    return [{ id: 'weight', label: 'Вес', color: '#7d5f9c', points }]
   }, [history])
 
   const saveEntry = async () => {

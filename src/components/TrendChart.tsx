@@ -22,9 +22,9 @@ type Props = {
   goal?: number
 }
 
-const BAR_BELOW = '#d4a017'
-const BAR_ABOVE = '#2f7d4c'
-const GOAL_COLOR = '#2b6cb0'
+const BAR_BELOW = '#e6d59a'
+const BAR_ABOVE = '#5e8a48'
+const GOAL_COLOR = '#7d5f9c'
 
 function shortDate(iso: string): string {
   const [, m, d] = iso.split('-')

@@ -629,8 +629,17 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
 
   return (
     <div className="panel-stack">
-      <div className="section-head">
-        <h2>Рецепты</h2>
+      <div className="catalog-toolbar">
+        <label className="field catalog-search">
+          <span className="visually-hidden">Поиск рецепта</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Найти рецепт…"
+            autoComplete="off"
+          />
+        </label>
         <button
           type="button"
           className="primary-btn icon-cta"
@@ -644,18 +653,6 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       <p className="muted small">
         Блюда, собранные из ингредиентов — КБЖУ на 100 г готового
       </p>
-      {dishes.length > 0 && (
-        <label className="field catalog-search">
-          <span className="visually-hidden">Поиск рецепта</span>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Найти рецепт…"
-            autoComplete="off"
-          />
-        </label>
-      )}
       <CatalogSections
         groups={dishGroups}
         expandAll={Boolean(query.trim())}

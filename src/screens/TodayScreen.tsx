@@ -10,13 +10,7 @@ import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
 import { truncateMealPreview } from '../lib/mealDraft'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { calcSweetBudgetKcal } from '../lib/sweets'
-import {
-  CareMenuIcon,
-  DiaryMenuIcon,
-  HistoryMenuIcon,
-  LibraryMenuIcon,
-  MeasuresMenuIcon,
-} from '../components/MoreMenuIcons'
+import { NavGlyph } from '../components/NavGlyph'
 import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
 import { PlusIcon } from '../components/PlusIcon'
 import { buildWeightProgress } from '../lib/weightProgress'
@@ -226,74 +220,46 @@ export function TodayScreen({
     <section className="screen today-screen">
       <header className="screen-header today-header">
         <div className="today-menu-row" role="toolbar" aria-label="Меню">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onOpenDiary}
-            aria-label="Дневник"
-            title="Дневник"
-          >
-            <DiaryMenuIcon />
+          <button type="button" className="today-nav-item" onClick={onOpenDiary}>
+            <span className="today-nav-icon">
+              <NavGlyph name="diary" label="Дневник" />
+            </span>
+            <span className="today-nav-label">Дневник</span>
+          </button>
+          <button type="button" className="today-nav-item" onClick={onOpenHistory}>
+            <span className="today-nav-icon">
+              <NavGlyph name="history" label="История" />
+            </span>
+            <span className="today-nav-label">История</span>
+          </button>
+          <button type="button" className="today-nav-item" onClick={onOpenCare}>
+            <span className="today-nav-icon">
+              <NavGlyph name="care" label="Уход" />
+            </span>
+            <span className="today-nav-label">Уход</span>
+          </button>
+          <button type="button" className="today-nav-item" onClick={onOpenMeasures}>
+            <span className="today-nav-icon">
+              <NavGlyph name="measures" label="Обмеры" />
+            </span>
+            <span className="today-nav-label">Обмеры</span>
+          </button>
+          <button type="button" className="today-nav-item" onClick={onOpenLibrary}>
+            <span className="today-nav-icon">
+              <NavGlyph name="library" label="Каталог" />
+            </span>
+            <span className="today-nav-label">Каталог</span>
           </button>
           <button
             type="button"
-            className="icon-btn"
-            onClick={onOpenHistory}
-            aria-label="История"
-            title="История"
-          >
-            <HistoryMenuIcon />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onOpenCare}
-            aria-label="Уход"
-            title="Уход"
-          >
-            <CareMenuIcon />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onOpenMeasures}
-            aria-label="Обмеры"
-            title="Обмеры"
-          >
-            <MeasuresMenuIcon />
-          </button>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onOpenLibrary}
-            aria-label="Справочник"
-            title="Справочник"
-          >
-            <LibraryMenuIcon />
-          </button>
-          <button
-            type="button"
-            className={`icon-btn profile-btn${profileReady ? '' : ' warn'}`}
+            className={`today-nav-item${profileReady ? '' : ' warn'}`}
             onClick={onOpenProfile}
             aria-label="Профиль и норма калорий"
-            title="Профиль"
           >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden
-              style={{ width: 24, height: 24, display: 'block', flexShrink: 0 }}
-            >
-              <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
-              <path
-                d="M5 19.5c1.2-3.2 3.6-4.8 7-4.8s5.8 1.6 7 4.8"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
+            <span className="today-nav-icon">
+              <NavGlyph name="profile" label="Профиль" />
+            </span>
+            <span className="today-nav-label">Профиль</span>
           </button>
         </div>
         <div className="today-date-nav">

@@ -2,20 +2,24 @@
 
 :root {
   color-scheme: light;
-  --bg: #e8f0f2;
-  --bg-deep: #d5e4e8;
-  --surface: #f7fbfc;
-  --ink: #14262c;
-  --muted: #5a7178;
-  --line: #c5d6dc;
-  --accent: #0f4c5c;
-  --accent-soft: #d2e8ee;
-  --warm: #b85c38;
-  --warm-soft: #f3e2d8;
-  --ok: #2f7d4c;
-  --danger: #a33b3b;
-  --shadow: 0 1px 0 rgba(20, 38, 44, 0.04);
-  --radius: 16px;
+  --bg: #f8f6fb;
+  --bg-deep: #ebe6f2;
+  --surface: #fffcff;
+  --ink: #2c2436;
+  --muted: #71687a;
+  --line: #ddd5e6;
+  /* pansy: petal violet · golden center · leaf green */
+  --accent: #7d5f9c;
+  --accent-soft: #ebe4f4;
+  --warm: #e6d59a;
+  --warm-soft: #f6f1dc;
+  --warm-ink: #4a4228;
+  --warm-text: #b89a3c;
+  --ok: #5e8a48;
+  --ok-soft: #e5f0df;
+  --danger: #b85a6a;
+  --shadow: 0 1px 0 rgba(44, 36, 54, 0.04);
+  --radius: 18px;
   --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
   --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
   --nav-pad-y: 10px;
@@ -26,10 +30,7 @@
   line-height: 1.45;
   font-weight: 400;
   color: var(--ink);
-  background:
-    radial-gradient(ellipse 70% 45% at 0% 0%, #cfe3e9 0%, transparent 55%),
-    radial-gradient(ellipse 55% 35% at 100% 10%, #e8ddd4 0%, transparent 50%),
-    var(--bg);
+  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;

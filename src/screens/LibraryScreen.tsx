@@ -58,7 +58,7 @@ export function LibraryScreen({
           <button type="button" className="link-btn" onClick={onBack}>
             {backLabel}
           </button>
-          <h1>Справочник</h1>
+          <h1>Каталог</h1>
         </div>
         <button
           type="button"

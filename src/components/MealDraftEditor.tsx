@@ -398,7 +398,7 @@ export function removeDraftItem(
 function sourceMark(fromLibrary: boolean, unmatched: boolean, needsPick = false) {
   if (fromLibrary) {
     return (
-      <span className="draft-source-mark ok" title="Из справочника" aria-label="Из справочника">
+      <span className="draft-source-mark ok" title="Из каталога" aria-label="Из каталога">
         <LibraryMenuIcon size={14} />
       </span>
     )
@@ -422,7 +422,7 @@ function sourceMark(fromLibrary: boolean, unmatched: boolean, needsPick = false)
 }
 
 function compactMacrosLine(item: MealItem, unmatched: boolean, needsPick: boolean): string {
-  if (needsPick) return 'Выберите вариант из справочника'
+  if (needsPick) return 'Выберите вариант из каталога'
   if (unmatched) return 'КБЖУ не заданы'
   return `${item.grams} г · ${Math.round(item.kcal)} ккал`
 }
@@ -723,8 +723,8 @@ export function MealDraftEditor({
                       type="button"
                       className="icon-btn sm draft-rematch-btn"
                       onClick={() => applyRematch(index, item)}
-                      aria-label="Найти в справочнике"
-                      title="Найти в справочнике"
+                      aria-label="Найти в каталоге"
+                      title="Найти в каталоге"
                     >
                       <LibraryMenuIcon size={16} />
                     </button>
@@ -764,7 +764,7 @@ export function MealDraftEditor({
               <div className="draft-pick-panel">
                 {needsPick && (
                   <>
-                    <p className="draft-pick-title">В справочнике несколько вариантов</p>
+                    <p className="draft-pick-title">В каталоге несколько вариантов</p>
                     <ul className="draft-food-list">
                       {pickGroups.primary.map((food) => (
                         <li key={food.id}>
@@ -802,7 +802,7 @@ export function MealDraftEditor({
                       }
                     >
                       <span>
-                        {needsPick ? 'Похожие' : 'Похожие в справочнике'}
+                        {needsPick ? 'Похожие' : 'Похожие в каталоге'}
                         <span className="muted"> · {pickGroups.related.length}</span>
                       </span>
                       <span className="draft-pick-related-chevron" aria-hidden>
@@ -924,12 +924,12 @@ export function MealDraftEditor({
             </div>
             {fromLibrary && (
               <p className="muted small draft-kbju-hint">
-                КБЖУ из справочника — меняйте порцию, нажмите название чтобы заменить, или отвяжите для ручного ввода.
+                КБЖУ из каталога — меняйте порцию, нажмите название чтобы заменить, или отвяжите для ручного ввода.
               </p>
             )}
             {unmatched && (
               <p className="muted small draft-kbju-hint">
-                Введите КБЖУ вручную, оцените через ИИ или найдите в справочнике.
+                Введите КБЖУ вручную, оцените через ИИ или найдите в каталоге.
               </p>
             )}
 

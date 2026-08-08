@@ -50,7 +50,7 @@ export function StepsHistoryScreen({ data, onBack, onSave }: Props) {
       .filter((s) => s.count > 0)
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((s) => ({ date: s.date, value: s.count }))
-    return [{ id: 'steps', label: 'Шаги', color: '#2f7d4c', points }]
+    return [{ id: 'steps', label: 'Шаги', color: '#5e8a48', points }]
   }, [history])
 
   const saveEntry = async () => {

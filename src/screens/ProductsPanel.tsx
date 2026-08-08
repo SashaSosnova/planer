@@ -611,7 +611,17 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
 
   return (
     <div className="panel-stack">
-      <div className="section-head products-toolbar">
+      <div className="catalog-toolbar">
+        <label className="field catalog-search">
+          <span className="visually-hidden">Поиск продукта</span>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Найти продукт…"
+            autoComplete="off"
+          />
+        </label>
         <button
           type="button"
           className="primary-btn icon-cta"
@@ -866,19 +876,6 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
       )}
 
       {!adding && !editId && info && <p className="form-msg">{info}</p>}
-
-      {products.length > 0 && (
-        <label className="field catalog-search">
-          <span className="visually-hidden">Поиск продукта</span>
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Найти продукт…"
-            autoComplete="off"
-          />
-        </label>
-      )}
 
       {brandFilter && (
         <div className="place-chip-row" role="status">

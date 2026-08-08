@@ -57,14 +57,16 @@ export function deltaVsYesterdayWeight(
   const yesterday = addDaysIso(today, -1)
   const yesterdayEntry =
     [...sorted].reverse().find((w) => w.date === yesterday) ?? null
-  const current =
-    [...sorted].reverse().find((w) => w.date === today) ??
-    sorted[sorted.length - 1]!
+  const todayEntry =
+    [...sorted].reverse().find((w) => w.date === today) ?? null
+  const current = todayEntry ?? sorted[sorted.length - 1]!
 
+  // Prefer calendar-yesterday when we have today's weigh-in; otherwise latest
+  // vs previous entry (yesterdayEntry may equal current when today is missing).
   const baseline =
-    yesterdayEntry ??
-    [...sorted].reverse().find((w) => w.date < current.date) ??
-    null
+    yesterdayEntry && yesterdayEntry.date < current.date
+      ? yesterdayEntry
+      : ([...sorted].reverse().find((w) => w.date < current.date) ?? null)
   if (!baseline || baseline.date === current.date) return null
 
   return round1(current.kg - baseline.kg)

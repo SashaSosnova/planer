@@ -450,11 +450,7 @@ export function AddMealScreen({
             type="button"
             className="link-btn"
             onClick={() => {
-              setDate(todayIso())
-              setMealTypeTouched(false)
-              setDraft(null)
-              setInfo(null)
-              parsedTextRef.current = null
+              clearDraftForDateChange(todayIso())
             }}
           >
             Сегодня

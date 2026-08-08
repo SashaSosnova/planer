@@ -41,6 +41,18 @@ describe('deltaVsYesterdayWeight', () => {
       ),
     ).toBeCloseTo(-0.2, 1)
   })
+
+  it('falls back to latest vs previous when today has no weigh-in', () => {
+    expect(
+      deltaVsYesterdayWeight(
+        [
+          { id: '1', date: '2026-06-15', kg: 69, createdAt: 1 },
+          { id: '2', date: '2026-06-22', kg: 68.5, createdAt: 2 },
+        ],
+        '2026-06-23',
+      ),
+    ).toBeCloseTo(-0.5, 1)
+  })
 })
 
 describe('buildWeightProgress', () => {

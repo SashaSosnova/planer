@@ -1,12 +1,57 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { defaultFoodGrams } from '../lib/foodPortion'
-import { foodVariants } from '../lib/foodVariants'
+import { findFoodCandidates, findRelatedFoodCandidates, resolveCatalogMatch } from '../lib/foodMatch'
+import { capitalizeFoodName, sameFoodLabel } from '../lib/foodName'
+import { unmatchedMealItem } from '../lib/mealUnknown'
 import { round1, scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, MealItem, ParsedMealDraft } from '../types'
 import { CloseIcon } from './CloseIcon'
 import { DecimalInput } from './DecimalInput'
+import { LibraryMenuIcon } from './MoreMenuIcons'
 import { PlusIcon } from './PlusIcon'
 import { TrashIcon } from './TrashIcon'
+
+function SourceApproxIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      style={{ width: size, height: size, display: 'block', flexShrink: 0 }}
+    >
+      <path
+        d="M4 12c1.5-2.5 3-3.5 5-3.5s3.5 1 5 3.5 3 3.5 5 3.5 3.5-1 5-3.5"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function SourceUnknownIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      style={{ width: size, height: size, display: 'block', flexShrink: 0 }}
+    >
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        d="M9.6 9.4a2.6 2.6 0 0 1 5 1c0 1.5-2.1 2-2.1 3.4"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      <circle cx="12" cy="17" r="1" fill="currentColor" />
+    </svg>
+  )
+}
 
 export function emptyMealItem(): MealItem {
   return {
@@ -46,15 +91,55 @@ function formatMacros(m: Pick<MacroSet, 'kcal' | 'protein' | 'fat' | 'carbs'>): 
   return `${Math.round(m.kcal)} ккал · Б ${m.protein} · Ж ${m.fat} · У ${m.carbs}`
 }
 
-function formatPortion(item: MealItem): string {
-  return formatMacros(item)
-}
-
 function portionFromPer100(per100: MacroSet, grams: number): MacroSet {
   return scalePer100g(per100, grams)
 }
 
 type MacrosBasis = 'per100' | 'portion'
+
+/** Commit name on blur/Enter so rematch does not fire on every keystroke. */
+function ItemNameInput({
+  value,
+  onCommit,
+}: {
+  value: string
+  onCommit: (name: string) => void
+}) {
+  const [focused, setFocused] = useState(false)
+  const [text, setText] = useState(value)
+
+  useEffect(() => {
+    if (!focused) setText(value)
+  }, [value, focused])
+
+  const commit = () => {
+    const next = text
+    if (next.trim() !== value.trim()) onCommit(next)
+    else setText(value)
+  }
+
+  return (
+    <input
+      value={focused ? text : value}
+      placeholder="Продукт"
+      onFocus={() => {
+        setFocused(true)
+        setText(value)
+      }}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => {
+        setFocused(false)
+        commit()
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          ;(e.target as HTMLInputElement).blur()
+        }
+      }}
+    />
+  )
+}
 
 function clampMacroPatch(patch: Partial<MealItem>): Partial<MealItem> {
   const out: Partial<MealItem> = { ...patch }
@@ -62,6 +147,8 @@ function clampMacroPatch(patch: Partial<MealItem>): Partial<MealItem> {
     const v = out[key]
     if (v != null && (!Number.isFinite(v) || v < 0)) delete out[key]
   }
+  // Portion 0 would wipe КБЖУ via scale-to-zero and break «на 100 г».
+  if (out.grams != null && !(out.grams > 0)) delete out.grams
   return out
 }
 
@@ -75,8 +162,17 @@ export function applyItemPatch(
   return items.map((item, i) => {
     if (i !== index) return item
 
-    if (safe.source === 'library') {
-      return { ...item, ...safe, source: 'library' as const }
+    if (safe.source === 'library' || safe.source === 'unknown') {
+      return { ...item, ...safe, source: safe.source }
+    }
+
+    // Explicit detach from catalog (manual КБЖУ).
+    if (
+      safe.source === 'estimate' &&
+      Object.prototype.hasOwnProperty.call(safe, 'foodId') &&
+      !safe.foodId
+    ) {
+      return { ...item, ...safe, foodId: undefined, source: 'estimate' as const }
     }
 
     const editingMacros =
@@ -91,14 +187,26 @@ export function applyItemPatch(
       }
     }
 
-    // Renaming breaks the library link — otherwise old КБЖУ stick to a new name.
+    // Rename only — no silent rematch. Use rematchItemByName / replaceItemWithFood.
     if (safe.name != null && safe.name.trim() !== item.name.trim()) {
+      const rawName = safe.name.trim()
+      if (!rawName) {
+        return {
+          ...item,
+          name: safe.name,
+          foodId: undefined,
+          source: 'estimate' as const,
+        }
+      }
+      const name = capitalizeFoodName(rawName)
+      if (sameFoodLabel(name, item.name)) {
+        return { ...item, name }
+      }
       return {
         ...item,
-        ...safe,
-        name: safe.name,
+        name,
         foodId: undefined,
-        source: 'estimate' as const,
+        source: item.source === 'unknown' ? ('unknown' as const) : ('estimate' as const),
       }
     }
 
@@ -125,6 +233,112 @@ export function applyItemPatch(
   })
 }
 
+/** Primary disambiguation options + softer «Похожие» (never auto-picked). */
+export type CatalogPickGroups = {
+  primary: FoodItem[]
+  related: FoodItem[]
+}
+
+export function catalogPickGroups(name: string, foods: FoodItem[]): CatalogPickGroups {
+  const label = name.trim()
+  if (!label || foods.length === 0) return { primary: [], related: [] }
+
+  const resolved = resolveCatalogMatch(label, foods, { minScore: 70 })
+
+  let primary: FoodItem[] = []
+  let excludeIds: string[] = []
+
+  if (resolved.kind === 'match') {
+    // Keep auto-match; still offer softer cousins as «Похожие» (e.g. сыр → творожный сыр).
+    excludeIds = [resolved.food.id]
+  } else if (resolved.kind === 'ambiguous') {
+    primary = resolved.candidates.map((c) => c.food as FoodItem)
+    excludeIds = primary.map((f) => f.id)
+  } else {
+    // Unmatched: still surface near head-stem pairs as primary if several.
+    const near = findFoodCandidates(label, foods, 55, 6)
+    if (near.length >= 2) {
+      primary = near.map((c) => c.food as FoodItem)
+      excludeIds = primary.map((f) => f.id)
+    }
+  }
+
+  const related = findRelatedFoodCandidates(label, foods, excludeIds).map(
+    (c) => c.food as FoodItem,
+  )
+
+  return { primary, related }
+}
+
+/** Catalog variants the user should pick from (ambiguous short query). */
+export function catalogPickOptions(name: string, foods: FoodItem[]): FoodItem[] {
+  return catalogPickGroups(name, foods).primary
+}
+
+export function rematchItemByName(
+  items: MealItem[],
+  index: number,
+  name: string,
+  foods: FoodItem[],
+): MealItem[] {
+  return items.map((item, i) => {
+    if (i !== index) return item
+    const label = capitalizeFoodName(name.trim() || item.name)
+    if (!label) return item
+    const resolved = resolveCatalogMatch(label, foods, { minScore: 70 })
+    const grams =
+      item.grams > 0
+        ? item.grams
+        : resolved.kind === 'match'
+          ? defaultFoodGrams(resolved.food)
+          : 100
+    if (resolved.kind === 'match') {
+      const matched = resolved.food
+      return {
+        ...item,
+        name: matched.name,
+        grams,
+        foodId: matched.id,
+        ...scalePer100g(matched.per100g, grams),
+        source: 'library' as const,
+      }
+    }
+    return unmatchedMealItem(label, grams)
+  })
+}
+
+export function replaceItemWithFood(
+  items: MealItem[],
+  index: number,
+  food: FoodItem,
+): MealItem[] {
+  return items.map((item, i) => {
+    if (i !== index) return item
+    const grams = item.grams > 0 ? item.grams : defaultFoodGrams(food)
+    return {
+      ...item,
+      name: food.name,
+      grams,
+      foodId: food.id,
+      ...scalePer100g(food.per100g, grams),
+      source: 'library' as const,
+    }
+  })
+}
+
+/** Detach from catalog — keep current КБЖУ, allow manual edits. */
+export function unlinkItemFromLibrary(items: MealItem[], index: number): MealItem[] {
+  return items.map((item, i) => {
+    if (i !== index) return item
+    if (!item.foodId && item.source !== 'library') return item
+    return {
+      ...item,
+      foodId: undefined,
+      source: 'estimate' as const,
+    }
+  })
+}
+
 export function patchDraft(
   draft: ParsedMealDraft,
   index: number,
@@ -136,8 +350,42 @@ export function patchDraft(
     ...draft,
     items,
     totals: sumMacros(items),
-    isApproximate: draft.eatingOut || items.some((i) => i.source === 'estimate'),
+    isApproximate:
+      draft.eatingOut ||
+      items.some((i) => i.source === 'estimate' || i.source === 'unknown'),
   }
+}
+
+function sourceMark(fromLibrary: boolean, unmatched: boolean, needsPick = false) {
+  if (fromLibrary) {
+    return (
+      <span className="draft-source-mark ok" title="Из справочника" aria-label="Из справочника">
+        <LibraryMenuIcon size={14} />
+      </span>
+    )
+  }
+  if (needsPick || unmatched) {
+    return (
+      <span
+        className="draft-source-mark warn"
+        title={needsPick ? 'Уточните продукт' : 'Не найдено'}
+        aria-label={needsPick ? 'Уточните продукт' : 'Не найдено'}
+      >
+        <SourceUnknownIcon size={14} />
+      </span>
+    )
+  }
+  return (
+    <span className="draft-source-mark" title="Примерно" aria-label="Примерно">
+      <SourceApproxIcon size={14} />
+    </span>
+  )
+}
+
+function compactMacrosLine(item: MealItem, unmatched: boolean, needsPick: boolean): string {
+  if (needsPick) return 'Выберите вариант из справочника'
+  if (unmatched) return 'КБЖУ не заданы'
+  return `${item.grams} г · ${Math.round(item.kcal)} ккал`
 }
 
 type Props = {
@@ -149,6 +397,9 @@ type Props = {
   onAddFromFood?: (food: FoodItem) => void
   onEstimateProduct?: (text: string) => Promise<void>
   estimatingProduct?: boolean
+  /** Estimate КБЖУ for an unmatched / empty row in place. */
+  onEstimateItem?: (index: number) => Promise<void>
+  estimatingItemIndex?: number | null
   onSaveToLibrary?: (index: number) => void
   savingFoodIndex?: number | null
   /** Collapsed rows by default; expand one item with the pencil. */
@@ -164,6 +415,8 @@ export function MealDraftEditor({
   onAddFromFood,
   onEstimateProduct,
   estimatingProduct = false,
+  onEstimateItem,
+  estimatingItemIndex = null,
   onSaveToLibrary,
   savingFoodIndex = null,
   collapsible = false,
@@ -172,18 +425,41 @@ export function MealDraftEditor({
   const [macrosEdit, setMacrosEdit] = useState<{ index: number; basis: MacrosBasis } | null>(
     null,
   )
+  const [replacingIndex, setReplacingIndex] = useState<number | null>(null)
+  const [replaceQuery, setReplaceQuery] = useState('')
+  const [relatedOpenIndex, setRelatedOpenIndex] = useState<number | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [addQuery, setAddQuery] = useState('')
   const [estimateError, setEstimateError] = useState<string | null>(null)
 
+  const itemsPickKey = items
+    .map((i) => `${i.name}|${i.foodId ?? ''}|${i.source}`)
+    .join(';')
+
+  useEffect(() => {
+    if (!collapsible) return
+    const idx = items.findIndex((i) => {
+      if (i.foodId) return false
+      const g = catalogPickGroups(i.name, data.foods)
+      return g.primary.length >= 2 || g.related.length > 0
+    })
+    if (idx >= 0) setEditingIndex(idx)
+  }, [itemsPickKey, collapsible, data.foods, items])
+
   const collapseItem = () => {
     setEditingIndex(null)
     setMacrosEdit(null)
+    setReplacingIndex(null)
+    setReplaceQuery('')
+    setRelatedOpenIndex(null)
   }
 
   const openItem = (index: number) => {
     setEditingIndex(index)
     setMacrosEdit(null)
+    setReplacingIndex(null)
+    setReplaceQuery('')
+    setRelatedOpenIndex(null)
   }
 
   const toggleMacrosEdit = (index: number, basis: MacrosBasis) => {
@@ -216,6 +492,19 @@ export function MealDraftEditor({
       .slice(0, 36)
   }, [data.foods, addQuery])
 
+  const replaceFilteredFoods = useMemo(() => {
+    const q = replaceQuery.trim().toLowerCase()
+    const list = [...data.foods]
+    const filtered = q
+      ? list.filter(
+          (f) =>
+            f.name.toLowerCase().includes(q) ||
+            f.aliases.some((a) => a.toLowerCase().includes(q)),
+        )
+      : list
+    return filtered.sort((a, b) => a.name.localeCompare(b.name, 'ru')).slice(0, 36)
+  }, [data.foods, replaceQuery])
+
   const removeAt = (index: number) => {
     onRemoveItem?.(index)
     setMacrosEdit((cur) => {
@@ -230,6 +519,31 @@ export function MealDraftEditor({
       if (cur > index) return cur - 1
       return cur
     })
+    setReplacingIndex((cur) => {
+      if (cur == null) return null
+      if (cur === index) return null
+      if (cur > index) return cur - 1
+      return cur
+    })
+    setRelatedOpenIndex((cur) => {
+      if (cur == null) return null
+      if (cur === index) return null
+      if (cur > index) return cur - 1
+      return cur
+    })
+  }
+
+  const applyRematch = (index: number, item: MealItem) => {
+    const next = rematchItemByName([item], 0, item.name, data.foods)[0]!
+    onChangeItem(index, { ...next })
+  }
+
+  const applyReplace = (index: number, item: MealItem, food: FoodItem) => {
+    const next = replaceItemWithFood([item], 0, food)[0]!
+    onChangeItem(index, { ...next })
+    setReplacingIndex(null)
+    setReplaceQuery('')
+    setRelatedOpenIndex(null)
   }
 
   const closeAdd = () => {
@@ -271,12 +585,29 @@ export function MealDraftEditor({
     <ul className="draft-list">
       {items.map((item, index) => {
         const linked = item.foodId ? data.foods.find((f) => f.id === item.foodId) : undefined
-        // Trust catalog link even if the model left source=estimate.
         const fromLibrary = Boolean(linked)
+        const unmatched = item.source === 'unknown'
+        const estimated = item.source === 'estimate'
+        const pickGroups = catalogPickGroups(item.name, data.foods)
+        const needsPick = !fromLibrary && pickGroups.primary.length >= 2
+        const hasRelated = pickGroups.related.length > 0
+        const showPickPanel = needsPick || hasRelated
+        const askClarify = needsPick || (!fromLibrary && hasRelated)
         const per100 = linked ? linked.per100g : per100FromPortion(item)
-        const variants = linked ? foodVariants(linked, data.foods) : []
+        const portionGrams =
+          linked?.portionGrams != null && linked.portionGrams > 0
+            ? linked.portionGrams
+            : null
         const expanded = !collapsible || editingIndex === index
+        const replacing = replacingIndex === index
         const label = item.name.trim() || 'продукт'
+        const canEditMacros = !fromLibrary
+        const pieces =
+          portionGrams != null && item.grams > 0
+            ? Math.round((item.grams / portionGrams) * 100) / 100
+            : portionGrams != null
+              ? 1
+              : null
 
         if (!expanded) {
           return (
@@ -290,10 +621,10 @@ export function MealDraftEditor({
                 <div className="draft-compact-text">
                   <div className="draft-compact-title">
                     <strong className="draft-compact-name">{item.name.trim() || 'Без названия'}</strong>
-                    {!fromLibrary && <span className="badge">примерно</span>}
+                    {sourceMark(fromLibrary, unmatched, askClarify)}
                   </div>
                   <p className="muted small">
-                    {item.grams} г · {formatPortion(item)}
+                    {compactMacrosLine(item, unmatched, askClarify)}
                   </p>
                 </div>
               </button>
@@ -306,36 +637,231 @@ export function MealDraftEditor({
             <div className="draft-item-top">
               {fromLibrary ? (
                 <div className="field grow">
-                  <span>Название</span>
-                  <div className="draft-item-title-name">{item.name}</div>
+                  <span>Продукт</span>
+                  <button
+                    type="button"
+                    className={`draft-item-title-name draft-item-title-btn${replacing ? ' active' : ''}`}
+                    onClick={() => {
+                      if (replacing) {
+                        setReplacingIndex(null)
+                        setReplaceQuery('')
+                        return
+                      }
+                      setReplacingIndex(index)
+                      setReplaceQuery(item.name)
+                      setMacrosEdit(null)
+                    }}
+                    aria-expanded={replacing}
+                    aria-label={`Заменить ${label}`}
+                    title="Заменить продукт"
+                  >
+                    <span className="draft-item-title-text">{item.name}</span>
+                    {sourceMark(true, false)}
+                  </button>
                 </div>
               ) : (
-                <label className="field grow">
-                  <span>Название</span>
-                  <input
-                    value={item.name}
-                    onChange={(e) => onChangeItem(index, { name: e.target.value })}
-                    placeholder="Продукт"
+                <div className="field grow">
+                  <span>
+                    Название
+                    {askClarify
+                      ? ' · уточните'
+                      : unmatched
+                        ? ' · не найдено'
+                        : ' · примерно'}
+                  </span>
+                  <div className="draft-name-with-action">
+                    <ItemNameInput
+                      value={item.name}
+                      onCommit={(name) => onChangeItem(index, { name })}
+                    />
+                    <button
+                      type="button"
+                      className="icon-btn sm draft-rematch-btn"
+                      onClick={() => applyRematch(index, item)}
+                      aria-label="Найти в справочнике"
+                      title="Найти в справочнике"
+                    >
+                      <LibraryMenuIcon size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="draft-portion-fields">
+                {portionGrams != null && pieces != null && (
+                  <label className="field draft-portion-field">
+                    <span>Шт</span>
+                    <DecimalInput
+                      className="draft-portion-input"
+                      value={pieces}
+                      onCommit={(pcs) => {
+                        if (!(pcs > 0)) return
+                        onChangeItem(index, {
+                          grams: Math.round(pcs * portionGrams * 10) / 10,
+                        })
+                      }}
+                      ariaLabel="Штуки"
+                    />
+                  </label>
+                )}
+                <label className="field draft-portion-field">
+                  <span>Порция, г</span>
+                  <DecimalInput
+                    className="draft-portion-input"
+                    value={item.grams}
+                    onCommit={(grams) => onChangeItem(index, { grams })}
+                    ariaLabel="Порция, г"
                   />
                 </label>
-              )}
-              <label className="field draft-portion-field">
-                <span>Порция, г</span>
-                <DecimalInput
-                  className="draft-portion-input"
-                  value={item.grams}
-                  onCommit={(grams) => onChangeItem(index, { grams })}
-                  ariaLabel="Порция, г"
-                />
-              </label>
+              </div>
             </div>
+
+            {showPickPanel && (
+              <div className="draft-pick-panel">
+                {needsPick && (
+                  <>
+                    <p className="draft-pick-title">В справочнике несколько вариантов</p>
+                    <ul className="draft-food-list">
+                      {pickGroups.primary.map((food) => (
+                        <li key={food.id}>
+                          <button
+                            type="button"
+                            className="draft-food-option"
+                            onClick={() => applyReplace(index, item, food)}
+                          >
+                            <strong>{food.name}</strong>
+                            <span className="muted small">
+                              {food.brand ? `${food.brand} · ` : ''}
+                              {Math.round(food.per100g.kcal)} ккал / 100 г
+                              {food.portionGrams != null && food.portionGrams > 0
+                                ? ` · порция ${food.portionGrams} г`
+                                : ''}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+                {hasRelated && (
+                  <div className="draft-pick-related">
+                    <button
+                      type="button"
+                      className={
+                        needsPick
+                          ? 'draft-pick-related-toggle draft-pick-related-toggle-nested'
+                          : 'draft-pick-related-toggle'
+                      }
+                      aria-expanded={relatedOpenIndex === index}
+                      onClick={() =>
+                        setRelatedOpenIndex((cur) => (cur === index ? null : index))
+                      }
+                    >
+                      <span>
+                        {needsPick ? 'Похожие' : 'Похожие в справочнике'}
+                        <span className="muted"> · {pickGroups.related.length}</span>
+                      </span>
+                      <span className="draft-pick-related-chevron" aria-hidden>
+                        {relatedOpenIndex === index ? '▾' : '▸'}
+                      </span>
+                    </button>
+                    {relatedOpenIndex === index && (
+                      <ul className="draft-food-list">
+                        {pickGroups.related.map((food) => (
+                          <li key={food.id}>
+                            <button
+                              type="button"
+                              className="draft-food-option"
+                              onClick={() => applyReplace(index, item, food)}
+                            >
+                              <strong>{food.name}</strong>
+                              <span className="muted small">
+                                {food.brand ? `${food.brand} · ` : ''}
+                                {Math.round(food.per100g.kcal)} ккал / 100 г
+                                {food.portionGrams != null && food.portionGrams > 0
+                                  ? ` · порция ${food.portionGrams} г`
+                                  : ''}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+                {onEstimateItem && !fromLibrary && (
+                  <button
+                    type="button"
+                    className="ghost-btn draft-action-btn draft-pick-estimate"
+                    disabled={estimatingItemIndex != null}
+                    onClick={() => void onEstimateItem(index)}
+                  >
+                    {estimatingItemIndex === index
+                      ? 'Оцениваю…'
+                      : 'Нет подходящего — оценить ИИ'}
+                  </button>
+                )}
+              </div>
+            )}
+
+            {replacing && (
+              <div className="draft-replace-panel">
+                <label className="field">
+                  <span>Поиск в моих продуктах</span>
+                  <input
+                    value={replaceQuery}
+                    onChange={(e) => setReplaceQuery(e.target.value)}
+                    placeholder="Название"
+                    autoFocus
+                  />
+                </label>
+                <div className="draft-food-picker">
+                  {replaceFilteredFoods.length === 0 ? (
+                    <p className="muted small">Ничего не найдено.</p>
+                  ) : (
+                    <ul className="draft-food-list">
+                      {replaceFilteredFoods.map((food) => (
+                        <li key={food.id}>
+                          <button
+                            type="button"
+                            className="draft-food-option"
+                            onClick={() => applyReplace(index, item, food)}
+                          >
+                            <span className="food-row-title">
+                              <strong>{food.name}</strong>
+                              {food.brand && <span className="brand-chip">{food.brand}</span>}
+                            </span>
+                            <span className="muted small">
+                              {Math.round(food.per100g.kcal)} ккал / 100 г
+                              {food.portionGrams != null && food.portionGrams > 0
+                                ? ` · порция ${food.portionGrams} г`
+                                : ''}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="link-btn"
+                  onClick={() => {
+                    setReplacingIndex(null)
+                    setReplaceQuery('')
+                  }}
+                >
+                  Отмена
+                </button>
+              </div>
+            )}
 
             <div className="draft-kbju-rows">
               {per100 && (
                 <button
                   type="button"
                   className={`draft-kbju-row${macrosEdit?.index === index && macrosEdit.basis === 'per100' ? ' active' : ''}`}
-                  onClick={() => toggleMacrosEdit(index, 'per100')}
+                  onClick={() => canEditMacros && toggleMacrosEdit(index, 'per100')}
+                  disabled={!canEditMacros}
                 >
                   <span className="draft-kbju-label">На 100 г</span>
                   <span>{formatMacros(per100)}</span>
@@ -344,14 +870,25 @@ export function MealDraftEditor({
               <button
                 type="button"
                 className={`draft-kbju-row${macrosEdit?.index === index && macrosEdit.basis === 'portion' ? ' active' : ''}`}
-                onClick={() => toggleMacrosEdit(index, 'portion')}
+                onClick={() => canEditMacros && toggleMacrosEdit(index, 'portion')}
+                disabled={!canEditMacros}
               >
                 <span className="draft-kbju-label">Порция</span>
-                <span>{formatMacros(item)}</span>
+                <span>{unmatched ? 'КБЖУ не заданы' : formatMacros(item)}</span>
               </button>
             </div>
+            {fromLibrary && (
+              <p className="muted small draft-kbju-hint">
+                КБЖУ из справочника — меняйте порцию, нажмите название чтобы заменить, или отвяжите для ручного ввода.
+              </p>
+            )}
+            {unmatched && (
+              <p className="muted small draft-kbju-hint">
+                Введите КБЖУ вручную, оцените через ИИ или найдите в справочнике.
+              </p>
+            )}
 
-            {macrosEdit?.index === index && (
+            {canEditMacros && macrosEdit?.index === index && (
               <div className="draft-macros">
                 <p className="muted small">
                   {macrosEdit.basis === 'per100' ? 'КБЖУ на 100 г' : 'КБЖУ порции'}
@@ -425,44 +962,62 @@ export function MealDraftEditor({
               </div>
             )}
 
-            {variants.length > 0 && (
-              <label className="field">
-                <span>Вариант продукта</span>
-                <select
-                  value={item.foodId ?? ''}
-                  onChange={(e) => {
-                    if (!e.target.value) return
-                    const food = data.foods.find((f) => f.id === e.target.value)
-                    if (!food) return
-                    const macros = scalePer100g(food.per100g, item.grams)
-                    onChangeItem(index, {
-                      foodId: food.id,
-                      name: food.name,
-                      source: 'library',
-                      ...macros,
-                    })
-                  }}
-                >
-                  {variants.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-
             <div className="draft-item-footer">
-              {!fromLibrary && onSaveToLibrary && Boolean(item.name.trim()) && (
-                <button
-                  type="button"
-                  className="link-btn draft-remember-btn"
-                  disabled={savingFoodIndex != null}
-                  onClick={() => onSaveToLibrary(index)}
-                >
-                  {savingFoodIndex === index ? 'Сохраняю…' : 'Запомнить в мои продукты'}
-                </button>
-              )}
+              <div className="draft-item-footer-links">
+                {fromLibrary && (
+                  <button
+                    type="button"
+                    className="link-btn draft-remember-btn"
+                    onClick={() => {
+                      onChangeItem(index, { foodId: undefined, source: 'estimate' })
+                      setMacrosEdit({ index, basis: 'portion' })
+                    }}
+                  >
+                    Править КБЖУ вручную
+                  </button>
+                )}
+                {unmatched && onEstimateItem && !showPickPanel && (
+                  <button
+                    type="button"
+                    className="ghost-btn draft-action-btn"
+                    disabled={estimatingItemIndex != null}
+                    onClick={() => void onEstimateItem(index)}
+                  >
+                    {estimatingItemIndex === index ? 'Оцениваю…' : 'Оценить КБЖУ'}
+                  </button>
+                )}
+                {!fromLibrary &&
+                  onSaveToLibrary &&
+                  Boolean(item.name.trim()) &&
+                  !unmatched && (
+                    <button
+                      type="button"
+                      className={`ghost-btn draft-remember-btn${estimated ? ' draft-remember-emphasis' : ''}`}
+                      disabled={savingFoodIndex != null || item.kcal <= 0}
+                      onClick={() => onSaveToLibrary(index)}
+                    >
+                      {savingFoodIndex === index
+                        ? 'Сохраняю…'
+                        : 'Запомнить в мои продукты'}
+                    </button>
+                  )}
+                {!fromLibrary &&
+                  onSaveToLibrary &&
+                  unmatched &&
+                  Boolean(item.name.trim()) &&
+                  item.kcal > 0 && (
+                    <button
+                      type="button"
+                      className="ghost-btn draft-remember-btn draft-remember-emphasis"
+                      disabled={savingFoodIndex != null}
+                      onClick={() => onSaveToLibrary(index)}
+                    >
+                      {savingFoodIndex === index
+                        ? 'Сохраняю…'
+                        : 'Запомнить в мои продукты'}
+                    </button>
+                  )}
+              </div>
               {(collapsible || onRemoveItem) && (
                 <div className="draft-item-footer-actions">
                   {collapsible && (

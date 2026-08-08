@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
 
 function parseNum(value: string): number | null {
-  const n = Number(value.replace(',', '.'))
+  const t = value.trim().replace(',', '.')
+  // Number('') === 0 in JS — empty must not count as zero.
+  if (!t) return null
+  const n = Number(t)
   if (!Number.isFinite(n) || n < 0) return null
   return n
 }

@@ -67,7 +67,7 @@ export type FoodItem = {
   menuId?: string
 }
 
-export type MealItemSource = 'library' | 'estimate'
+export type MealItemSource = 'library' | 'estimate' | 'unknown'
 
 export type MealItem = {
   name: string

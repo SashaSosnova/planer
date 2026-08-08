@@ -5,6 +5,7 @@ import { useAppData } from './hooks/useAppData'
 import { useSettings } from './hooks/useSettings'
 import { useSwipeBack } from './hooks/useSwipeBack'
 import { buildTodayTimeline } from './lib/dayStats'
+import { todayIso } from './lib/date'
 import {
   hasStepsPermission,
   isHealthStepsSupported,
@@ -29,7 +30,13 @@ import type { MealType } from './types'
 import './App.css'
 
 type Overlay =
-  | { type: 'add-meal'; prefillText?: string; mealType?: MealType; date?: string }
+  | {
+      type: 'add-meal'
+      prefillText?: string
+      mealType?: MealType
+      date?: string
+      seedMealId?: string
+    }
   | { type: 'edit-meal'; mealId: string }
   | { type: 'profile'; openCycleCal?: boolean }
   | { type: 'weight-history' }
@@ -251,6 +258,7 @@ export default function App() {
             prefillText={overlay.prefillText}
             initialMealType={overlay.mealType}
             initialDate={overlay.date}
+            seedMealId={overlay.seedMealId}
             onBack={closeOverlay}
             onSaveMeal={saveMeal}
             onSaveFood={saveFood}
@@ -270,6 +278,13 @@ export default function App() {
             onDelete={deleteMeal}
             onSaveFood={saveFood}
             onSaveMedCheck={saveMedCheck}
+            onRepeatToday={() =>
+              setOverlay({
+                type: 'add-meal',
+                seedMealId: editMeal.id,
+                date: todayIso(),
+              })
+            }
           />
         )}
 

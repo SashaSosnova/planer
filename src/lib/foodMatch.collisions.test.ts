@@ -69,6 +69,11 @@ const FALSE_FRIENDS: Array<{
     distractor: 'Паста с кабачком и курицей',
     distractorKind: 'dish',
   },
+  {
+    query: 'куриное филе гриль',
+    intended: 'Куриное филе гриль',
+    distractor: 'Куриное филе бедра сырое',
+  },
 ]
 
 /** Inflection / wording that must still hit the same product. */
@@ -168,7 +173,8 @@ describe('finalizeDraft rejects LLM mislinks for false friends', () => {
       wrongName: 'Творожный сыр',
       wrongId: 'cream',
       catalog: [food('cream', 'Творожный сыр')],
-      expectName: 'творог',
+      expectName: 'Творог',
+      expectSource: 'unknown' as const,
     },
     {
       userText: '200 гр творога',
@@ -184,7 +190,8 @@ describe('finalizeDraft rejects LLM mislinks for false friends', () => {
       wrongName: 'Сырники',
       wrongId: 'syrniki',
       catalog: [food('syrniki', 'Сырники', 'dish')],
-      expectName: 'сыр',
+      expectName: 'Сыр',
+      expectSource: 'unknown' as const,
     },
     {
       userText: 'рис 100 г',
@@ -200,7 +207,8 @@ describe('finalizeDraft rejects LLM mislinks for false friends', () => {
       wrongName: 'Молочный коктейль',
       wrongId: 'shake',
       catalog: [food('shake', 'Молочный коктейль', 'dish')],
-      expectName: 'молоко',
+      expectName: 'Молоко',
+      expectSource: 'unknown' as const,
     },
     {
       userText: 'курица 150 г',
@@ -216,7 +224,8 @@ describe('finalizeDraft rejects LLM mislinks for false friends', () => {
       wrongName: 'Паста с кабачком и курицей',
       wrongId: 'dish',
       catalog: [food('dish', 'Паста с кабачком и курицей', 'dish')],
-      expectName: 'паста',
+      expectName: 'Паста',
+      expectSource: 'unknown' as const,
     },
   ])(
     '$userText: model linked $wrongName → $expectName',

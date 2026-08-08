@@ -1,8 +1,10 @@
 import type { FoodRef, MealItem, MealType, ParsedMealDraft } from '../types'
 import { deepseekJson } from './deepseek'
-import { findBestFood } from './foodMatch'
+import { resolveCatalogMatch } from './foodMatch'
 import { coerceMealType, defaultMealTypeForNow } from './labels'
 import { defaultFoodGrams, defaultGramsForFoodName } from './foodPortion'
+import { capitalizeFoodName } from './foodName'
+import { unmatchedMealItem } from './mealUnknown'
 import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
 import {
   buildMealEstimatePrompt,
@@ -31,7 +33,7 @@ function toEstimateItem(
   macros: { kcal: number; protein: number; fat: number; carbs: number },
 ): MealItem {
   return {
-    name,
+    name: capitalizeFoodName(name),
     grams,
     kcal: nonNeg(macros.kcal),
     protein: nonNeg(macros.protein),
@@ -49,6 +51,7 @@ function resolveGrams(line: MealSplitLine, food: FoodRef | null, eatingOut: bool
 
 /**
  * Match split lines to catalog. Returns library items + unknowns still needing macros.
+ * Ambiguous catalog hits stay as unmatched (no LLM invent) so the UI can ask which product.
  */
 export function applyCatalogToSplit(
   lines: MealSplitLine[],
@@ -57,17 +60,26 @@ export function applyCatalogToSplit(
 ): {
   items: Array<MealItem | null>
   unknown: Array<{ index: number; name: string; grams: number }>
+  needsPick: number
 } {
   const items: Array<MealItem | null> = []
   const unknown: Array<{ index: number; name: string; grams: number }> = []
+  let needsPick = 0
 
   lines.forEach((line, index) => {
-    const name = line.name.trim() || 'Блюдо'
-    const food = !eatingOut ? findBestFood(name, foods, 70) : null
+    const name = capitalizeFoodName(line.name.trim() || 'Блюдо')
+    const resolved = !eatingOut ? resolveCatalogMatch(name, foods, { minScore: 70 }) : { kind: 'none' as const }
+    const food = resolved.kind === 'match' ? resolved.food : null
     const grams = resolveGrams({ ...line, name }, food, eatingOut)
 
-    if (food) {
-      items.push(toLibraryItem(food, grams))
+    if (resolved.kind === 'match') {
+      items.push(toLibraryItem(resolved.food, grams))
+      return
+    }
+
+    if (resolved.kind === 'ambiguous') {
+      needsPick += 1
+      items.push(unmatchedMealItem(name, grams))
       return
     }
 
@@ -75,7 +87,7 @@ export function applyCatalogToSplit(
     unknown.push({ index, name, grams })
   })
 
-  return { items, unknown }
+  return { items, unknown, needsPick }
 }
 
 export async function splitMealTextWithLlm(
@@ -119,8 +131,7 @@ export async function estimateUnknownMacrosWithLlm(
   return unknown.map((u, i) => {
     const row = rows[i]
     if (!row) {
-      const fb = scalePer100g(guessFallbackCategory(u.name), u.grams)
-      return { name: u.name, grams: u.grams, ...fb }
+      return { name: u.name, grams: u.grams, kcal: 0, protein: 0, fat: 0, carbs: 0 }
     }
     return {
       name: String(row.name || u.name),
@@ -133,6 +144,39 @@ export async function estimateUnknownMacrosWithLlm(
   })
 }
 
+/**
+ * Force-estimate one product (skip catalog match / disambiguation).
+ * Used when the user rejects ambiguous catalog options or asks to evaluate КБЖУ.
+ */
+export async function estimateMealItemMacros(
+  name: string,
+  grams: number,
+): Promise<MealItem> {
+  const label = capitalizeFoodName(name.trim() || 'Блюдо')
+  const g = grams > 0 ? grams : 100
+
+  try {
+    const [row] = await estimateUnknownMacrosWithLlm([{ name: label, grams: g }])
+    if (row && (row.kcal > 0 || row.protein > 0 || row.fat > 0 || row.carbs > 0)) {
+      return toEstimateItem(row.name || label, g, {
+        kcal: row.kcal,
+        protein: row.protein,
+        fat: row.fat,
+        carbs: row.carbs,
+      })
+    }
+  } catch {
+    // local heuristic below
+  }
+
+  return {
+    name: label,
+    grams: g,
+    ...scalePer100g(guessFallbackCategory(label), g),
+    source: 'estimate',
+  }
+}
+
 /** Full LLM pipeline: split → catalog → estimate gaps. */
 export async function parseMealCatalogFirst(
   text: string,
@@ -142,33 +186,32 @@ export async function parseMealCatalogFirst(
 ): Promise<ParsedMealDraft> {
   const split = await splitMealTextWithLlm(text, mealType, eatingOut)
   const out = Boolean(split.eatingOut ?? eatingOut)
-  const { items: slots, unknown } = applyCatalogToSplit(split.items, foods, out)
+  const { items: slots, unknown, needsPick } = applyCatalogToSplit(split.items, foods, out)
 
   let usedEstimateLlm = false
+  let usedUnmatched = false
   if (unknown.length > 0) {
-    usedEstimateLlm = true
-    let estimates: MacroEstimateLine[]
+    let estimates: MacroEstimateLine[] | null = null
     try {
       estimates = await estimateUnknownMacrosWithLlm(unknown)
+      usedEstimateLlm = true
     } catch {
-      estimates = unknown.map((u) => {
-        const fb = scalePer100g(guessFallbackCategory(u.name), u.grams)
-        return { name: u.name, grams: u.grams, ...fb }
-      })
+      estimates = null
     }
+
     unknown.forEach((u, i) => {
+      if (!estimates) {
+        usedUnmatched = true
+        slots[u.index] = unmatchedMealItem(u.name, u.grams)
+        return
+      }
       const est = estimates[i]!
-      // If macros are all zero for non-water, fall back locally
       const looksLikeDrink = /вода|чай(?!\s*с)|американо|эспрессо/i.test(u.name)
-      if (
-        !looksLikeDrink &&
-        est.kcal <= 0 &&
-        est.protein <= 0 &&
-        est.fat <= 0 &&
-        est.carbs <= 0
-      ) {
-        const fb = scalePer100g(guessFallbackCategory(u.name), u.grams)
-        slots[u.index] = toEstimateItem(u.name, u.grams, fb)
+      const empty =
+        est.kcal <= 0 && est.protein <= 0 && est.fat <= 0 && est.carbs <= 0
+      if (empty && !looksLikeDrink) {
+        usedUnmatched = true
+        slots[u.index] = unmatchedMealItem(u.name, u.grams)
       } else {
         slots[u.index] = toEstimateItem(est.name || u.name, u.grams, est)
       }
@@ -185,12 +228,21 @@ export async function parseMealCatalogFirst(
   if (typeof split.notes === 'string' && split.notes.trim()) {
     noteParts.push(split.notes.trim())
   }
+  if (needsPick > 0) {
+    noteParts.push(
+      needsPick === 1
+        ? 'Уточните продукт — в справочнике несколько похожих.'
+        : 'Уточните продукты — в справочнике несколько похожих.',
+    )
+  }
   if (allLibrary) {
     noteParts.push(
       items.length > 1
         ? 'Все позиции найдены в справочнике.'
         : 'Совпало с продуктом из справочника.',
     )
+  } else if (usedUnmatched) {
+    noteParts.push('Есть позиции не из справочника — КБЖУ не подставлялись автоматически.')
   } else if (usedEstimateLlm) {
     noteParts.push('Часть позиций оценена по КБЖУ (нет в справочнике).')
   }
@@ -199,7 +251,8 @@ export async function parseMealCatalogFirst(
     mealType: coerceMealType(split.mealType ?? mealType, defaultMealTypeForNow()),
     items,
     totals: sumMacros(items),
-    isApproximate: out || items.some((i) => i.source === 'estimate'),
+    isApproximate:
+      out || items.some((i) => i.source === 'estimate' || i.source === 'unknown'),
     eatingOut: out,
     parseSource: allLibrary ? 'library' : 'deepseek',
     notes: noteParts.length > 0 ? noteParts.join(' ') : undefined,

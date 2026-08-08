@@ -56,7 +56,8 @@ export function sanitizeMealItem(raw: unknown): MealItem | null {
   if (!name) return null
   const grams = nonNeg(item.grams, 0)
   if (!(grams > 0)) return null
-  const source = item.source === 'library' ? 'library' : 'estimate'
+  const source =
+    item.source === 'library' ? 'library' : item.source === 'unknown' ? 'unknown' : 'estimate'
   return {
     name,
     grams: round1(grams),

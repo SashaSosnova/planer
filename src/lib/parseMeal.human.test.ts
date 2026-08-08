@@ -57,7 +57,7 @@ type Expectation = {
   eatingOut?: boolean
   approximate?: boolean
   /** First item source */
-  source?: 'library' | 'estimate'
+  source?: 'library' | 'estimate' | 'unknown'
   /** First item library name */
   firstName?: string
   firstGrams?: number
@@ -341,7 +341,7 @@ const CASES: Array<{ input: string; exp: Expectation; cat: string }> = [
   {
     cat: 'edge',
     input: 'asdf qwerty 50 г',
-    exp: { source: 'estimate', firstGrams: 50, approximate: true },
+    exp: { source: 'unknown', firstGrams: 50, approximate: true },
   },
   {
     cat: 'edge',
@@ -380,17 +380,17 @@ const KNOWN_ISSUES: Array<{ input: string; note: string; check: (d: ParsedMealDr
   },
   {
     input: 'яичница',
-    note: 'Без продукта «Яичница» в справочнике → estimate, не Яйцо',
+    note: 'Без продукта «Яичница» в справочнике → unknown, не Яйцо',
     check: (d) => {
-      expect(d.items[0]!.source).toBe('estimate')
+      expect(d.items[0]!.source).toBe('unknown')
       expect(d.items[0]!.name.toLowerCase()).toContain('яичница')
     },
   },
   {
     input: 'тварог 200 г',
-    note: 'Опечатка со сменой буквы («тварог») — нет edit-distance, estimate',
+    note: 'Опечатка со сменой буквы («тварог») — нет edit-distance, unknown',
     check: (d) => {
-      expect(d.items[0]!.source).toBe('estimate')
+      expect(d.items[0]!.source).toBe('unknown')
       expect(d.items[0]!.grams).toBe(200)
     },
   },

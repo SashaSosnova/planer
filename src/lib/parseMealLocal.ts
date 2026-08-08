@@ -1,16 +1,16 @@
 import type { FoodRef, MealItem, MealType, ParsedMealDraft } from '../types'
 import { stripEatingOutMarkers, textSuggestsEatingOut } from './eatingOut'
 import { defaultFoodGrams, defaultGramsForFoodName } from './foodPortion'
-import { findBestFood, scoreFoodMatch } from './foodMatch'
+import { findBestFood, resolveCatalogMatch, scoreFoodMatch } from './foodMatch'
 import { defaultMealTypeForNow } from './labels'
 import { isComplexMealText } from './mealComplexity'
 import {
-  guessFallbackCategory,
   restaurantPortionGrams,
   round1,
   scalePer100g,
   sumMacros,
 } from './nutrition'
+import { unmatchedMealItem } from './mealUnknown'
 
 const DEFAULT_GRAMS = 100
 const DECIMAL_GUARD = '\uE000'
@@ -212,8 +212,9 @@ function toItem(
   eatingOut: boolean,
 ): MealItem {
   if (!eatingOut) {
-    const matched = findBestFood(name, foods)
-    if (matched) {
+    const resolved = resolveCatalogMatch(name, foods, { minScore: 70 })
+    if (resolved.kind === 'match') {
+      const matched = resolved.food
       const g = grams != null && grams > 0 ? grams : defaultFoodGrams(matched)
       const macros = scalePer100g(matched.per100g, g)
       return {
@@ -231,14 +232,7 @@ function toItem(
       : eatingOut
         ? restaurantPortionGrams(name)
         : defaultGramsForBase(name)
-  const per100 = guessFallbackCategory(name)
-  const macros = scalePer100g(per100, g)
-  return {
-    name,
-    grams: g,
-    ...macros,
-    source: 'estimate',
-  }
+  return unmatchedMealItem(name, g)
 }
 
 /** If the whole phrase is a known product/dish — one line, no splitting. */
@@ -257,8 +251,9 @@ function tryMatchWholeFood(
   if (!name) return null
 
   // Prefer dishes / longer names — lower min score for near-exact titles
-  const matched = findBestFood(name, foods, 70)
-  if (!matched) return null
+  const resolved = resolveCatalogMatch(name, foods, { minScore: 70 })
+  if (resolved.kind !== 'match') return null
+  const matched = resolved.food
 
   const g = grams ?? defaultFoodGrams(matched)
   const macros = scalePer100g(matched.per100g, g)
@@ -355,15 +350,17 @@ export function parseMealLocal(
     mealType: mealType ?? defaultMealTypeForNow(),
     items,
     totals: sumMacros(items),
-    isApproximate: eatingOut || items.some((i) => i.source === 'estimate'),
+    isApproximate: eatingOut || items.some((i) => i.source === 'estimate' || i.source === 'unknown'),
     eatingOut,
     parseSource: 'local',
     notes: eatingOut
       ? 'Локальная оценка «вне дома» (без LLM).'
       : expanded
         ? 'Локальный разбор: составные позиции (кофе с молоком и т.п.).'
-        : items.some((i) => i.source === 'estimate')
-          ? 'Локальная оценка без LLM — грубые средние по типу продукта.'
-          : undefined,
+        : items.some((i) => i.source === 'unknown')
+          ? 'Есть позиции не из справочника — КБЖУ не подставлялись.'
+          : items.some((i) => i.source === 'estimate')
+            ? 'Локальная оценка без LLM — грубые средние по типу продукта.'
+            : undefined,
   }
 }

@@ -12,14 +12,18 @@ import {
   MEAL_TYPE_LABELS,
   MEAL_TYPE_ORDER,
   extractMealTypeFromText,
+  mealPreviewText,
   mealRawTextFromItems,
   nextMealType,
 } from '../lib/labels'
 import { parseMeal } from '../lib/parseMeal'
+import { estimateMealItemMacros } from '../lib/parseMealCatalogFirst'
+import { cloneMealAsDraft, listRecentMeals } from '../lib/recentMeals'
 import { scalePer100g, sumMacros } from '../lib/nutrition'
 import type {
   AppData,
   FoodItem,
+  Meal,
   MealItem,
   MealParseSource,
   MealType,
@@ -53,6 +57,8 @@ type Props = {
   initialMealType?: MealType
   /** Prefill meal date (e.g. when adding from a past day). */
   initialDate?: string
+  /** Clone this meal into the draft (skip parse). */
+  seedMealId?: string
   onBack: () => void
   onSaveMeal: (input: {
     date: string
@@ -81,6 +87,7 @@ export function AddMealScreen({
   prefillText,
   initialMealType,
   initialDate,
+  seedMealId,
   onBack,
   onSaveMeal,
   onSaveFood,
@@ -105,8 +112,34 @@ export function AddMealScreen({
   const [info, setInfo] = useState<string | null>(null)
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
   const [estimatingProduct, setEstimatingProduct] = useState(false)
+  const [estimatingItemIndex, setEstimatingItemIndex] = useState<number | null>(null)
   const viewRef = useRef(view)
   viewRef.current = view
+  const seedAppliedRef = useRef(false)
+  const textAreaRef = useRef<HTMLTextAreaElement>(null)
+  /** Text that produced the current draft — edit only clears draft when it diverges. */
+  const parsedTextRef = useRef<string | null>(null)
+
+  const applyRepeatMeal = (meal: Meal) => {
+    const next = cloneMealAsDraft(meal)
+    setDraft(next)
+    setEatingOut(next.eatingOut)
+    setMealType(next.mealType)
+    setMealTypeTouched(true)
+    const body = meal.rawText || mealPreviewText(meal)
+    setText(body)
+    parsedTextRef.current = body
+    setInfo(next.notes ?? null)
+    setError(null)
+  }
+
+  useEffect(() => {
+    if (!seedMealId || seedAppliedRef.current) return
+    const meal = data.meals.find((m) => m.id === seedMealId)
+    if (!meal) return
+    seedAppliedRef.current = true
+    applyRepeatMeal(meal)
+  }, [seedMealId, data.meals])
 
   useEffect(() => {
     if (!registerBackHandler) return
@@ -132,6 +165,11 @@ export function AddMealScreen({
     [data.foods],
   )
 
+  const recentMeals = useMemo(
+    () => listRecentMeals(data.meals, 8, mealType),
+    [data.meals, mealType],
+  )
+
   const dayMeals = data.meals
     .filter((m) => m.date === date)
     .sort((a, b) => a.createdAt - b.createdAt)
@@ -141,11 +179,9 @@ export function AddMealScreen({
   useEffect(() => {
     if (mealTypeTouched) return
     const fromText = extractMealTypeFromText(text).mealType
-    if (fromText) {
-      setMealType(fromText)
-      return
-    }
-    setMealType(nextMealType(dayMealTypesKey.split('|').filter(Boolean) as MealType[]))
+    const next =
+      fromText ?? nextMealType(dayMealTypesKey.split('|').filter(Boolean) as MealType[])
+    setMealType((prev) => (prev === next ? prev : next))
   }, [date, dayMealTypesKey, text, mealTypeTouched])
 
   const runParse = async () => {
@@ -157,8 +193,11 @@ export function AddMealScreen({
       setDraft(result)
       setEatingOut(result.eatingOut)
       setMealType(result.mealType)
+      setMealTypeTouched(true)
       const cleaned = extractMealTypeFromText(text).cleaned
-      if (cleaned && cleaned !== text.trim()) setText(cleaned)
+      const nextText = cleaned && cleaned !== text.trim() ? cleaned : text
+      if (nextText !== text) setText(nextText)
+      parsedTextRef.current = nextText
       if (result.notes && shouldShowParseNotes(result.parseSource)) setInfo(result.notes)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Не удалось разобрать')
@@ -212,6 +251,8 @@ export function AddMealScreen({
       const saved = await onSaveFood({
         name: item.name.trim(),
         aliases: [],
+        kind: 'dish',
+        portionGrams: item.grams > 0 ? item.grams : undefined,
         per100g: {
           kcal: Math.round(item.kcal * k * 10) / 10,
           protein: Math.round(item.protein * k * 10) / 10,
@@ -235,6 +276,34 @@ export function AddMealScreen({
       setError(err instanceof Error ? err.message : 'Не удалось сохранить продукт')
     } finally {
       setSavingFoodIndex(null)
+    }
+  }
+
+  const estimateItemAt = async (index: number) => {
+    if (!draft || estimatingItemIndex != null) return
+    const item = draft.items[index]
+    if (!item?.name.trim()) return
+    setEstimatingItemIndex(index)
+    setError(null)
+    try {
+      const grams = item.grams > 0 ? item.grams : 100
+      const nextItem = await estimateMealItemMacros(item.name.trim(), grams)
+      setDraft((prev) => {
+        if (!prev) return prev
+        const items = prev.items.map((it, i) => (i === index ? nextItem : it))
+        return {
+          ...prev,
+          items,
+          totals: sumMacros(items),
+          isApproximate: true,
+          notes: prev.notes,
+        }
+      })
+      setInfo(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось оценить')
+    } finally {
+      setEstimatingItemIndex(null)
     }
   }
 
@@ -294,6 +363,7 @@ export function AddMealScreen({
             setMealTypeTouched(false)
             setDraft(null)
             setInfo(null)
+            parsedTextRef.current = null
           }}
         />
         <label className="check-row add-eating-out">
@@ -331,6 +401,7 @@ export function AddMealScreen({
               setMealTypeTouched(false)
               setDraft(null)
               setInfo(null)
+              parsedTextRef.current = null
             }}
           >
             Сегодня
@@ -340,19 +411,39 @@ export function AddMealScreen({
 
       <label className="field">
         <textarea
+          ref={textAreaRef}
           rows={4}
           value={text}
           onChange={(e) => {
-            const value = e.target.value
+            const el = e.target
+            const value = el.value
+            const selStart = el.selectionStart
+            const selEnd = el.selectionEnd
             setText(value)
-            // Draft is tied to the calculated text — invalidate on edit.
-            setDraft(null)
-            setInfo(null)
+            // Only tear down draft when the source text actually changed after parse.
+            // Clearing draft mid-keystroke remounts a large panel and resets the caret
+            // (typing appears reversed) in WebKit/Electron.
+            if (draft != null && value !== parsedTextRef.current) {
+              setDraft(null)
+              setInfo(null)
+              parsedTextRef.current = null
+            }
             const hinted = extractMealTypeFromText(value).mealType
             if (hinted) {
               setMealType(hinted)
               setMealTypeTouched(false)
             }
+            // Restore caret after React commits the controlled value.
+            queueMicrotask(() => {
+              const node = textAreaRef.current
+              if (!node || document.activeElement !== node) return
+              if (node.value !== value) return
+              try {
+                node.setSelectionRange(selStart, selEnd)
+              } catch {
+                /* ignore */
+              }
+            })
           }}
           placeholder="200 г творога, яблоко…"
           aria-label="Что было съедено и сколько граммов"
@@ -367,6 +458,30 @@ export function AddMealScreen({
       >
         {busy ? 'Считаю…' : 'Рассчитать'}
       </button>
+
+      {!draft && recentMeals.length > 0 && (
+        <div className="recent-meals">
+          <h2 className="recent-meals-title">Недавние</h2>
+          <ul className="recent-meals-list">
+            {recentMeals.map((meal) => (
+              <li key={meal.id}>
+                <button
+                  type="button"
+                  className="recent-meal-btn"
+                  onClick={() => applyRepeatMeal(meal)}
+                >
+                  <span className="recent-meal-type">{MEAL_TYPE_LABELS[meal.mealType]}</span>
+                  <span className="recent-meal-preview">{mealPreviewText(meal)}</span>
+                  <span className="muted small">
+                    {Math.round(meal.totals.kcal)} ккал
+                    {meal.eatingOut ? ' · вне дома' : ''}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {error && (
         <div className="form-msg-block">
@@ -441,6 +556,8 @@ export function AddMealScreen({
               })
             }
             estimatingProduct={estimatingProduct}
+            estimatingItemIndex={estimatingItemIndex}
+            onEstimateItem={(index) => estimateItemAt(index)}
             onEstimateProduct={async (line) => {
               setEstimatingProduct(true)
               setError(null)
@@ -454,7 +571,10 @@ export function AddMealScreen({
                     items,
                     totals: sumMacros(items),
                     isApproximate:
-                      prev.eatingOut || items.some((i) => i.source === 'estimate'),
+                      prev.eatingOut ||
+                      items.some(
+                        (i) => i.source === 'estimate' || i.source === 'unknown',
+                      ),
                     notes: result.notes ?? prev.notes,
                   }
                 })
@@ -481,7 +601,10 @@ export function AddMealScreen({
             <button
               type="button"
               className="icon-btn"
-              onClick={() => setDraft(null)}
+              onClick={() => {
+                setDraft(null)
+                parsedTextRef.current = null
+              }}
               aria-label="Закрыть"
               title="Закрыть"
             >

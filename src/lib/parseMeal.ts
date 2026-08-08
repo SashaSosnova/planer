@@ -1,6 +1,6 @@
 import type { FoodRef, MealType, ParsedMealDraft } from '../types'
 import { textSuggestsEatingOut } from './eatingOut'
-import { findBestFood, scoreFoodMatch } from './foodMatch'
+import { findBestFood, resolveCatalogMatch, scoreFoodMatch } from './foodMatch'
 import { isComplexMealText } from './mealComplexity'
 import { isLlmConfigured } from './parseMealLlm'
 import { parseMealCatalogFirst } from './parseMealCatalogFirst'
@@ -12,6 +12,7 @@ import {
   resolveParsedGrams,
 } from './foodPortion'
 import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
+import { unmatchedMealItem } from './mealUnknown'
 import { sanitizeMealItems } from './sanitize'
 
 /** Comma/semicolon/newline lists must not collapse to a single fuzzy library hit. */
@@ -30,8 +31,9 @@ function tryWholeLibraryMatch(
   const { name, grams: parsedGrams } = extractMealGrams(collapsed)
   if (!name) return null
 
-  const food = findBestFood(name, foods, 70)
-  if (!food) return null
+  const resolved = resolveCatalogMatch(name, foods, { minScore: 70 })
+  if (resolved.kind !== 'match') return null
+  const food = resolved.food
 
   const grams = parsedGrams ?? defaultFoodGrams(food)
   if (!Number.isFinite(grams) || grams <= 0) return null
@@ -159,7 +161,10 @@ export function finalizeDraft(
               fat: item.fat ?? 0,
               carbs: item.carbs ?? 0,
             }
-          : scalePer100g(guessFallbackCategory(userLabel), grams)
+          : null
+        if (!macros) {
+          return unmatchedMealItem(userLabel, grams)
+        }
         return {
           name: userLabel,
           grams,
@@ -197,7 +202,8 @@ export function finalizeDraft(
     mealType: coerceMealType(mealType),
     items: clean,
     totals: sumMacros(clean),
-    isApproximate: eatingOut || clean.some((i) => i.source === 'estimate'),
+    isApproximate:
+      eatingOut || clean.some((i) => i.source === 'estimate' || i.source === 'unknown'),
     eatingOut,
     parseSource,
     notes,

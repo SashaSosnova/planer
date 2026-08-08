@@ -13,6 +13,7 @@ import { todayIso } from '../lib/date'
 import { MEAL_TYPE_LABELS, MEAL_TYPE_ORDER, mealRawTextFromItems } from '../lib/labels'
 import type { MedDoseKey } from '../lib/medRoutine'
 import { parseMeal } from '../lib/parseMeal'
+import { estimateMealItemMacros } from '../lib/parseMealCatalogFirst'
 import { scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, Meal, MealItem, MealType } from '../types'
 
@@ -36,6 +37,7 @@ type Props = {
     dose: MedDoseKey
     taken: boolean
   }) => Promise<unknown>
+  onRepeatToday?: () => void
 }
 
 export function MealDetailScreen({
@@ -46,6 +48,7 @@ export function MealDetailScreen({
   onDelete,
   onSaveFood,
   onSaveMedCheck,
+  onRepeatToday,
 }: Props) {
   const [items, setItems] = useState(meal.items)
   const [date, setDate] = useState(meal.date)
@@ -55,6 +58,7 @@ export function MealDetailScreen({
   const [error, setError] = useState<string | null>(null)
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
   const [estimatingProduct, setEstimatingProduct] = useState(false)
+  const [estimatingItemIndex, setEstimatingItemIndex] = useState<number | null>(null)
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
 
   const skipAutosave = useRef(true)
@@ -167,6 +171,8 @@ export function MealDetailScreen({
       const saved = await onSaveFood({
         name: item.name,
         aliases: [],
+        kind: 'dish',
+        portionGrams: item.grams > 0 ? item.grams : undefined,
         per100g: {
           kcal: Math.round(item.kcal * k * 10) / 10,
           protein: Math.round(item.protein * k * 10) / 10,
@@ -190,6 +196,23 @@ export function MealDetailScreen({
     }
   }
 
+  const estimateItemAt = async (index: number) => {
+    if (estimatingItemIndex != null) return
+    const item = items[index]
+    if (!item?.name.trim()) return
+    setEstimatingItemIndex(index)
+    setError(null)
+    try {
+      const grams = item.grams > 0 ? item.grams : 100
+      const nextItem = await estimateMealItemMacros(item.name.trim(), grams)
+      setItems((prev) => prev.map((it, i) => (i === index ? nextItem : it)))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Не удалось оценить')
+    } finally {
+      setEstimatingItemIndex(null)
+    }
+  }
+
   const totals = sumMacros(items)
 
   return (
@@ -198,16 +221,6 @@ export function MealDetailScreen({
         <div className="meal-detail-nav">
           <button type="button" className="link-btn" onClick={() => void goBack()}>
             ← Назад
-          </button>
-          <button
-            type="button"
-            className="icon-btn sm danger"
-            disabled={busy}
-            onClick={() => void remove()}
-            aria-label="Удалить приём"
-            title="Удалить"
-          >
-            <TrashIcon size={18} />
           </button>
         </div>
 
@@ -253,6 +266,16 @@ export function MealDetailScreen({
 
       <MacroBar totals={totals} />
 
+      {onRepeatToday && (
+        <button
+          type="button"
+          className="ghost-btn meal-detail-repeat"
+          onClick={onRepeatToday}
+        >
+          Повторить сегодня
+        </button>
+      )}
+
       <MealDraftEditor
         key={meal.id}
         data={data}
@@ -265,6 +288,8 @@ export function MealDetailScreen({
         onAddItem={(seed) => setItems((prev) => [...prev, { ...emptyMealItem(), ...seed }])}
         onAddFromFood={(food) => setItems((prev) => [...prev, mealItemFromFood(food)])}
         estimatingProduct={estimatingProduct}
+        estimatingItemIndex={estimatingItemIndex}
+        onEstimateItem={(index) => estimateItemAt(index)}
         onEstimateProduct={async (line) => {
           setEstimatingProduct(true)
           setError(null)
@@ -288,6 +313,18 @@ export function MealDetailScreen({
         onSaveToLibrary={(index) => void saveToLibrary(index)}
         savingFoodIndex={savingFoodIndex}
       />
+
+      <div className="meal-detail-footer">
+        <button
+          type="button"
+          className="link-btn danger meal-detail-delete"
+          disabled={busy}
+          onClick={() => void remove()}
+        >
+          <TrashIcon size={16} />
+          Удалить приём
+        </button>
+      </div>
 
       {(saveState === 'saving' || saveState === 'saved') && (
         <p className="muted small meal-detail-save-hint">

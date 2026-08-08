@@ -110,9 +110,9 @@ describe('finalizeDraft (cloud library guard)', () => {
       'cloud',
       '200 гр творога',
     )
-    expect(draft.items[0]!.name).toBe('творога')
+    expect(draft.items[0]!.name).toBe('Творога')
     expect(draft.items[0]!.foodId).toBeUndefined()
-    expect(draft.items[0]!.source).toBe('estimate')
+    expect(draft.items[0]!.source).toBe('unknown')
   })
 
   it('rematches LLM estimate «творог» without foodId to catalog Творог', () => {
@@ -195,7 +195,7 @@ describe('applyCatalogToSplit', () => {
       [egg, butter],
       false,
     )
-    expect(unknown).toEqual([{ index: 2, name: 'хумус из марса', grams: 50 }])
+    expect(unknown).toEqual([{ index: 2, name: 'Хумус из марса', grams: 50 }])
     expect(items[0]).toMatchObject({ name: 'Яйцо куриное', grams: 55, source: 'library' })
     expect(items[1]).toMatchObject({ name: 'Масло сливочное', grams: 2, source: 'library' })
     expect(items[2]).toBeNull()

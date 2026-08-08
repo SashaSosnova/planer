@@ -22,6 +22,7 @@ import { deepseekJson } from './deepseek'
 import { isLlmConfigured } from './parseMealLlm'
 import {
   applyCatalogToSplit,
+  estimateMealItemMacros,
   estimateUnknownMacrosWithLlm,
   parseMealCatalogFirst,
   splitMealTextWithLlm,
@@ -131,12 +132,13 @@ describe('applyCatalogToSplit', () => {
     )
     expect(items[0]).toMatchObject(libMacros(CATALOG.find((f) => f.id === 'tvorog')!, 200))
     expect(items[1]).toBeNull()
-    expect(unknown).toEqual([{ index: 1, name: 'хумус из марса', grams: 50 }])
+    expect(unknown).toEqual([{ index: 1, name: 'Хумус из марса', grams: 50 }])
   })
 
   it('unknown without grams uses name default or 100', () => {
     const { unknown } = applyCatalogToSplit([{ name: 'хумус из марса', grams: null }], CATALOG, false)
     expect(unknown[0]!.grams).toBe(100)
+    expect(unknown[0]!.name).toBe('Хумус из марса')
   })
 
   it('unknown egg-like name without catalog still gets ~55 g via name default', () => {
@@ -280,11 +282,11 @@ describe('splitMealTextWithLlm / estimateUnknownMacrosWithLlm', () => {
     await expect(splitMealTextWithLlm('???', undefined, false)).rejects.toThrow(/не вернул/)
   })
 
-  it('estimate fills missing rows from fallback category', async () => {
+  it('estimate missing rows stay empty (caller marks not found)', async () => {
     vi.mocked(deepseekJson).mockResolvedValue({ items: [] })
     const rows = await estimateUnknownMacrosWithLlm([{ name: 'хумус', grams: 50 }])
     expect(rows).toHaveLength(1)
-    expect(rows[0]!.kcal).toBeGreaterThan(0)
+    expect(rows[0]!.kcal).toBe(0)
     expect(rows[0]!.grams).toBe(50)
   })
 
@@ -356,7 +358,7 @@ describe('parseMealCatalogFirst', () => {
     expect(deepseekJson).toHaveBeenCalledTimes(2)
   })
 
-  it('estimate LLM failure → local fallback category macros', async () => {
+  it('estimate LLM failure → mark not found (no fake kcal)', async () => {
     let call = 0
     vi.mocked(deepseekJson).mockImplementation(async (prompt: string) => {
       call++
@@ -367,17 +369,18 @@ describe('parseMealCatalogFirst', () => {
     })
     const draft = await parseMealCatalogFirst('хумус из марса 50 г', CATALOG, undefined, false)
     expect(call).toBe(2)
-    expect(draft.items[0]!.source).toBe('estimate')
-    expect(draft.items[0]!.kcal).toBeGreaterThan(0)
+    expect(draft.items[0]!.source).toBe('unknown')
+    expect(draft.items[0]!.kcal).toBe(0)
   })
 
-  it('zero macros on non-drink → local fallback category', async () => {
+  it('zero macros on non-drink → mark not found', async () => {
     mockSplitThenEstimate(
       { items: [{ name: 'хумус', grams: 50 }] },
       [{ name: 'хумус', grams: 50, kcal: 0, protein: 0, fat: 0, carbs: 0 }],
     )
     const draft = await parseMealCatalogFirst('хумус 50 г', [], undefined, false)
-    expect(draft.items[0]!.kcal).toBeGreaterThan(0)
+    expect(draft.items[0]!.source).toBe('unknown')
+    expect(draft.items[0]!.kcal).toBe(0)
   })
 
   it('water may keep ~0 kcal', async () => {
@@ -796,5 +799,25 @@ describe('realistic diary matrix → full catalog-first (mocked LLM)', () => {
     expect(draft.items).toHaveLength(1)
     expect(draft.items[0]!.source).toBe('estimate')
     expect(draft.items[0]!.kcal).toBe(350)
+  })
+})
+
+describe('estimateMealItemMacros', () => {
+  it('returns LLM estimate without catalog disambiguation', async () => {
+    vi.mocked(deepseekJson).mockResolvedValue({
+      items: [{ name: 'Творог', grams: 200, kcal: 220, protein: 36, fat: 10, carbs: 6 }],
+    })
+    const item = await estimateMealItemMacros('творог', 200)
+    expect(item.source).toBe('estimate')
+    expect(item.foodId).toBeUndefined()
+    expect(item.grams).toBe(200)
+    expect(item.kcal).toBe(220)
+  })
+
+  it('falls back to heuristic when LLM fails', async () => {
+    vi.mocked(deepseekJson).mockRejectedValue(new Error('offline'))
+    const item = await estimateMealItemMacros('творог', 200)
+    expect(item.source).toBe('estimate')
+    expect(item.kcal).toBeGreaterThan(0)
   })
 })

@@ -3,6 +3,7 @@ import { deepseekJson, isDeepseekConfigured } from './deepseek'
 import { coerceMealType, defaultMealTypeForNow } from './labels'
 import { buildParseMealPrompt } from './parseMealPrompt'
 import { defaultFoodGrams, defaultGramsForFoodName, resolveParsedGrams } from './foodPortion'
+import { unmatchedMealItem } from './mealUnknown'
 import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
 import { nonNeg, sanitizeMealItems } from './sanitize'
 
@@ -76,19 +77,26 @@ export function mapLlmResultToDraft(
     let fat = nonNeg(item.fat)
     let carbs = nonNeg(item.carbs)
 
-    // Flash sometimes returns 0/0/0/0 when unsure — replace with local estimate
     const looksLikeDrink = /вода|чай(?!\s*с)|американо|эспрессо|чёрн\w*\s*кофе/i.test(name)
     const looksCoffeeMilk = /кофе.*молок|молок.*кофе|латте|капучино/i.test(name)
-    if (
-      (!looksLikeDrink && kcal <= 0 && protein <= 0 && fat <= 0 && carbs <= 0) ||
-      (looksCoffeeMilk && kcal > 0 && kcal < 15 && grams >= 100)
-    ) {
+    const empty = kcal <= 0 && protein <= 0 && fat <= 0 && carbs <= 0
+
+    // Coffee-with-milk wrongly near zero — use milk-drink density, not «not found».
+    if (looksCoffeeMilk && kcal > 0 && kcal < 15 && grams >= 100) {
       const fallback = scalePer100g(guessFallbackCategory(name), grams)
-      kcal = fallback.kcal
-      protein = fallback.protein
-      fat = fallback.fat
-      carbs = fallback.carbs
+      return {
+        name,
+        grams,
+        foodId: item.foodId ?? undefined,
+        ...fallback,
+        source: 'estimate' as const,
+      }
+    }
+
+    // Model returned empty macros — do not invent default 150 kcal.
+    if (!looksLikeDrink && empty) {
       usedZeroFallback = true
+      return unmatchedMealItem(name, grams)
     }
 
     return {
@@ -111,7 +119,7 @@ export function mapLlmResultToDraft(
   const noteParts: string[] = []
   if (options.notesPrefix?.trim()) noteParts.push(options.notesPrefix.trim())
   if (usedZeroFallback) {
-    noteParts.push('КБЖУ модель вернула нулями — подставлена типичная оценка.')
+    noteParts.push('Часть позиций без КБЖУ — отмечены как не найденные в справочнике.')
   }
 
   return {
@@ -119,7 +127,9 @@ export function mapLlmResultToDraft(
     items,
     totals: sumMacros(items),
     isApproximate:
-      Boolean(options.forceApproximate) || out || items.some((i) => i.source === 'estimate'),
+      Boolean(options.forceApproximate) ||
+      out ||
+      items.some((i) => i.source === 'estimate' || i.source === 'unknown'),
     eatingOut: out,
     parseSource: 'deepseek',
     notes: noteParts.length > 0 ? noteParts.join(' ') : undefined,

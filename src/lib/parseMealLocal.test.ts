@@ -142,12 +142,13 @@ describe('parseMealLocal', () => {
   it('does not pick Творожный сыр when only that product exists for творога', () => {
     const draft = parseMealLocal('200 гр творога', [tvorozhnySyr])
     expect(draft.items[0]!.name).not.toBe('Творожный сыр')
-    expect(draft.items[0]!.source).toBe('estimate')
+    expect(draft.items[0]!.source).toBe('unknown')
   })
 
-  it('empty-ish unknown food stays estimate', () => {
+  it('empty-ish unknown food is marked not found (no fake kcal)', () => {
     const draft = parseMealLocal('хумус из марса 50 г', [])
-    expect(draft.items[0]!.source).toBe('estimate')
+    expect(draft.items[0]!.source).toBe('unknown')
+    expect(draft.items[0]!.kcal).toBe(0)
     expect(draft.items[0]!.name).toMatch(/хумус/i)
   })
 })

@@ -206,4 +206,39 @@ describe('catalogPickGroups related', () => {
     expect(g.primary.map((f) => f.id).sort()).toEqual(['s01', 's5'])
     expect(g.related.map((f) => f.id)).not.toContain('cream')
   })
+
+  it('after picking soft cottage, «мягкий» does not pull caramel/curry', () => {
+    const caramel = asFoodItem(
+      food('caramel', 'Карамель мягкая', 'ingredient', {
+        kcal: 400,
+        protein: 0,
+        fat: 10,
+        carbs: 80,
+      }),
+    )
+    const curry = asFoodItem(
+      food('curry', 'Карри порошок мягкий', 'ingredient', {
+        kcal: 325,
+        protein: 10,
+        fat: 10,
+        carbs: 40,
+      }),
+    )
+    const sochen = asFoodItem(
+      food('sochen', 'Сочень с творогом', 'dish', {
+        kcal: 338,
+        protein: 10,
+        fat: 15,
+        carbs: 40,
+      }),
+    )
+    const g = catalogPickGroups('Творог мягкий 0,1%', [
+      softFoods[0]!,
+      caramel,
+      curry,
+      sochen,
+      creamItem,
+    ])
+    expect(g.related).toHaveLength(0)
+  })
 })

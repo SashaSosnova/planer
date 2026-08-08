@@ -224,6 +224,7 @@ export async function parseMealCatalogFirst(
   }
 
   const allLibrary = items.every((i) => i.source === 'library')
+  const catalogOnly = items.every((i) => i.source === 'library' || i.source === 'unknown')
   const noteParts: string[] = []
   if (typeof split.notes === 'string' && split.notes.trim()) {
     noteParts.push(split.notes.trim())
@@ -254,7 +255,13 @@ export async function parseMealCatalogFirst(
     isApproximate:
       out || items.some((i) => i.source === 'estimate' || i.source === 'unknown'),
     eatingOut: out,
-    parseSource: allLibrary ? 'library' : 'deepseek',
+    // Catalog-first with ambiguous picks is still «справочник», not AI estimate.
+    parseSource:
+      allLibrary || (catalogOnly && !usedEstimateLlm)
+        ? 'library'
+        : usedEstimateLlm
+          ? 'deepseek'
+          : 'local',
     notes: noteParts.length > 0 ? noteParts.join(' ') : undefined,
   }
 }

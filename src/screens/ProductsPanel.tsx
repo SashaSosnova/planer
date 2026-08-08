@@ -611,8 +611,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
 
   return (
     <div className="panel-stack">
-      <div className="section-head">
-        <h2>Продукты</h2>
+      <div className="section-head products-toolbar">
         <button
           type="button"
           className="primary-btn icon-cta"

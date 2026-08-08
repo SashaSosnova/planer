@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { defaultFoodGrams } from '../lib/foodPortion'
 import { findFoodCandidates, findRelatedFoodCandidates, resolveCatalogMatch } from '../lib/foodMatch'
 import { capitalizeFoodName, sameFoodLabel } from '../lib/foodName'
+import { applyDraftResolutionMeta, mealItemsAreApproximate, showPieceControls } from '../lib/mealDraft'
 import { unmatchedMealItem } from '../lib/mealUnknown'
 import { round1, scalePer100g, sumMacros } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, MealItem, ParsedMealDraft } from '../types'
@@ -61,7 +62,8 @@ export function emptyMealItem(): MealItem {
     protein: 0,
     fat: 0,
     carbs: 0,
-    source: 'estimate',
+    /** Placeholder until named — not a real estimate (avoids ≈ / block save). */
+    source: 'unknown',
   }
 }
 
@@ -192,10 +194,8 @@ export function applyItemPatch(
       const rawName = safe.name.trim()
       if (!rawName) {
         return {
-          ...item,
-          name: safe.name,
-          foodId: undefined,
-          source: 'estimate' as const,
+          ...emptyMealItem(),
+          name: '',
         }
       }
       const name = capitalizeFoodName(rawName)
@@ -303,6 +303,16 @@ export function rematchItemByName(
         source: 'library' as const,
       }
     }
+    // Keep existing estimate / manual macros — don't wipe on rematch miss.
+    if (item.source === 'estimate' || item.kcal > 0) {
+      return {
+        ...item,
+        name: label,
+        grams,
+        foodId: undefined,
+        source: 'estimate' as const,
+      }
+    }
     return unmatchedMealItem(label, grams)
   })
 }
@@ -346,14 +356,43 @@ export function patchDraft(
   foods: FoodItem[],
 ): ParsedMealDraft {
   const items = applyItemPatch(draft.items, index, patch, foods)
-  return {
-    ...draft,
-    items,
-    totals: sumMacros(items),
-    isApproximate:
-      draft.eatingOut ||
-      items.some((i) => i.source === 'estimate' || i.source === 'unknown'),
-  }
+  const stillNeedsClarify = items.some((i) => {
+    if (!i.name.trim() || i.source !== 'unknown') return false
+    if (i.foodId && foods.some((f) => f.id === i.foodId)) return false
+    return catalogPickGroups(i.name, foods).primary.length >= 2
+  })
+  return applyDraftResolutionMeta(
+    {
+      ...draft,
+      items,
+      totals: sumMacros(items.filter((i) => i.name.trim())),
+      isApproximate: mealItemsAreApproximate(draft.eatingOut, items),
+    },
+    stillNeedsClarify,
+  )
+}
+
+/** Drop a row and refresh clarify notes / parseSource. */
+export function removeDraftItem(
+  draft: ParsedMealDraft,
+  index: number,
+  foods: FoodItem[],
+): ParsedMealDraft {
+  const items = draft.items.filter((_, i) => i !== index)
+  const stillNeedsClarify = items.some((i) => {
+    if (!i.name.trim() || i.source !== 'unknown') return false
+    if (i.foodId && foods.some((f) => f.id === i.foodId)) return false
+    return catalogPickGroups(i.name, foods).primary.length >= 2
+  })
+  return applyDraftResolutionMeta(
+    {
+      ...draft,
+      items,
+      totals: sumMacros(items.filter((i) => i.name.trim())),
+      isApproximate: mealItemsAreApproximate(draft.eatingOut, items),
+    },
+    stillNeedsClarify,
+  )
 }
 
 function sourceMark(fromLibrary: boolean, unmatched: boolean, needsPick = false) {
@@ -439,9 +478,9 @@ export function MealDraftEditor({
   useEffect(() => {
     if (!collapsible) return
     const idx = items.findIndex((i) => {
-      if (i.foodId) return false
-      const g = catalogPickGroups(i.name, data.foods)
-      return g.primary.length >= 2 || g.related.length > 0
+      if (i.source !== 'unknown' || !i.name.trim()) return false
+      if (i.foodId && data.foods.some((f) => f.id === i.foodId)) return false
+      return catalogPickGroups(i.name, data.foods).primary.length >= 2
     })
     if (idx >= 0) setEditingIndex(idx)
   }, [itemsPickKey, collapsible, data.foods, items])
@@ -588,24 +627,30 @@ export function MealDraftEditor({
         const fromLibrary = Boolean(linked)
         const unmatched = item.source === 'unknown'
         const estimated = item.source === 'estimate'
-        const pickGroups = catalogPickGroups(item.name, data.foods)
-        const needsPick = !fromLibrary && pickGroups.primary.length >= 2
-        const hasRelated = pickGroups.related.length > 0
-        const showPickPanel = needsPick || hasRelated
-        const askClarify = needsPick || (!fromLibrary && hasRelated)
+        const pickGroups = fromLibrary
+          ? { primary: [] as FoodItem[], related: [] as FoodItem[] }
+          : catalogPickGroups(item.name, data.foods)
+        const needsPick =
+          unmatched && !fromLibrary && pickGroups.primary.length >= 2
+        const hasRelated = !fromLibrary && pickGroups.related.length > 0
+        const showPickPanel =
+          (!fromLibrary && pickGroups.primary.length >= 2) || hasRelated
+        /** Soft related / estimated rows are optional — only unknown+collision. */
+        const askClarify = needsPick
         const per100 = linked ? linked.per100g : per100FromPortion(item)
         const portionGrams =
           linked?.portionGrams != null && linked.portionGrams > 0
             ? linked.portionGrams
             : null
+        const showPieces = Boolean(linked && portionGrams != null && showPieceControls(linked))
         const expanded = !collapsible || editingIndex === index
         const replacing = replacingIndex === index
         const label = item.name.trim() || 'продукт'
         const canEditMacros = !fromLibrary
         const pieces =
-          portionGrams != null && item.grams > 0
+          showPieces && portionGrams != null && item.grams > 0
             ? Math.round((item.grams / portionGrams) * 100) / 100
-            : portionGrams != null
+            : showPieces && portionGrams != null
               ? 1
               : null
 
@@ -687,7 +732,7 @@ export function MealDraftEditor({
                 </div>
               )}
               <div className="draft-portion-fields">
-                {portionGrams != null && pieces != null && (
+                {showPieces && portionGrams != null && pieces != null && (
                   <label className="field draft-portion-field">
                     <span>Шт</span>
                     <DecimalInput

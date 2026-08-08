@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyItemPatch,
+  patchDraft,
   rematchItemByName,
   replaceItemWithFood,
 } from './MealDraftEditor'
-import type { FoodItem, MealItem } from '../types'
+import type { FoodItem, MealItem, ParsedMealDraft } from '../types'
 
 function item(partial: Partial<MealItem> = {}): MealItem {
   return {
@@ -104,8 +105,16 @@ describe('rematch / replace', () => {
     expect(next[0]!.source).toBe('library')
   })
 
-  it('rematchItemByName marks unknown when missing', () => {
-    const items = [item({ name: 'хумус из марса', grams: 50, kcal: 99 })]
+  it('rematchItemByName keeps estimate macros when catalog miss', () => {
+    const items = [item({ name: 'хумус из марса', grams: 50, kcal: 99, source: 'estimate' })]
+    const next = rematchItemByName(items, 0, 'хумус из марса', [raw])
+    expect(next[0]!.source).toBe('estimate')
+    expect(next[0]!.kcal).toBe(99)
+    expect(next[0]!.foodId).toBeUndefined()
+  })
+
+  it('rematchItemByName marks unknown when missing and no macros', () => {
+    const items = [item({ name: 'хумус из марса', grams: 50, kcal: 0, source: 'unknown' })]
     const next = rematchItemByName(items, 0, 'хумус из марса', [raw])
     expect(next[0]!.source).toBe('unknown')
     expect(next[0]!.kcal).toBe(0)
@@ -152,5 +161,71 @@ describe('unlink from library', () => {
     expect(next[0]!.foodId).toBeUndefined()
     expect(next[0]!.source).toBe('estimate')
     expect(next[0]!.kcal).toBe(120)
+  })
+})
+
+describe('patchDraft after catalog pick', () => {
+  const soft01 = food(
+    's01',
+    'Творог мягкий 0,1%',
+    { kcal: 55, protein: 10, fat: 0.1, carbs: 3.4 },
+    'ingredient',
+    ['творог'],
+  )
+  const soft5 = food(
+    's5',
+    'Творог мягкий 5%',
+    { kcal: 92, protein: 8, fat: 5, carbs: 3.6 },
+    'ingredient',
+    ['творог'],
+  )
+  const apple = food('apple', 'Яблоко', {
+    kcal: 52,
+    protein: 0.3,
+    fat: 0.2,
+    carbs: 14,
+  })
+
+  it('clears clarify note and sets library badge when pick resolves', () => {
+    const draft: ParsedMealDraft = {
+      mealType: 'snack',
+      items: [
+        {
+          name: 'Творог',
+          grams: 200,
+          kcal: 0,
+          protein: 0,
+          fat: 0,
+          carbs: 0,
+          source: 'unknown',
+        },
+        {
+          name: 'Яблоко',
+          grams: 150,
+          foodId: 'apple',
+          kcal: 78,
+          protein: 0.5,
+          fat: 0.3,
+          carbs: 21,
+          source: 'library',
+        },
+      ],
+      totals: { kcal: 78, protein: 0.5, fat: 0.3, carbs: 21 },
+      isApproximate: true,
+      eatingOut: false,
+      parseSource: 'library',
+      notes: 'Уточните продукт — в справочнике несколько похожих.',
+    }
+    const next = patchDraft(
+      draft,
+      0,
+      replaceItemWithFood(draft.items, 0, soft01)[0]!,
+      [soft01, soft5, apple],
+    )
+    expect(next.items[0]!.source).toBe('library')
+    expect(next.items[0]!.foodId).toBe('s01')
+    expect(next.notes).toBeUndefined()
+    expect(next.parseSource).toBe('library')
+    expect(next.isApproximate).toBe(false)
   })
 })

@@ -2,9 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { MacroBar } from '../components/MacroBar'
 import {
   MealDraftEditor,
+  catalogPickGroups,
   emptyMealItem,
   mealItemFromFood,
   patchDraft,
+  removeDraftItem,
 } from '../components/MealDraftEditor'
 import { todayIso } from '../lib/date'
 import { isDeepseekConfigured } from '../lib/deepseek'
@@ -16,6 +18,13 @@ import {
   mealRawTextFromItems,
   nextMealType,
 } from '../lib/labels'
+import {
+  applyDraftResolutionMeta,
+  inferSavedFoodKind,
+  mealItemsAreApproximate,
+  mealItemsHaveUnresolved,
+  resolveDraftMealType,
+} from '../lib/mealDraft'
 import { parseMeal } from '../lib/parseMeal'
 import { estimateMealItemMacros } from '../lib/parseMealCatalogFirst'
 import { cloneMealAsDraft, listRecentMeals } from '../lib/recentMeals'
@@ -141,14 +150,42 @@ export function AddMealScreen({
     applyRepeatMeal(meal)
   }, [seedMealId, data.meals])
 
+  const draftRef = useRef(draft)
+  draftRef.current = draft
+
   useEffect(() => {
     if (!registerBackHandler) return
     return registerBackHandler(() => {
-      if (viewRef.current !== 'library') return false
-      setView('meal')
+      if (viewRef.current === 'library') {
+        setView('meal')
+        return true
+      }
+      if (draftRef.current && draftRef.current.items.some((i) => i.name.trim())) {
+        if (!confirm('Закрыть без сохранения черновика?')) return true
+      }
+      onBack()
       return true
     })
-  }, [registerBackHandler])
+  }, [registerBackHandler, onBack])
+
+  const requestLeave = () => {
+    if (draft && draft.items.some((i) => i.name.trim())) {
+      if (!confirm('Закрыть без сохранения черновика?')) return
+    }
+    onBack()
+  }
+
+  const clearDraftForDateChange = (next: string) => {
+    if (draft && draft.items.some((i) => i.name.trim())) {
+      if (!confirm('Сменить дату и сбросить черновик?')) return false
+    }
+    setDate(next > todayIso() ? todayIso() : next)
+    setMealTypeTouched(false)
+    setDraft(null)
+    setInfo(null)
+    parsedTextRef.current = null
+    return true
+  }
 
   const foodsRef = useMemo(
     () =>
@@ -188,11 +225,20 @@ export function AddMealScreen({
     setBusy(true)
     setError(null)
     setInfo(null)
+    const selectedType = mealType
+    const typeTouched = mealTypeTouched
     try {
-      const result = await parseMeal(text, foodsRef, mealType, eatingOut)
-      setDraft(result)
+      const result = await parseMeal(text, foodsRef, selectedType, eatingOut)
+      const nextType = resolveDraftMealType({
+        text,
+        userMealType: selectedType,
+        mealTypeTouched: typeTouched,
+        parsedMealType: result.mealType,
+        extractFromText: extractMealTypeFromText,
+      })
+      setDraft({ ...result, mealType: nextType })
       setEatingOut(result.eatingOut)
-      setMealType(result.mealType)
+      setMealType(nextType)
       setMealTypeTouched(true)
       const cleaned = extractMealTypeFromText(text).cleaned
       const nextText = cleaned && cleaned !== text.trim() ? cleaned : text
@@ -213,6 +259,10 @@ export function AddMealScreen({
       setError('Добавьте хотя бы один продукт')
       return
     }
+    if (mealItemsHaveUnresolved(kept, data.foods)) {
+      setError('Уточните продукты в справочнике или оцените КБЖУ перед сохранением')
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -225,7 +275,7 @@ export function AddMealScreen({
         mealType,
         rawText: body,
         items: kept,
-        isApproximate: draft.eatingOut || kept.some((i) => i.source === 'estimate'),
+        isApproximate: mealItemsAreApproximate(draft.eatingOut, kept),
         eatingOut: draft.eatingOut,
       })
       onBack()
@@ -251,7 +301,7 @@ export function AddMealScreen({
       const saved = await onSaveFood({
         name: item.name.trim(),
         aliases: [],
-        kind: 'dish',
+        kind: inferSavedFoodKind(item.name),
         portionGrams: item.grams > 0 ? item.grams : undefined,
         per100g: {
           kcal: Math.round(item.kcal * k * 10) / 10,
@@ -291,13 +341,20 @@ export function AddMealScreen({
       setDraft((prev) => {
         if (!prev) return prev
         const items = prev.items.map((it, i) => (i === index ? nextItem : it))
-        return {
-          ...prev,
-          items,
-          totals: sumMacros(items),
-          isApproximate: true,
-          notes: prev.notes,
-        }
+        const stillNeedsClarify = items.some((i) => {
+          if (!i.name.trim() || i.source !== 'unknown') return false
+          if (i.foodId && data.foods.some((f) => f.id === i.foodId)) return false
+          return catalogPickGroups(i.name, data.foods).primary.length >= 2
+        })
+        return applyDraftResolutionMeta(
+          {
+            ...prev,
+            items,
+            totals: sumMacros(items.filter((row) => row.name.trim())),
+            isApproximate: true,
+          },
+          stillNeedsClarify,
+        )
       })
       setInfo(null)
     } catch (err) {
@@ -330,7 +387,7 @@ export function AddMealScreen({
     <section className="screen">
       <header className="screen-header add-header">
         <div className="add-header-main">
-          <button type="button" className="link-btn" onClick={onBack}>
+          <button type="button" className="link-btn" onClick={requestLeave}>
             ← Назад
           </button>
           <h1>Добавить приём</h1>
@@ -359,11 +416,7 @@ export function AddMealScreen({
           value={date}
           max={todayIso()}
           onChange={(next) => {
-            setDate(next > todayIso() ? todayIso() : next)
-            setMealTypeTouched(false)
-            setDraft(null)
-            setInfo(null)
-            parsedTextRef.current = null
+            clearDraftForDateChange(next)
           }}
         />
         <label className="check-row add-eating-out">
@@ -378,7 +431,7 @@ export function AddMealScreen({
                   ? {
                       ...prev,
                       eatingOut: next,
-                      isApproximate: next || prev.items.some((i) => i.source === 'estimate'),
+                      isApproximate: mealItemsAreApproximate(next, prev.items),
                     }
                   : prev,
               )
@@ -510,25 +563,33 @@ export function AddMealScreen({
               {draft.eatingOut && <span className="badge">вне дома</span>}
             </div>
           </div>
-          <MacroBar totals={draft.totals} />
+          <MacroBar
+            totals={draft.totals}
+            incomplete={mealItemsHaveUnresolved(draft.items, data.foods)}
+          />
 
           <MealDraftEditor
             data={data}
             items={draft.items}
             collapsible
             onChangeItem={(index, patch) =>
-              setDraft((prev) => (prev ? patchDraft(prev, index, patch, data.foods) : prev))
+              setDraft((prev) => {
+                if (!prev) return prev
+                const next = patchDraft(prev, index, patch, data.foods)
+                if (next.notes !== prev.notes) {
+                  setInfo(next.notes ?? null)
+                }
+                return next
+              })
             }
             onRemoveItem={(index) =>
               setDraft((prev) => {
                 if (!prev) return prev
-                const items = prev.items.filter((_, i) => i !== index)
-                return {
-                  ...prev,
-                  items,
-                  totals: sumMacros(items),
-                  isApproximate: prev.eatingOut || items.some((i) => i.source === 'estimate'),
+                const next = removeDraftItem(prev, index, data.foods)
+                if (next.notes !== prev.notes) {
+                  setInfo(next.notes ?? null)
                 }
+                return next
               })
             }
             onAddItem={(seed) =>
@@ -539,7 +600,7 @@ export function AddMealScreen({
                   ...prev,
                   items,
                   totals: sumMacros(items),
-                  isApproximate: true,
+                  isApproximate: mealItemsAreApproximate(prev.eatingOut, items),
                 }
               })
             }
@@ -551,7 +612,7 @@ export function AddMealScreen({
                   ...prev,
                   items,
                   totals: sumMacros(items),
-                  isApproximate: prev.eatingOut || items.some((i) => i.source === 'estimate'),
+                  isApproximate: mealItemsAreApproximate(prev.eatingOut, items),
                 }
               })
             }
@@ -570,11 +631,7 @@ export function AddMealScreen({
                     ...prev,
                     items,
                     totals: sumMacros(items),
-                    isApproximate:
-                      prev.eatingOut ||
-                      items.some(
-                        (i) => i.source === 'estimate' || i.source === 'unknown',
-                      ),
+                    isApproximate: mealItemsAreApproximate(prev.eatingOut, items),
                     notes: result.notes ?? prev.notes,
                   }
                 })
@@ -593,7 +650,12 @@ export function AddMealScreen({
             <button
               type="button"
               className="primary-btn"
-              disabled={busy}
+              disabled={busy || mealItemsHaveUnresolved(draft.items, data.foods)}
+              title={
+                mealItemsHaveUnresolved(draft.items, data.foods)
+                  ? 'Сначала уточните продукты или оцените КБЖУ'
+                  : undefined
+              }
               onClick={() => void confirmMeal()}
             >
               Сохранить приём

@@ -51,6 +51,7 @@ export const FALLBACK_ESTIMATES: Record<string, MacroSet> = {
   /** Brewed black coffee / americano — nearly zero */
   coffee: { kcal: 2, protein: 0.1, fat: 0, carbs: 0 },
   tea: { kcal: 1, protein: 0, fat: 0, carbs: 0 },
+  water: { kcal: 0, protein: 0, fat: 0, carbs: 0 },
   /** Ready latte/cappuccino cup, not split into parts */
   coffeeMilkDrink: { kcal: 45, protein: 2, fat: 2, carbs: 4 },
   milk: { kcal: 52, protein: 2.9, fat: 2.5, carbs: 4.7 },
@@ -80,6 +81,7 @@ export function guessFallbackCategory(name: string): MacroSet {
   if (/молок/.test(n)) return FALLBACK_ESTIMATES.milk
   if (/кофе|американо|эспрессо/.test(n)) return FALLBACK_ESTIMATES.coffee
   if (/чай/.test(n)) return FALLBACK_ESTIMATES.tea
+  if (/^вода\b|вода\s|минерал|газировк/.test(n) || n === 'вода') return FALLBACK_ESTIMATES.water
   if (/масло|оливк/.test(n)) return FALLBACK_ESTIMATES.oil
   if (/кабачок|цукини/.test(n)) return FALLBACK_ESTIMATES.zucchini
   if (/хлеб|тост|булка|батон/.test(n)) return FALLBACK_ESTIMATES.bread

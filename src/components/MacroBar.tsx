@@ -4,14 +4,16 @@ type Props = {
   totals: MacroSet
   /** When true, only BJU — kcal shown elsewhere (e.g. calorie ring). */
   hideKcal?: boolean
+  /** Some rows still need catalog pick / macros — totals are partial. */
+  incomplete?: boolean
 }
 
-export function MacroBar({ totals, hideKcal }: Props) {
+export function MacroBar({ totals, hideKcal, incomplete }: Props) {
   return (
-    <div className={`macro-bar${hideKcal ? ' macros-only' : ''}`}>
+    <div className={`macro-bar${hideKcal ? ' macros-only' : ''}${incomplete ? ' incomplete' : ''}`}>
       {!hideKcal && (
         <div className="macro-kcal-block">
-          <span className="macro-label">ккал</span>
+          <span className="macro-label">ккал{incomplete ? ' · неполный' : ''}</span>
           <span className="macro-kcal">{Math.round(totals.kcal)}</span>
         </div>
       )}

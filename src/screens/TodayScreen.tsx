@@ -7,6 +7,7 @@ import { addDaysIso, formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
+import { truncateMealPreview } from '../lib/mealDraft'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { calcSweetBudgetKcal } from '../lib/sweets'
 import {
@@ -419,6 +420,7 @@ export function TodayScreen({
                       <strong>
                         {MEAL_TYPE_LABELS[meal.mealType]}
                         {meal.eatingOut ? ' · вне дома' : ''}
+                        {meal.isApproximate && !meal.eatingOut ? ' · ≈' : ''}
                         {hasMg || hasFe ? (
                           <span className="meal-med-tags">
                             {hasMg ? ' · Mg' : ''}
@@ -426,9 +428,14 @@ export function TodayScreen({
                           </span>
                         ) : null}
                       </strong>
-                      <span>{Math.round(meal.totals.kcal)} ккал</span>
+                      <span>
+                        {meal.isApproximate ? '≈ ' : ''}
+                        {Math.round(meal.totals.kcal)} ккал
+                      </span>
                     </div>
-                    <p className="meal-preview">{mealPreviewText(meal)}</p>
+                    <p className="meal-preview">
+                      {truncateMealPreview(mealPreviewText(meal), 72)}
+                    </p>
                     <p className="meal-bju">
                       Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
                       {Math.round(meal.totals.carbs)}

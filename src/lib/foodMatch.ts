@@ -300,6 +300,28 @@ export const RELATED_CANDIDATE_FLOOR = 40
 const RELATED_MAX_SCORE = 70
 
 /**
+ * Soft related: short query appears as a *non-head* token of another product
+ * («сыр» → «Творожный сыр»). Blocks modifier-only noise like
+ * «Творог мягкий…» → «Карамель мягкая» / «Карри … мягкий».
+ */
+export function isSoftRelatedCousin(query: string, food: FoodRef): boolean {
+  const qTok = tokens(query)
+  if (qTok.length !== 1) return false
+  const q = qTok[0]!
+  if (q.length < 3) return false
+  if (food.kind === 'dish') return false
+
+  const foodTok = tokens(food.name)
+  if (foodTok.length < 2) return false
+
+  const head = foodTok[0]!
+  // Head-stem variants belong in primary / ambiguous, not «похожие».
+  if (head === q || sameLexeme(head, q)) return false
+
+  return foodTok.some((t, i) => i > 0 && (t === q || sameLexeme(t, q)))
+}
+
+/**
  * Weaker catalog cousins for the pick UI (exclude primary / auto-match hits).
  */
 export function findRelatedFoodCandidates(
@@ -310,7 +332,12 @@ export function findRelatedFoodCandidates(
 ): FoodMatchCandidate[] {
   const exclude = new Set(excludeIds ?? [])
   return findFoodCandidates(name, foods, RELATED_CANDIDATE_FLOOR, 16)
-    .filter((c) => !exclude.has(c.food.id) && c.score < RELATED_MAX_SCORE)
+    .filter(
+      (c) =>
+        !exclude.has(c.food.id) &&
+        c.score < RELATED_MAX_SCORE &&
+        isSoftRelatedCousin(name, c.food),
+    )
     .slice(0, Math.max(1, limit))
 }
 

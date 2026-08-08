@@ -1,6 +1,7 @@
 import type { AppData, MacroSet, Meal } from '../types'
 import { emptyMacros, sumMacros } from './nutrition'
 import { todayIso } from './date'
+import { compareMealsByTypeThenTime } from './mealDraft'
 import { sweetKcalFromMeals } from './sweets'
 import { vegGramsFromMeals } from './vegetables'
 import {
@@ -44,7 +45,7 @@ export type WeekStats = {
 export function statsForDate(data: AppData, date: string): DayStats {
   const meals = data.meals
     .filter((m) => m.date === date)
-    .sort((a, b) => a.createdAt - b.createdAt)
+    .sort(compareMealsByTypeThenTime)
   const totals = meals.length ? sumMacros(meals.map((m) => m.totals)) : emptyMacros()
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)

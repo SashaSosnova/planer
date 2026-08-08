@@ -1053,6 +1053,10 @@
   padding: 10px 14px;
 }
 
+.macro-bar.incomplete .macro-kcal {
+  opacity: 0.72;
+}
+
 .macro-kcal-block {
   display: flex;
   flex-direction: column;
@@ -1135,6 +1139,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.products-toolbar {
+  justify-content: flex-end;
 }
 
 .subhead {

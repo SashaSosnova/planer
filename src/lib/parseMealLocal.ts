@@ -301,6 +301,7 @@ function parseAsSingleDish(
   if (whole) return { ...whole, eatingOut, isApproximate: eatingOut || whole.isApproximate }
 
   const item = toItem(name, grams, foods, true)
+  const unmatched = item.source === 'unknown'
   return {
     mealType: mealType ?? defaultMealTypeForNow(),
     items: [item],
@@ -308,8 +309,9 @@ function parseAsSingleDish(
     isApproximate: true,
     eatingOut,
     parseSource: 'local',
-    notes:
-      'Локальная оценка (без LLM): одно блюдо по весу в конце. Подключите DeepSeek для умнее.',
+    notes: unmatched
+      ? 'Сложное блюдо — КБЖУ не заданы. Уточните в справочнике, оцените ИИ или подключите DeepSeek.'
+      : 'Локальная оценка (без LLM): одно блюдо по весу в конце. Подключите DeepSeek для умнее.',
   }
 }
 
@@ -354,7 +356,9 @@ export function parseMealLocal(
     eatingOut,
     parseSource: 'local',
     notes: eatingOut
-      ? 'Локальная оценка «вне дома» (без LLM).'
+      ? items.every((i) => i.source === 'unknown')
+        ? 'Вне дома — КБЖУ не заданы (нужна оценка ИИ или ручной ввод).'
+        : 'Локальная оценка «вне дома» (без LLM).'
       : expanded
         ? 'Локальный разбор: составные позиции (кофе с молоком и т.п.).'
         : items.some((i) => i.source === 'unknown')

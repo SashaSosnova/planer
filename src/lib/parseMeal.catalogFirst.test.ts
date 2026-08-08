@@ -373,6 +373,43 @@ describe('parseMealCatalogFirst', () => {
     expect(draft.items[0]!.kcal).toBe(0)
   })
 
+  it('ambiguous catalog pick stays library parseSource (not AI badge)', async () => {
+    const soft01 = food('s01', 'Творог мягкий 0,1%', {
+      kcal: 55,
+      protein: 10,
+      fat: 0.1,
+      carbs: 3.4,
+    })
+    const soft5 = food('s5', 'Творог мягкий 5%', {
+      kcal: 92,
+      protein: 8,
+      fat: 5,
+      carbs: 3.6,
+    })
+    const appleOnly = food('apple2', 'Яблоко', {
+      kcal: 52,
+      protein: 0.3,
+      fat: 0.2,
+      carbs: 14,
+    })
+    mockSplitThenEstimate({
+      items: [
+        { name: 'творог', grams: 200 },
+        { name: 'яблоко', grams: 150 },
+      ],
+    })
+    const draft = await parseMealCatalogFirst(
+      '200 г творога, яблоко 150 г',
+      [soft01, soft5, appleOnly],
+      'snack',
+      false,
+    )
+    expect(draft.items[0]!.source).toBe('unknown')
+    expect(draft.parseSource).toBe('library')
+    expect(draft.notes).toMatch(/Уточните продукт/)
+    expect(deepseekJson).toHaveBeenCalledTimes(1)
+  })
+
   it('zero macros on non-drink → mark not found', async () => {
     mockSplitThenEstimate(
       { items: [{ name: 'хумус', grams: 50 }] },

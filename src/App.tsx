@@ -278,6 +278,7 @@ export default function App() {
             onDelete={deleteMeal}
             onSaveFood={saveFood}
             onSaveMedCheck={saveMedCheck}
+            registerBackHandler={registerBackHandler}
             onRepeatToday={() =>
               setOverlay({
                 type: 'add-meal',

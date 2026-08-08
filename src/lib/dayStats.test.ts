@@ -29,12 +29,31 @@ const empty: AppData = {
 }
 
 describe('statsForDate', () => {
-  it('sums meals for the date and sorts by createdAt', () => {
+  it('sums meals for the date and sorts by meal type then createdAt', () => {
     const data: AppData = {
       ...empty,
       meals: [
-        meal({ id: 'b', date: '2026-07-15', createdAt: 2, totals: { kcal: 200, protein: 0, fat: 0, carbs: 0 } }),
-        meal({ id: 'a', date: '2026-07-15', createdAt: 1, totals: { kcal: 100, protein: 0, fat: 0, carbs: 0 } }),
+        meal({
+          id: 'lunch-late',
+          date: '2026-07-15',
+          mealType: 'lunch',
+          createdAt: 9,
+          totals: { kcal: 200, protein: 0, fat: 0, carbs: 0 },
+        }),
+        meal({
+          id: 'breakfast',
+          date: '2026-07-15',
+          mealType: 'breakfast',
+          createdAt: 5,
+          totals: { kcal: 100, protein: 0, fat: 0, carbs: 0 },
+        }),
+        meal({
+          id: 'snack',
+          date: '2026-07-15',
+          mealType: 'snack',
+          createdAt: 1,
+          totals: { kcal: 50, protein: 0, fat: 0, carbs: 0 },
+        }),
         meal({ id: 'c', date: '2026-07-14', createdAt: 1, totals: { kcal: 999, protein: 0, fat: 0, carbs: 0 } }),
       ],
       weights: [{ id: 'w', date: '2026-07-15', kg: 60, createdAt: 1 }],
@@ -50,8 +69,8 @@ describe('statsForDate', () => {
       ],
     }
     const day = statsForDate(data, '2026-07-15')
-    expect(day.meals.map((m) => m.id)).toEqual(['a', 'b'])
-    expect(day.totals.kcal).toBe(300)
+    expect(day.meals.map((m) => m.id)).toEqual(['breakfast', 'lunch-late', 'snack'])
+    expect(day.totals.kcal).toBe(350)
     expect(day.weightKg).toBe(60)
     expect(day.steps).toBe(5000)
     expect(day.noteText).toBe('Нормальный день')

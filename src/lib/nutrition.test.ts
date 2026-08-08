@@ -52,6 +52,7 @@ describe('guessFallbackCategory', () => {
   it('detects coffee and latte separately', () => {
     expect(guessFallbackCategory('американо').kcal).toBe(2)
     expect(guessFallbackCategory('латте').kcal).toBe(45)
+    expect(guessFallbackCategory('вода').kcal).toBe(0)
   })
 
   it('does not treat coffee with milk as black coffee', () => {

@@ -420,7 +420,6 @@ export function TodayScreen({
                       <strong>
                         {MEAL_TYPE_LABELS[meal.mealType]}
                         {meal.eatingOut ? ' · вне дома' : ''}
-                        {meal.isApproximate && !meal.eatingOut ? ' · ≈' : ''}
                         {hasMg || hasFe ? (
                           <span className="meal-med-tags">
                             {hasMg ? ' · Mg' : ''}

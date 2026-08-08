@@ -503,7 +503,7 @@ type RealisticCase = {
   llmSplit: MealSplitLine[]
   eatingOut?: boolean
   expectNames?: string[]
-  expectGrams?: number[]
+  expectGrams?: Array<number | null>
   expectSources?: Array<'library' | 'estimate'>
   expectUnknownCount?: number
   /** Also check local fallback produces same item count (when applicable). */

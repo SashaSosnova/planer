@@ -1,4 +1,4 @@
-import type { FoodRef, MealType } from '../types'
+import type { MealType } from '../types'
 
 /** One line after LLM split — grams null = weight not stated in text. */
 export type MealSplitLine = {

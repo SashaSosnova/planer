@@ -1,7 +1,7 @@
 import type { FoodRef, MealItem, MealType, ParsedMealDraft } from '../types'
 import { stripEatingOutMarkers, textSuggestsEatingOut } from './eatingOut'
-import { defaultFoodGrams } from './foodPortion'
-import { findBestFood } from './foodMatch'
+import { defaultFoodGrams, defaultGramsForFoodName } from './foodPortion'
+import { findBestFood, scoreFoodMatch } from './foodMatch'
 import { defaultMealTypeForNow } from './labels'
 import { isComplexMealText } from './mealComplexity'
 import {
@@ -43,13 +43,6 @@ const WITH_PART_DEFAULTS: AddonRule[] = [
   { match: /^масло$/, grams: 10, label: () => 'масло' },
   { match: /^сыром$|^сыр$/, grams: 20, label: () => 'сыр' },
   { match: /^сметан/, grams: 30, label: () => 'сметана' },
-]
-
-const BASE_DEFAULT_GRAMS: Array<{ match: RegExp; grams: number }> = [
-  { match: /кофе|латте|капучино|американо/, grams: 200 },
-  { match: /чай/, grams: 200 },
-  { match: /тост|хлеб/, grams: 30 },
-  { match: /овсянк/, grams: 40 },
 ]
 
 function normalize(s: string): string {
@@ -117,11 +110,7 @@ function extractGrams(part: string): { name: string; grams: number | null } {
 }
 
 function defaultGramsForBase(name: string): number {
-  const n = normalize(name)
-  for (const rule of BASE_DEFAULT_GRAMS) {
-    if (rule.match.test(n)) return rule.grams
-  }
-  return DEFAULT_GRAMS
+  return defaultGramsForFoodName(name) ?? DEFAULT_GRAMS
 }
 
 function resolveAddon(withPart: string): { name: string; grams: number } | null {
@@ -193,7 +182,7 @@ function splitSimpleAndList(text: string): string[] | null {
     .split(/\s+и\s+/i)
     .map((p) => p.trim())
     .filter(Boolean)
-  if (parts.length < 2 || parts.length > 4) return null
+  if (parts.length < 2 || parts.length > 6) return null
   if (parts.some((p) => p.length > 36 || /\d/.test(p))) return null
   return parts
 }
@@ -204,8 +193,10 @@ function splitSegments(text: string, foods: FoodRef[] = []): Segment[] {
   const segments: Segment[] = []
   for (const raw of chunks) {
     const { name, grams } = extractGrams(raw)
-    // Keep catalog dishes like «кофе с молоком» intact instead of splitting «с …».
-    if (name && foods.length > 0 && findBestFood(name, foods, 70)) {
+    // Keep only a strong full-phrase catalog hit (e.g. dish «Кофе с молоком»).
+    // Weak base hits («Кофе» for «кофе с молоком») must still expand add-ons.
+    const matched = name && foods.length > 0 ? findBestFood(name, foods, 70) : null
+    if (matched && scoreFoodMatch(name, matched) >= 88) {
       segments.push({ raw, name, grams })
       continue
     }

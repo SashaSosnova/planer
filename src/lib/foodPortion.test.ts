@@ -21,6 +21,12 @@ describe('foodPortion', () => {
     expect(resolveParsedGrams(100, { portionGrams: 180 }, true)).toBe(100)
   })
 
+  it('replaces piece-count grams with typical portion', () => {
+    expect(resolveParsedGrams(2, { portionGrams: 55 }, false, 'яйцо')).toBe(55)
+    expect(resolveParsedGrams(1, null, false, 'яйцо куриное')).toBe(55)
+    expect(resolveParsedGrams(2, null, true, 'яйцо')).toBe(2)
+  })
+
   it('detects explicit grams in meal text', () => {
     expect(mealTextHasExplicitGrams('бутерброд и кофе')).toBe(false)
     expect(mealTextHasExplicitGrams('бутерброд 180 г')).toBe(true)

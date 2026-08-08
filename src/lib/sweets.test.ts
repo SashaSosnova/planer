@@ -99,6 +99,17 @@ describe('isSweetName', () => {
     expect(isSweetName('какао-порошок')).toBe(false)
     expect(isSweetName('пирог с капустой')).toBe(false)
     expect(isSweetName('булочка с сыром')).toBe(false)
+    expect(isSweetName('круассан')).toBe(false)
+    expect(isSweetName('Круассан обычный')).toBe(false)
+    expect(isSweetName('слойка')).toBe(false)
+    expect(isSweetName('рогалик')).toBe(false)
+  })
+
+  it('counts filled sweet croissant / pastry', () => {
+    expect(isSweetName('круассан с шоколадом')).toBe(true)
+    expect(isSweetName('шоколадный круассан')).toBe(true)
+    expect(isSweetName('сладкий круассан')).toBe(true)
+    expect(isSweetName('слойка с яблоком')).toBe(true)
   })
 })
 

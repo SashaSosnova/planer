@@ -2,7 +2,7 @@ import type { FoodRef, MealType, ParsedMealDraft } from '../types'
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
 import { coerceMealType, defaultMealTypeForNow } from './labels'
 import { buildParseMealPrompt } from './parseMealPrompt'
-import { defaultFoodGrams } from './foodPortion'
+import { defaultFoodGrams, defaultGramsForFoodName, resolveParsedGrams } from './foodPortion'
 import { guessFallbackCategory, scalePer100g, sumMacros } from './nutrition'
 import { nonNeg, sanitizeMealItems } from './sanitize'
 
@@ -52,12 +52,13 @@ export function mapLlmResultToDraft(
     const food = item.foodId ? foodMap.get(item.foodId) : undefined
     const useLibrary =
       Boolean(food) && !out && item.needsEstimate !== true && item.source !== 'estimate'
+    const rawGrams = Number(item.grams) > 0 ? Number(item.grams) : null
     const grams =
-      Number(item.grams) > 0
-        ? Number(item.grams)
+      rawGrams != null
+        ? resolveParsedGrams(rawGrams, food, false, name)
         : food
           ? defaultFoodGrams(food)
-          : 300
+          : (defaultGramsForFoodName(name) ?? (out ? 300 : 100))
 
     if (useLibrary && food) {
       const macros = scalePer100g(food.per100g, grams)
@@ -77,7 +78,11 @@ export function mapLlmResultToDraft(
 
     // Flash sometimes returns 0/0/0/0 when unsure — replace with local estimate
     const looksLikeDrink = /вода|чай(?!\s*с)|американо|эспрессо|чёрн\w*\s*кофе/i.test(name)
-    if (!looksLikeDrink && kcal <= 0 && protein <= 0 && fat <= 0 && carbs <= 0) {
+    const looksCoffeeMilk = /кофе.*молок|молок.*кофе|латте|капучино/i.test(name)
+    if (
+      (!looksLikeDrink && kcal <= 0 && protein <= 0 && fat <= 0 && carbs <= 0) ||
+      (looksCoffeeMilk && kcal > 0 && kcal < 15 && grams >= 100)
+    ) {
       const fallback = scalePer100g(guessFallbackCategory(name), grams)
       kcal = fallback.kcal
       protein = fallback.protein

@@ -334,6 +334,11 @@ const CASES: Array<{ input: string; exp: Expectation; cat: string }> = [
 
   // —— edge / garbage ——
   {
+    cat: 'multi',
+    input: 'рис 50г, курица 80г, хлеб 20г, яблоко 100г',
+    exp: { names: ['Рис', 'Курица', 'Хлеб', 'Яблоко'], grams: [50, 80, 20, 100] },
+  },
+  {
     cat: 'edge',
     input: 'asdf qwerty 50 г',
     exp: { source: 'estimate', firstGrams: 50, approximate: true },
@@ -368,9 +373,9 @@ const KNOWN_ISSUES: Array<{ input: string; note: string; check: (d: ParsedMealDr
   },
   {
     input: 'гречка и курица',
-    note: '«и» не разделяет список (чтобы не ломать названия блюд) — одна позиция',
+    note: 'Простой список через «и» (2–6 коротких частей) — отдельные позиции',
     check: (d) => {
-      expect(d.items.length).toBe(1)
+      expect(d.items.length).toBe(2)
     },
   },
   {

@@ -7,6 +7,22 @@ export function defaultFoodGrams(food: Pick<FoodItem, 'portionGrams'>): number {
   return g != null && g > 0 ? g : 100
 }
 
+/** Typical piece/serving size from the food name when weight was omitted. */
+export function defaultGramsForFoodName(name: string): number | null {
+  const n = name
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!n) return null
+  if (/яйц/.test(n)) return 55
+  if (/латте|капучино|флэт\s*уайт|раф|кофе/.test(n)) return 200
+  if (/чай/.test(n)) return 200
+  if (/тост|хлеб/.test(n)) return 30
+  if (/овсянк/.test(n)) return 40
+  return null
+}
+
 /** True if the meal text already names a weight (г / мл / кг). */
 export function mealTextHasExplicitGrams(text: string): boolean {
   // Avoid \\b — ASCII-only and breaks Cyrillic «г».
@@ -16,24 +32,38 @@ export function mealTextHasExplicitGrams(text: string): boolean {
 }
 
 /**
- * Grams after parse: keep explicit weights; if the model/local path left a
- * generic stub (100/200/300) and the catalog has a portion — use the portion.
+ * Grams after parse.
+ * Without an explicit weight in the text, a bare product name means one catalog
+ * portion (`portionGrams`) — «яйцо куриное», «карамель мягкая» = 1 шт/порция.
+ * Also replaces LLM stubs (100/200/300) and piece-counts mistaken as grams (1–12).
  */
 export function resolveParsedGrams(
   parsedGrams: number | null | undefined,
   food: Pick<FoodItem, 'portionGrams'> | null | undefined,
   textHasWeights: boolean,
+  nameHint?: string,
 ): number {
-  const portion = food ? defaultFoodGrams(food) : 100
+  const catalogPortion =
+    food?.portionGrams != null && food.portionGrams > 0 ? food.portionGrams : null
+  // Name fallback only when the card has no portion yet (egg ≈ 55 г и т.п.).
+  const namePortion = nameHint ? defaultGramsForFoodName(nameHint) : null
+  const portion = catalogPortion ?? namePortion ?? 100
+
   if (!(parsedGrams != null && parsedGrams > 0)) return portion
-  if (
-    !textHasWeights &&
-    food?.portionGrams != null &&
-    food.portionGrams > 0 &&
-    (parsedGrams === 100 || parsedGrams === 200 || parsedGrams === 300)
-  ) {
-    return food.portionGrams
+
+  if (!textHasWeights) {
+    if (
+      catalogPortion != null &&
+      (parsedGrams === 100 || parsedGrams === 200 || parsedGrams === 300)
+    ) {
+      return catalogPortion
+    }
+    // LLM: «1 яйцо» → grams:1 — treat as one portion when we know the size.
+    if (parsedGrams < 15 && portion >= 20) {
+      return portion
+    }
   }
+
   return parsedGrams
 }
 

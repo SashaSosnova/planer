@@ -2,7 +2,8 @@ import type { FoodRef, MealType, ParsedMealDraft } from '../types'
 import { textSuggestsEatingOut } from './eatingOut'
 import { findBestFood, scoreFoodMatch } from './foodMatch'
 import { isComplexMealText } from './mealComplexity'
-import { isLlmConfigured, parseMealWithLlm } from './parseMealLlm'
+import { isLlmConfigured } from './parseMealLlm'
+import { parseMealCatalogFirst } from './parseMealCatalogFirst'
 import { extractMealGrams, parseMealLocal } from './parseMealLocal'
 import { coerceMealType, defaultMealTypeForNow, extractMealTypeFromText } from './labels'
 import {
@@ -117,7 +118,6 @@ export function finalizeDraft(
     const userLabel = (singleItem && queryName ? queryName : item.name) || 'Блюдо'
 
     if (!eatingOut) {
-      // 1) Validate claimed catalog id (even if model marked source=estimate).
       if (item.foodId) {
         const viaId = resolveLibraryFood(
           { ...item, source: 'library' },
@@ -128,30 +128,30 @@ export function finalizeDraft(
         if (viaId) {
           return toLibraryItem(
             viaId,
-            resolveParsedGrams(item.grams, viaId, textHasWeights),
+            resolveParsedGrams(item.grams, viaId, textHasWeights, viaId.name),
           )
         }
       }
 
-      // 2) LLM often returns the right name without foodId / as estimate — rematch.
       const viaName = findBestFood(query, foods, 70)
       if (viaName) {
         return toLibraryItem(
           viaName,
-          resolveParsedGrams(item.grams, viaName, textHasWeights),
+          resolveParsedGrams(item.grams, viaName, textHasWeights, viaName.name),
         )
       }
 
-      // 3) Wrong catalog id / model renamed product («творог» → «Творожный сыр»).
-      // Drop foodId and prefer the user's wording for a single-item phrase.
       if (item.foodId || (singleItem && queryName)) {
-        const grams = item.grams > 0 ? item.grams : 100
+        const grams = resolveParsedGrams(item.grams, null, textHasWeights, userLabel)
+        const lookCoffeeMilk = /кофе.*молок|молок.*кофе|латте|капучино/i.test(userLabel)
+        const modelKcal = item.kcal ?? 0
         const keepModelMacros =
           item.source !== 'library' &&
           ((item.kcal ?? 0) > 0 ||
             (item.protein ?? 0) > 0 ||
             (item.fat ?? 0) > 0 ||
-            (item.carbs ?? 0) > 0)
+            (item.carbs ?? 0) > 0) &&
+          !(lookCoffeeMilk && modelKcal > 0 && modelKcal < 15 && grams >= 100)
         const macros = keepModelMacros
           ? {
               kcal: item.kcal ?? 0,
@@ -169,7 +169,18 @@ export function finalizeDraft(
       }
     }
 
-    const grams = item.grams > 0 ? item.grams : 100
+    const grams = resolveParsedGrams(item.grams, null, textHasWeights, item.name)
+    const lookCoffeeMilk = /кофе.*молок|молок.*кофе|латте|капучино/i.test(item.name)
+    const kcal = item.kcal ?? 0
+    if (lookCoffeeMilk && !textHasWeights && kcal > 0 && kcal < 15 && grams >= 100) {
+      const macros = scalePer100g(guessFallbackCategory(item.name), grams)
+      return {
+        name: item.name,
+        grams,
+        ...macros,
+        source: 'estimate' as const,
+      }
+    }
     return {
       name: item.name,
       grams,
@@ -193,6 +204,12 @@ export function finalizeDraft(
   }
 }
 
+/**
+ * Parse meal text:
+ * 1) Fast path: single known catalog product
+ * 2) LLM: split → catalog macros → LLM only for unknown КБЖУ
+ * 3) Fallback: local regex parser if LLM off / failed
+ */
 export async function parseMeal(
   text: string,
   foods: FoodRef[],
@@ -211,50 +228,20 @@ export async function parseMeal(
   const complex = isComplexMealText(body)
   const eatingOut = eatingOutHint || textSuggestsEatingOut(body) || complex
 
-  // Known product/dish in library — never split with LLM/regex
   if (!eatingOut) {
     const whole = tryWholeLibraryMatch(body, foods, resolvedType)
     if (whole) return whole
   }
 
-  // Prefer local catalog matching; DeepSeek only when something is missing.
-  const local = parseMealLocal(body, foods, resolvedType, eatingOut)
-  const withType = fromText.mealType
-    ? { ...local, mealType: fromText.mealType }
-    : local
-  const allFromLibrary =
-    !eatingOut &&
-    withType.items.length > 0 &&
-    withType.items.every((i) => i.source === 'library')
-
-  if (allFromLibrary) {
-    return {
-      ...withType,
-      parseSource: 'library',
-      isApproximate: false,
-      notes:
-        withType.items.length > 1
-          ? 'Все позиции найдены в справочнике.'
-          : withType.notes,
-    }
-  }
-
   if (isLlmConfigured()) {
     try {
-      const draft = await parseMealWithLlm(body, foods, resolvedType, eatingOut)
-      return finalizeDraft(
-        fromText.mealType ?? draft.mealType,
-        draft.items,
-        foods,
-        draft.eatingOut,
-        draft.notes,
-        'deepseek',
-        body,
-      )
+      const draft = await parseMealCatalogFirst(body, foods, resolvedType, eatingOut)
+      return fromText.mealType ? { ...draft, mealType: fromText.mealType } : draft
     } catch {
-      // keep local estimate below
+      // local fallback below
     }
   }
 
-  return withType
+  const local = parseMealLocal(body, foods, resolvedType, eatingOut)
+  return fromText.mealType ? { ...local, mealType: fromText.mealType } : local
 }

@@ -54,6 +54,10 @@ describe('guessFallbackCategory', () => {
     expect(guessFallbackCategory('латте').kcal).toBe(45)
   })
 
+  it('does not treat coffee with milk as black coffee', () => {
+    expect(guessFallbackCategory('кофе с молоком').kcal).toBe(45)
+  })
+
   it('detects pasta dry vs cooked-ish pasta dishes', () => {
     expect(guessFallbackCategory('спагетти сухие').kcal).toBe(350)
     expect(guessFallbackCategory('паста карбонара').kcal).toBe(150)

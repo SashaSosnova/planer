@@ -72,7 +72,10 @@ export const FALLBACK_ESTIMATES: Record<string, MacroSet> = {
 
 export function guessFallbackCategory(name: string): MacroSet {
   const n = name.toLowerCase().replace(/ё/g, 'е')
-  if (/латте|капучино|флэт\s*уайт|раф/.test(n)) return FALLBACK_ESTIMATES.coffeeMilkDrink
+  // Milk coffee before bare «молоко» / black «кофе» — otherwise «кофе с молоком» ≈ 4 kcal.
+  if (/латте|капучино|флэт\s*уайт|раф|кофе.*молок|молок.*кофе/.test(n)) {
+    return FALLBACK_ESTIMATES.coffeeMilkDrink
+  }
   if (/сливк\w*\s*20|20\s*%\s*сливк|сливки/.test(n)) return FALLBACK_ESTIMATES.cream20
   if (/молок/.test(n)) return FALLBACK_ESTIMATES.milk
   if (/кофе|американо|эспрессо/.test(n)) return FALLBACK_ESTIMATES.coffee

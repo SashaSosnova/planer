@@ -154,6 +154,19 @@ function clampMacroPatch(patch: Partial<MealItem>): Partial<MealItem> {
   return out
 }
 
+/** Substring catalog search (ё→е), for picker — not the strict auto-matcher. */
+export function normalizeCatalogQuery(raw: string): string {
+  return raw.trim().toLowerCase().replace(/ё/g, 'е')
+}
+
+export function foodMatchesCatalogQuery(food: FoodItem, q: string): boolean {
+  if (!q) return true
+  const name = food.name.toLowerCase().replace(/ё/g, 'е')
+  if (name.includes(q)) return true
+  if (food.brand?.toLowerCase().replace(/ё/g, 'е').includes(q)) return true
+  return food.aliases.some((a) => a.toLowerCase().replace(/ё/g, 'е').includes(q))
+}
+
 export function applyItemPatch(
   items: MealItem[],
   index: number,
@@ -519,29 +532,19 @@ export function MealDraftEditor({
   }
 
   const filteredFoods = useMemo(() => {
-    const q = addQuery.trim().toLowerCase()
+    const q = normalizeCatalogQuery(addQuery)
     if (!q) return []
     return [...data.foods]
-      .filter(
-        (f) =>
-          f.name.toLowerCase().includes(q) ||
-          f.aliases.some((a) => a.toLowerCase().includes(q)),
-      )
+      .filter((f) => foodMatchesCatalogQuery(f, q))
       .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
       .slice(0, 36)
   }, [data.foods, addQuery])
 
   const replaceFilteredFoods = useMemo(() => {
-    const q = replaceQuery.trim().toLowerCase()
+    const q = normalizeCatalogQuery(replaceQuery)
     const list = [...data.foods]
-    const filtered = q
-      ? list.filter(
-          (f) =>
-            f.name.toLowerCase().includes(q) ||
-            f.aliases.some((a) => a.toLowerCase().includes(q)),
-        )
-      : list
-    return filtered.sort((a, b) => a.name.localeCompare(b.name, 'ru')).slice(0, 36)
+    const filtered = q ? list.filter((f) => foodMatchesCatalogQuery(f, q)) : list
+    return filtered.sort((a, b) => a.name.localeCompare(b.name, 'ru')).slice(0, 48)
   }, [data.foods, replaceQuery])
 
   const removeAt = (index: number) => {
@@ -573,8 +576,17 @@ export function MealDraftEditor({
   }
 
   const applyRematch = (index: number, item: MealItem) => {
-    const next = rematchItemByName([item], 0, item.name, data.foods)[0]!
-    onChangeItem(index, { ...next })
+    if (replacingIndex === index) {
+      setReplacingIndex(null)
+      setReplaceQuery('')
+      return
+    }
+    setMacrosEdit(null)
+    setRelatedOpenIndex(null)
+    setReplacingIndex(index)
+    // Prefill with the typed label so includes-search shows long catalog names
+    // («мороженое» → «Мороженое пломбир…»), not the strict auto-matcher.
+    setReplaceQuery(item.name.trim())
   }
 
   const applyReplace = (index: number, item: MealItem, food: FoodItem) => {
@@ -633,8 +645,10 @@ export function MealDraftEditor({
         const needsPick =
           unmatched && !fromLibrary && pickGroups.primary.length >= 2
         const hasRelated = !fromLibrary && pickGroups.related.length > 0
+        const replacing = replacingIndex === index
         const showPickPanel =
-          (!fromLibrary && pickGroups.primary.length >= 2) || hasRelated
+          !replacing &&
+          ((!fromLibrary && pickGroups.primary.length >= 2) || hasRelated)
         /** Soft related / estimated rows are optional — only unknown+collision. */
         const askClarify = needsPick
         const per100 = linked ? linked.per100g : per100FromPortion(item)
@@ -644,7 +658,6 @@ export function MealDraftEditor({
             : null
         const showPieces = Boolean(linked && portionGrams != null && showPieceControls(linked))
         const expanded = !collapsible || editingIndex === index
-        const replacing = replacingIndex === index
         const label = item.name.trim() || 'продукт'
         const canEditMacros = !fromLibrary
         const pieces =
@@ -721,8 +734,9 @@ export function MealDraftEditor({
                     />
                     <button
                       type="button"
-                      className="icon-btn sm draft-rematch-btn"
+                      className={`icon-btn sm draft-rematch-btn${replacing ? ' active' : ''}`}
                       onClick={() => applyRematch(index, item)}
+                      aria-expanded={replacing}
                       aria-label="Найти в каталоге"
                       title="Найти в каталоге"
                     >
@@ -851,17 +865,21 @@ export function MealDraftEditor({
             {replacing && (
               <div className="draft-replace-panel">
                 <label className="field">
-                  <span>Поиск в моих продуктах</span>
+                  <span>Поиск в каталоге</span>
                   <input
                     value={replaceQuery}
                     onChange={(e) => setReplaceQuery(e.target.value)}
-                    placeholder="Название"
+                    placeholder="Название или бренд"
                     autoFocus
                   />
                 </label>
                 <div className="draft-food-picker">
                   {replaceFilteredFoods.length === 0 ? (
-                    <p className="muted small">Ничего не найдено.</p>
+                    <p className="muted small">
+                      {normalizeCatalogQuery(replaceQuery)
+                        ? 'Ничего не найдено — попробуйте другое слово.'
+                        : 'В каталоге пока пусто.'}
+                    </p>
                   ) : (
                     <ul className="draft-food-list">
                       {replaceFilteredFoods.map((food) => (
@@ -874,6 +892,9 @@ export function MealDraftEditor({
                             <span className="food-row-title">
                               <strong>{food.name}</strong>
                               {food.brand && <span className="brand-chip">{food.brand}</span>}
+                              {food.kind === 'dish' && (
+                                <span className="muted small"> · рецепт</span>
+                              )}
                             </span>
                             <span className="muted small">
                               {Math.round(food.per100g.kcal)} ккал / 100 г

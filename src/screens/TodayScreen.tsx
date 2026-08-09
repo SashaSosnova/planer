@@ -7,7 +7,11 @@ import { addDaysIso, formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
-import { truncateMealPreview } from '../lib/mealDraft'
+import {
+  formatMealClock,
+  groupDayMealsForList,
+  truncateMealPreview,
+} from '../lib/mealDraft'
 import { formatKg } from '../lib/nutrition'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { calcSweetBudgetKcal } from '../lib/sweets'
@@ -15,7 +19,7 @@ import { NavGlyph } from '../components/NavGlyph'
 import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
 import { PlusIcon } from '../components/PlusIcon'
 import { buildWeightProgress } from '../lib/weightProgress'
-import type { AppData, MealType } from '../types'
+import type { AppData, Meal, MealType } from '../types'
 
 type PromptKind = 'weight' | 'steps' | null
 
@@ -48,6 +52,21 @@ type Props = {
   backEnabled?: boolean
   onSaveWeight: (date: string, kg: number) => Promise<unknown>
   onSaveSteps: (date: string, count: number) => Promise<unknown>
+}
+
+function formatMealBju(totals: { protein: number; fat: number; carbs: number }): string {
+  return `Б ${Math.round(totals.protein)} · Ж ${Math.round(totals.fat)} · У ${Math.round(totals.carbs)}`
+}
+
+function mealMedTags(
+  meal: Meal,
+  medDay: AppData['medDays'][number] | undefined,
+): { hasMg: boolean; hasFe: boolean } {
+  const mgDose = mgDoseKeyForMealType(meal.mealType)
+  return {
+    hasMg: mgDose ? Boolean(medTakenAt(medDay, mgDose)) : false,
+    hasFe: meal.mealType === 'breakfast' && Boolean(medTakenAt(medDay, 'iron')),
+  }
 }
 
 function num(v: string): number | undefined {
@@ -129,6 +148,10 @@ export function TodayScreen({
   }
 
   const dayStats = useMemo(() => statsForDate(data, date), [data, date])
+  const mealGroups = useMemo(
+    () => groupDayMealsForList(dayStats.meals),
+    [dayStats.meals],
+  )
   const sweetBudget = useMemo(
     () => calcSweetBudgetKcal(dailyKcalGoal),
     [dailyKcalGoal],
@@ -369,13 +392,59 @@ export function TodayScreen({
       </div>
 
       <section className="meal-section" aria-label="Приёмы пищи">
-        {dayStats.meals.length > 0 ? (
+        {mealGroups.length > 0 ? (
           <ul className="meal-list">
-            {dayStats.meals.map((meal) => {
-              const mgDose = mgDoseKeyForMealType(meal.mealType)
-              const hasMg = mgDose ? Boolean(medTakenAt(medDay, mgDose)) : false
-              const hasFe =
-                meal.mealType === 'breakfast' && Boolean(medTakenAt(medDay, 'iron'))
+            {mealGroups.map((group) => {
+              if (group.kind === 'snacks') {
+                const title =
+                  group.meals.length > 1 ? 'Перекусы' : MEAL_TYPE_LABELS.snack
+                return (
+                  <li key="snacks">
+                    <div className="meal-card meal-snack-card">
+                      <div className="meal-card-top">
+                        <strong>
+                          {title}
+                          {group.eatingOut ? ' · вне дома' : ''}
+                        </strong>
+                        <span>
+                          {group.isApproximate || group.eatingOut ? '≈ ' : ''}
+                          {Math.round(group.totals.kcal)} ккал
+                        </span>
+                      </div>
+                      <ul className="meal-snack-entries">
+                        {group.meals.map((meal) => {
+                          const time = formatMealClock(meal.createdAt)
+                          return (
+                            <li key={meal.id}>
+                              <button
+                                type="button"
+                                className="meal-snack-entry"
+                                onClick={() => onOpenMeal(meal.id)}
+                              >
+                                <span className="meal-snack-entry-body">
+                                  {truncateMealPreview(mealPreviewText(meal)) || '—'}
+                                  {meal.eatingOut ? ' · вне дома' : ''}
+                                  {meal.isApproximate ? ' ≈' : ''}
+                                </span>
+                                {time ? (
+                                  <span className="meal-time">{time}</span>
+                                ) : null}
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                      <div className="meal-card-foot">
+                        <p className="meal-bju">{formatMealBju(group.totals)}</p>
+                      </div>
+                    </div>
+                  </li>
+                )
+              }
+
+              const meal = group.meal
+              const { hasMg, hasFe } = mealMedTags(meal, medDay)
+              const time = formatMealClock(meal.createdAt)
               return (
                 <li key={meal.id}>
                   <button
@@ -402,10 +471,10 @@ export function TodayScreen({
                     <p className="meal-preview">
                       {truncateMealPreview(mealPreviewText(meal))}
                     </p>
-                    <p className="meal-bju">
-                      Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}
-                      {Math.round(meal.totals.carbs)}
-                    </p>
+                    <div className="meal-card-foot">
+                      <p className="meal-bju">{formatMealBju(meal.totals)}</p>
+                      {time ? <span className="meal-time">{time}</span> : null}
+                    </div>
                   </button>
                 </li>
               )

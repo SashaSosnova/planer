@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { CatalogSections } from '../components/CatalogSections'
 import { CategorySelect } from '../components/CategorySelect'
-import { PencilIcon } from '../components/PencilIcon'
 import { PlusIcon } from '../components/PlusIcon'
 import { TrashIcon } from '../components/TrashIcon'
 import { generateAliases } from '../lib/foodAliases'
@@ -910,7 +909,15 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
             <div className={`food-row food-row-icons${editId === food.id ? ' is-editing' : ''}`}>
               <div className="food-row-body">
                 <div className="food-row-title">
-                  <strong>{food.name}</strong>
+                  <button
+                    type="button"
+                    className="food-row-open food-row-name-open"
+                    onClick={() => startEdit(food)}
+                    aria-expanded={editId === food.id}
+                    aria-label={`Изменить ${food.name}`}
+                  >
+                    <strong>{food.name}</strong>
+                  </button>
                   {food.brand && (
                     <button
                       type="button"
@@ -926,30 +933,29 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                     </button>
                   )}
                 </div>
-                <p className="muted small">
-                  {food.per100g.kcal} ккал · Б {food.per100g.protein} · Ж {food.per100g.fat} · У{' '}
-                  {food.per100g.carbs} / 100 г
-                  {food.portionGrams != null && food.portionGrams > 0 && (
-                    <>
-                      <br />
-                      {(() => {
-                        const p = scalePer100g(food.per100g, food.portionGrams)
-                        return `порция ${food.portionGrams} г → ${p.kcal} ккал · Б ${p.protein} · Ж ${p.fat} · У ${p.carbs}`
-                      })()}
-                    </>
-                  )}
-                </p>
-              </div>
-              <div className="btn-row tight nowrap food-row-actions">
                 <button
                   type="button"
-                  className={`icon-btn sm${editId === food.id ? ' active' : ''}`}
+                  className="food-row-open food-row-meta-open"
                   onClick={() => startEdit(food)}
-                  aria-label={`Изменить ${food.name}`}
-                  title="Изменить"
+                  tabIndex={-1}
+                  aria-hidden
                 >
-                  <PencilIcon size={18} />
+                  <p className="muted small">
+                    {food.per100g.kcal} ккал · Б {food.per100g.protein} · Ж {food.per100g.fat} · У{' '}
+                    {food.per100g.carbs} / 100 г
+                    {food.portionGrams != null && food.portionGrams > 0 && (
+                      <>
+                        <br />
+                        {(() => {
+                          const p = scalePer100g(food.per100g, food.portionGrams)
+                          return `порция ${food.portionGrams} г → ${p.kcal} ккал · Б ${p.protein} · Ж ${p.fat} · У ${p.carbs}`
+                        })()}
+                      </>
+                    )}
+                  </p>
                 </button>
+              </div>
+              <div className="btn-row tight nowrap food-row-actions">
                 <button
                   type="button"
                   className="icon-btn sm danger"

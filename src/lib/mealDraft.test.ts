@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareMealsByTypeThenTime,
+  formatMealClock,
+  groupDayMealsForList,
   inferSavedFoodKind,
   mealItemIsUnresolved,
   mealItemsAreApproximate,
@@ -100,6 +102,68 @@ describe('compareMealsByTypeThenTime', () => {
       'b',
       'l',
     ])
+  })
+})
+
+describe('groupDayMealsForList', () => {
+  function meal(partial: Partial<Meal> & Pick<Meal, 'id' | 'mealType'>): Meal {
+    return {
+      date: '2026-01-01',
+      rawText: '',
+      items: [],
+      totals: { kcal: 100, protein: 10, fat: 5, carbs: 8 },
+      isApproximate: false,
+      eatingOut: false,
+      createdAt: 1,
+      ...partial,
+    }
+  }
+
+  it('merges snacks into one group with summed macros', () => {
+    const breakfast = meal({ id: 'b', mealType: 'breakfast', totals: { kcal: 400, protein: 30, fat: 10, carbs: 40 } })
+    const s1 = meal({
+      id: 's1',
+      mealType: 'snack',
+      createdAt: 10,
+      totals: { kcal: 50, protein: 1, fat: 0, carbs: 12 },
+    })
+    const s2 = meal({
+      id: 's2',
+      mealType: 'snack',
+      createdAt: 20,
+      isApproximate: true,
+      totals: { kcal: 150, protein: 2, fat: 8, carbs: 18 },
+    })
+    const groups = groupDayMealsForList([breakfast, s1, s2])
+    expect(groups).toHaveLength(2)
+    expect(groups[0]).toMatchObject({ kind: 'single', meal: { id: 'b' } })
+    expect(groups[1]).toMatchObject({
+      kind: 'snacks',
+      isApproximate: true,
+      totals: { kcal: 200, protein: 3, fat: 8, carbs: 30 },
+    })
+    if (groups[1]?.kind === 'snacks') {
+      expect(groups[1].meals.map((m) => m.id)).toEqual(['s1', 's2'])
+    }
+  })
+
+  it('keeps a single snack as a snacks group', () => {
+    const groups = groupDayMealsForList([meal({ id: 's', mealType: 'snack' })])
+    expect(groups).toEqual([
+      expect.objectContaining({ kind: 'snacks', meals: [expect.objectContaining({ id: 's' })] }),
+    ])
+  })
+})
+
+describe('formatMealClock', () => {
+  it('formats local HH:MM', () => {
+    const ts = new Date(2026, 7, 9, 15, 7).getTime()
+    expect(formatMealClock(ts)).toMatch(/15:07/)
+  })
+
+  it('returns empty for invalid', () => {
+    expect(formatMealClock(0)).toBe('')
+    expect(formatMealClock(Number.NaN)).toBe('')
   })
 })
 

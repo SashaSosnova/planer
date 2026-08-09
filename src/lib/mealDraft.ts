@@ -1,5 +1,6 @@
-import type { Meal, MealItem, MealType, ParsedMealDraft } from '../types'
+import type { MacroSet, Meal, MealItem, MealType, ParsedMealDraft } from '../types'
 import { MEAL_TYPE_ORDER } from './labels'
+import { sumMacros } from './nutrition'
 
 /** Blank draft rows are dropped on save — ignore for resolve / ≈. */
 export function mealItemIsBlank(item: MealItem): boolean {
@@ -63,6 +64,55 @@ export function compareMealsByTypeThenTime(a: Meal, b: Meal): number {
   const sb = ib < 0 ? MEAL_TYPE_ORDER.length : ib
   if (sa !== sb) return sa - sb
   return a.createdAt - b.createdAt
+}
+
+/** One card on the day list: main meal, or all snacks coalesced. */
+export type DayMealListGroup =
+  | { kind: 'single'; meal: Meal }
+  | {
+      kind: 'snacks'
+      meals: Meal[]
+      totals: MacroSet
+      isApproximate: boolean
+      eatingOut: boolean
+    }
+
+/** Keep breakfast/lunch/dinner as cards; merge all snacks into one block. */
+export function groupDayMealsForList(meals: Meal[]): DayMealListGroup[] {
+  const groups: DayMealListGroup[] = []
+  let snacks: Meal[] = []
+
+  const flushSnacks = () => {
+    if (snacks.length === 0) return
+    groups.push({
+      kind: 'snacks',
+      meals: snacks,
+      totals: sumMacros(snacks.map((m) => m.totals)),
+      isApproximate: snacks.some((m) => m.isApproximate),
+      eatingOut: snacks.some((m) => m.eatingOut),
+    })
+    snacks = []
+  }
+
+  for (const meal of meals) {
+    if (meal.mealType === 'snack') {
+      snacks.push(meal)
+      continue
+    }
+    flushSnacks()
+    groups.push({ kind: 'single', meal })
+  }
+  flushSnacks()
+  return groups
+}
+
+/** Local clock from meal.createdAt — «14:35». */
+export function formatMealClock(createdAt: number): string {
+  if (!Number.isFinite(createdAt) || createdAt <= 0) return ''
+  return new Date(createdAt).toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 const CLARIFY_NOTE_RE = /Уточните продукты? — в справочнике несколько похожих\.\s*/gi

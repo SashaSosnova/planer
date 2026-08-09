@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyItemPatch,
+  foodMatchesCatalogQuery,
+  normalizeCatalogQuery,
   patchDraft,
   rematchItemByName,
   replaceItemWithFood,
@@ -95,6 +97,30 @@ describe('rematch / replace', () => {
     'dish',
     ['куриное филе гриль'],
   )
+
+  it('catalog substring search finds long product by short word', () => {
+    const ice = food(
+      'ice',
+      'Мороженое пломбир ванильный Магнат в шоколадной глазури',
+      { kcal: 250, protein: 4, fat: 14, carbs: 28 },
+      'ingredient',
+      ['мороженое'],
+    )
+    const q = normalizeCatalogQuery('мороженое')
+    expect(foodMatchesCatalogQuery(ice, q)).toBe(true)
+    expect(foodMatchesCatalogQuery(raw, q)).toBe(false)
+  })
+
+  it('catalog substring search matches brand and ё/е', () => {
+    const ice = {
+      ...food('ice', 'Пломбир', { kcal: 200, protein: 3, fat: 12, carbs: 20 }),
+      brand: 'Магнат',
+    }
+    expect(foodMatchesCatalogQuery(ice, normalizeCatalogQuery('магнат'))).toBe(true)
+    expect(foodMatchesCatalogQuery(ice, normalizeCatalogQuery('мороженое'))).toBe(false)
+    const withYo = food('yo', 'Морожёное', { kcal: 200, protein: 3, fat: 12, carbs: 20 })
+    expect(foodMatchesCatalogQuery(withYo, normalizeCatalogQuery('мороженое'))).toBe(true)
+  })
 
   it('rematchItemByName links catalog hit', () => {
     const items = [item({ name: 'куриное филе гриль', grams: 100, kcal: 1, source: 'unknown' })]

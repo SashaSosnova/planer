@@ -91,7 +91,7 @@ export function buildWeekStats(
   const weightEnd = data.weights.find((w) => w.date === sunday)?.kg
   const weightDelta =
     weightStart != null && weightEnd != null
-      ? Math.round((weightEnd - weightStart) * 10) / 10
+      ? Math.round((weightEnd - weightStart) * 100) / 100
       : undefined
 
   const mealSnippets = days.flatMap((d) =>

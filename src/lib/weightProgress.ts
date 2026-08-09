@@ -1,6 +1,6 @@
 import type { AppData, WeightEntry } from '../types'
 import { addDaysIso, todayIso } from './date'
-import { round1 } from './nutrition'
+import { formatKg, round2 } from './nutrition'
 import {
   estimateNextMorning,
   forecastFromAppData,
@@ -17,14 +17,14 @@ export type WeightProgress = {
 }
 
 function formatSignedDelta(delta: number, approx = false): string {
-  const abs = Math.abs(delta).toFixed(1).replace('.', ',')
+  const abs = formatKg(Math.abs(delta))
   const core =
-    Math.abs(delta) < 0.05 ? '0 кг' : delta > 0 ? `+${abs} кг` : `−${abs} кг`
+    Math.abs(delta) < 0.005 ? '0 кг' : delta > 0 ? `+${abs} кг` : `−${abs} кг`
   return approx ? `≈ ${core}` : core
 }
 
 function toneFromDelta(delta: number | null | undefined): 'up' | 'down' | 'flat' {
-  if (delta == null || Math.abs(delta) < 0.05) return 'flat'
+  if (delta == null || Math.abs(delta) < 0.005) return 'flat'
   return delta > 0 ? 'up' : 'down'
 }
 
@@ -69,7 +69,7 @@ export function deltaVsYesterdayWeight(
       : ([...sorted].reverse().find((w) => w.date < current.date) ?? null)
   if (!baseline || baseline.date === current.date) return null
 
-  return round1(current.kg - baseline.kg)
+  return round2(current.kg - baseline.kg)
 }
 
 /**

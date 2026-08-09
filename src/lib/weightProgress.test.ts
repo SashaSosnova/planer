@@ -81,7 +81,7 @@ describe('buildWeightProgress', () => {
     expect(progress!.hero).toBe('−0,2 кг')
     expect(progress!.tone).toBe('down')
     expect(progress!.note).toMatch(/Вчера 1230 ккал/)
-    expect(progress!.note).toMatch(/Темп|через неделю/)
+    expect(progress!.note).toMatch(/дефицит|за неделю|через неделю/)
     expect(progress!.hero).not.toMatch(/через неделю/)
   })
 
@@ -107,7 +107,7 @@ describe('buildWeightProgress', () => {
     expect(progress).not.toBeNull()
     // No weight on 23rd → compares latest (22nd) to previous weigh-in (15→22: −0,5)
     expect(progress!.hero).toBe('−0,5 кг')
-    expect(progress!.note).toMatch(/Темп|через неделю/)
+    expect(progress!.note).toMatch(/дефицит|за неделю|через неделю/)
     expect(progress!.note).not.toMatch(/Вчера \d+ ккал/)
   })
 

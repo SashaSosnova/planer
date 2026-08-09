@@ -22,6 +22,7 @@ import {
 } from '../lib/cycle'
 import { formatRuDate, todayIso } from '../lib/date'
 import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
+import { formatKg } from '../lib/nutrition'
 import { calcSweetBudgetKcal } from '../lib/sweets'
 import type { AppSettings } from '../lib/settings'
 import type { AppData } from '../types'
@@ -297,10 +298,10 @@ export function ProfileScreen({
         <div className="panel">
           <div className="profile-summary">
             <div className="profile-summary-text">
-              <strong>Цель {savedTargetKg} кг</strong>
+              <strong>Цель {formatKg(savedTargetKg)} кг</strong>
               <p className="muted small">
                 {weightKg != null
-                  ? `Сейчас ${weightKg} кг · для прогноза и срока до цели`
+                  ? `Сейчас ${formatKg(weightKg)} кг · для прогноза и срока до цели`
                   : 'Для прогноза и срока до цели'}
               </p>
             </div>
@@ -342,7 +343,7 @@ export function ProfileScreen({
                   setTargetError('Целевой вес от 30 до 400 кг')
                   return
                 }
-                const nextTarget = Math.round(t * 10) / 10
+                const nextTarget = Math.round(t * 100) / 100
                 onSaveTargets({ targetWeightKg: nextTarget })
                 setSavedTargetKg(nextTarget)
                 setTargetError(null)
@@ -521,8 +522,8 @@ export function ProfileScreen({
               <strong>{liveGoal} ккал/день</strong>
               <p className="muted small">
                 {[
-                  weightKg != null ? `${weightKg} кг` : null,
-                  savedTargetKg != null ? `цель ${savedTargetKg} кг` : null,
+                  weightKg != null ? `${formatKg(weightKg)} кг` : null,
+                  savedTargetKg != null ? `цель ${formatKg(savedTargetKg)} кг` : null,
                   proteinGoal != null ? `белок ${proteinGoal} г` : null,
                   `овощи ${VEG_GOAL_G} г`,
                   `сладкое до ${calcSweetBudgetKcal(liveGoal)} ккал`,

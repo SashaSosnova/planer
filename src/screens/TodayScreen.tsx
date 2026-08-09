@@ -8,6 +8,7 @@ import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
 import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
 import { truncateMealPreview } from '../lib/mealDraft'
+import { formatKg } from '../lib/nutrition'
 import { VEG_GOAL_G } from '../lib/macroGoals'
 import { calcSweetBudgetKcal } from '../lib/sweets'
 import { NavGlyph } from '../components/NavGlyph'
@@ -329,7 +330,7 @@ export function TodayScreen({
           <div className="today-meta-row">
             <button type="button" className="stat-chip compact" onClick={openWeight}>
               <span>Вес</span>
-              <strong>{weight ? `${weight.kg} кг` : '—'}</strong>
+              <strong>{weight ? `${formatKg(weight.kg)} кг` : '—'}</strong>
             </button>
             <button type="button" className="stat-chip compact" onClick={openSteps}>
               <span>Шаги</span>
@@ -399,7 +400,7 @@ export function TodayScreen({
                       </span>
                     </div>
                     <p className="meal-preview">
-                      {truncateMealPreview(mealPreviewText(meal), 72)}
+                      {truncateMealPreview(mealPreviewText(meal))}
                     </p>
                     <p className="meal-bju">
                       Б {Math.round(meal.totals.protein)} · Ж {Math.round(meal.totals.fat)} · У{' '}

@@ -79,7 +79,7 @@ function cleanWeight(raw: unknown): WeightEntry | null {
   return {
     id: typeof o.id === 'string' && o.id ? o.id : crypto.randomUUID(),
     date,
-    kg: Math.round(kg * 10) / 10,
+    kg: Math.round(kg * 100) / 100,
     createdAt: asNum(o.createdAt) ?? Date.now(),
   }
 }

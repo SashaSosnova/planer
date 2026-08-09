@@ -37,6 +37,9 @@ function formatAxis(v: number, unit: string): string {
     if (v >= 1000) return `${Math.round(v / 100) / 10}k`.replace('.0k', 'k')
     return String(Math.round(v))
   }
+  if (unit === 'кг') {
+    return String(Math.round(v * 100) / 100)
+  }
   return String(Math.round(v * 10) / 10)
 }
 

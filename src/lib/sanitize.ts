@@ -1,5 +1,5 @@
 import { coerceMealType } from './labels'
-import { round1, sumMacros } from './nutrition'
+import { round1, round2, sumMacros } from './nutrition'
 import type {
   AppData,
   CareDayEntry,
@@ -154,7 +154,7 @@ export function sanitizeWeight(raw: unknown): WeightEntry | null {
   const date = String(w.date ?? '')
   const kg = nonNeg(w.kg)
   if (!id || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !(kg >= 30 && kg <= 400)) return null
-  return { id, date, kg: round1(kg), createdAt: Number(w.createdAt) || Date.now() }
+  return { id, date, kg: round2(kg), createdAt: Number(w.createdAt) || Date.now() }
 }
 
 export function sanitizeSteps(raw: unknown): StepsEntry | null {

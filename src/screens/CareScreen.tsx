@@ -1,17 +1,12 @@
 import { useMemo, useState } from 'react'
 import {
-  CARE_DAY_FLAGS,
   CARE_RULES,
-  CARE_WEEKDAY_LONG,
   CARE_WEEKDAY_ORDER,
   CARE_WEEKDAY_SHORT,
 } from '../lib/careRoutine'
 import {
   activeCareProducts,
   careWeekdayFromIso,
-  eveningTitleForWeekday,
-  formatCareDaysLabel,
-  formatCareSlotsLabel,
   productCheckedOnDay,
   productsForDaySlot,
   weekDatesContaining,
@@ -64,13 +59,8 @@ type Props = {
   onArchiveProduct: (id: string, archived?: boolean) => Promise<unknown>
 }
 
-function FlagMark({ on }: { on: boolean }) {
-  return <span className={on ? 'care-flag on' : 'care-flag'}>{on ? 'да' : '—'}</span>
-}
-
 function SlotChecklist({
   title,
-  subtitle,
   slot,
   products,
   doneIds,
@@ -78,7 +68,6 @@ function SlotChecklist({
   onMarkAll,
 }: {
   title: string
-  subtitle?: string
   slot: CareSlot
   products: CareProduct[]
   doneIds: string[]
@@ -95,7 +84,6 @@ function SlotChecklist({
           {done}/{products.length}
         </span>
       </div>
-      {subtitle && <p className="care-note-sub">{subtitle}</p>}
       {products.length > 0 && (
         <div className="care-slot-actions">
           <button
@@ -110,7 +98,7 @@ function SlotChecklist({
         </div>
       )}
       <ul className="care-check-list">
-        {products.map((p, i) => {
+        {products.map((p) => {
           const checked = doneIds.includes(p.id)
           return (
             <li key={`${slot}-${p.id}`}>
@@ -120,7 +108,6 @@ function SlotChecklist({
                   checked={checked}
                   onChange={() => onToggle(slot, p.id)}
                 />
-                <span className="care-check-num">{i + 1}</span>
                 <span className="care-check-body">
                   <span className="care-check-text">{p.name}</span>
                   {p.how && <span className="care-check-how">{p.how}</span>}
@@ -355,7 +342,6 @@ export function CareScreen({
 
   const weekday = careWeekdayFromIso(viewDate)
   const weekDates = useMemo(() => weekDatesContaining(viewDate), [viewDate])
-  const flags = CARE_DAY_FLAGS[weekday]
   const dayEntry = careDays.find((d) => d.date === viewDate)
 
   const morningProducts = useMemo(
@@ -510,25 +496,12 @@ export function CareScreen({
             })}
           </div>
 
-          <div className="care-flags-row">
-            <span>
-              Caramel <FlagMark on={flags.caramel} />
-            </span>
-            <span>
-              BHA <FlagMark on={flags.bha} />
-            </span>
-            <span>
-              Маска <FlagMark on={flags.mask} />
-            </span>
-          </div>
-
           {viewDate !== today && (
             <p className="muted small">Просмотр {formatRuDate(viewDate)} — можно ставить отметки.</p>
           )}
 
           <SlotChecklist
             title="Утро"
-            subtitle="По списку средств · ~5 мин"
             slot="morning"
             products={morningProducts}
             doneIds={dayEntry?.morning ?? []}
@@ -537,8 +510,7 @@ export function CareScreen({
           />
 
           <SlotChecklist
-            title={`Вечер · ${CARE_WEEKDAY_LONG[weekday]}`}
-            subtitle={eveningTitleForWeekday(weekday)}
+            title="Вечер"
             slot="evening"
             products={eveningProducts}
             doneIds={dayEntry?.evening ?? []}
@@ -583,9 +555,6 @@ export function CareScreen({
               {activeProducts.map((p) => (
                 <li key={p.id} className="care-product">
                   <p className="care-product-name">{p.name}</p>
-                  <p className="care-product-when">
-                    {formatCareSlotsLabel(p.slots)} · {formatCareDaysLabel(p.days)}
-                  </p>
                   {p.how && <p className="care-product-how">{p.how}</p>}
                   <div className="care-product-actions">
                     <button type="button" className="link-btn" onClick={() => openEditProduct(p)}>

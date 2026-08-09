@@ -1,6 +1,6 @@
 import type { Meal, WeightEntry } from '../types'
 import { addDaysIso } from './date'
-import { round1, sumMacros } from './nutrition'
+import { formatKg, round2, sumMacros } from './nutrition'
 
 export type WeightCheckin = {
   /** Hero label, e.g. «−0,6 кг» or «64,5 кг» for the first point */
@@ -10,13 +10,10 @@ export type WeightCheckin = {
   note: string
 }
 
-function fmtKg(n: number): string {
-  return Math.abs(n).toFixed(1).replace('.', ',')
-}
-
 function formatDeltaHero(deltaKg: number): string {
   if (deltaKg === 0) return '0 кг'
-  return deltaKg > 0 ? `+${fmtKg(deltaKg)} кг` : `−${fmtKg(deltaKg)} кг`
+  const abs = formatKg(Math.abs(deltaKg))
+  return deltaKg > 0 ? `+${abs} кг` : `−${abs} кг`
 }
 
 function sortedWeights(weights: WeightEntry[]): WeightEntry[] {
@@ -106,13 +103,13 @@ export function buildWeightCheckin(input: {
 
   if (!prev) {
     return {
-      hero: `${latest.kg.toFixed(1).replace('.', ',')} кг`,
+      hero: `${formatKg(latest.kg)} кг`,
       tone: 'flat',
       note: 'Первая точка — сравнение появится со следующего взвешивания.',
     }
   }
 
-  const deltaKg = round1(latest.kg - prev.kg)
+  const deltaKg = round2(latest.kg - prev.kg)
   const tone: WeightCheckin['tone'] =
     Math.abs(deltaKg) < 0.15 ? 'flat' : deltaKg > 0 ? 'up' : 'down'
 

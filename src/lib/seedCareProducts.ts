@@ -1,8 +1,8 @@
 import type { CareProduct, CareSlot, CareWeekday } from '../types'
 
 /** Bump when the default care catalog changes so clients replace the seed set. */
-export const SEED_CARE_PRODUCTS_KEY = 'planer-seed-care-products-v3'
-export const CARE_PRODUCTS_SEED_VERSION = 3
+export const SEED_CARE_PRODUCTS_KEY = 'planer-seed-care-products-v4'
+export const CARE_PRODUCTS_SEED_VERSION = 4
 
 /**
  * New routine (order, Anthelios SPF, updated how-texts) applies from this evening.
@@ -59,7 +59,7 @@ export const CARE_PRODUCT_OVERLAY_V2: Record<string, { name: string; how: string
   },
   thermal: {
     name: 'Термальная вода La Roche-Posay',
-    how: 'Распылить на лицо, подождать 10 секунд, промокнуть бумажной салфеткой. Утром — после умывания; вечером — перед гиалуронкой.',
+    how: 'Распылить на лицо, подождать 10 секунд, промокнуть бумажной салфеткой — кожа чуть влажная.',
   },
   'dual-toner': {
     name: 'Celimax Dual Barrier Creamy Toner',
@@ -83,7 +83,7 @@ export const CARE_PRODUCT_OVERLAY_V2: Record<string, { name: string; how: string
   },
   nmf: {
     name: 'The Ordinary Natural Moisturizing Factors + HA',
-    how: 'Утром: тонкий слой на всё лицо, дать впитаться 3–5 мин перед SPF. Вечером: плотный слой на всё лицо.',
+    how: 'Тонкий слой перед SPF (3–5 мин) или плотный слой после HA — похлопать, не растирать.',
   },
   spf: {
     name: 'Likoberon солнцезащитный крем SPF 50',
@@ -161,7 +161,7 @@ export function buildSeedCareProducts(now = Date.now()): CareProduct[] {
       slots: ['morning', 'evening'],
       days: 'every',
       sortOrder: 25,
-      how: 'Распылить на лицо, подождать до 10 секунд, промокнуть салфеткой (не тереть) — кожа должна остаться чуть влажной. Утро: после умывания, перед тонером. Вечер: после очищения (и после паузы BHA в субботу) / после маски в воскресенье — перед тонером.',
+      how: 'Распылить на лицо, подождать до 10 секунд, промокнуть салфеткой (не тереть) — кожа чуть влажная.',
     },
     {
       ...base,
@@ -170,7 +170,7 @@ export function buildSeedCareProducts(now = Date.now()): CareProduct[] {
       slots: ['morning', 'evening'],
       days: 'every',
       sortOrder: 30,
-      how: 'На чуть влажную кожу после термалки — похлопывающими движениями на всё лицо. В субботу — после паузы BHA и термалки.',
+      how: 'На чуть влажную кожу после термалки — похлопывающими движениями на всё лицо.',
     },
     {
       ...base,
@@ -188,7 +188,7 @@ export function buildSeedCareProducts(now = Date.now()): CareProduct[] {
       slots: ['evening'],
       days: ['sun'],
       sortOrder: 35,
-      how: 'После очищения, до тонера. На щёки — обычный слой, на Т-зону — тоньше. Держать 15 минут (при красноте — 10 мин или акцент на щёки). Смыть тёплой водой, промокнуть. Далее — термалка → тонер → HA → крем.',
+      how: 'На щёки — обычный слой, на Т-зону — тоньше. Держать 15 минут (при красноте — 10 мин или акцент на щёки). Смыть тёплой водой, промокнуть. Далее — термалка → тонер → HA → крем.',
     },
     {
       ...base,
@@ -197,7 +197,7 @@ export function buildSeedCareProducts(now = Date.now()): CareProduct[] {
       slots: ['morning'],
       days: 'every',
       sortOrder: 40,
-      how: '2–3 капли на всё лицо после тонера. Только утром.',
+      how: '2–3 капли на всё лицо после тонера.',
     },
     {
       ...base,
@@ -206,7 +206,7 @@ export function buildSeedCareProducts(now = Date.now()): CareProduct[] {
       slots: ['evening'],
       days: 'every',
       sortOrder: 50,
-      how: '2–3 капли на чуть влажную кожу всего лица после термалки и тонера. Если кожа уже высохла — снова лёгкий туман термалки, затем HA. Только вечером.',
+      how: '2–3 капли на чуть влажную кожу всего лица после термалки и тонера. Если кожа уже высохла — снова лёгкий туман термалки, затем HA.',
     },
     {
       ...base,
@@ -215,7 +215,7 @@ export function buildSeedCareProducts(now = Date.now()): CareProduct[] {
       slots: ['morning', 'evening'],
       days: 'every',
       sortOrder: 60,
-      how: 'Утром: тонкий слой на всё лицо, дать впитаться 3–5 мин перед SPF. Вечером: плотный слой на всё лицо после HA.',
+      how: 'Тонкий слой перед SPF (3–5 мин) или плотный слой после HA — похлопать, не растирать.',
     },
     {
       ...base,

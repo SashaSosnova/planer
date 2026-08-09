@@ -165,7 +165,7 @@ export const CARE_PRODUCT_GROUPS: CareProductGroup[] = [
         id: 'nmf',
         name: 'The Ordinary Natural Moisturizing Factors + HA',
         when: 'Утро + вечер — всё лицо',
-        how: 'Утром: тонкий слой, 3–5 мин перед SPF. Вечером: плотный слой на всё лицо после HA.',
+        how: 'Тонкий слой перед SPF (3–5 мин) или плотный слой после HA.',
       },
       {
         id: 'spf',

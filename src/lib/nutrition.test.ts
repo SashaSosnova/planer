@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   emptyMacros,
+  formatKg,
   guessFallbackCategory,
   restaurantPortionGrams,
   round1,
+  round2,
   scalePer100g,
   sumMacros,
 } from './nutrition'
@@ -45,6 +47,13 @@ describe('sumMacros / round1', () => {
   it('round1 rounds half up via Math.round', () => {
     expect(round1(1.15)).toBe(1.2)
     expect(round1(1.14)).toBe(1.1)
+  })
+
+  it('round2 keeps hundredths for body weight', () => {
+    expect(round2(62.854)).toBe(62.85)
+    expect(round2(62.856)).toBe(62.86)
+    expect(formatKg(62.85)).toBe('62,85')
+    expect(formatKg(70)).toBe('70')
   })
 })
 

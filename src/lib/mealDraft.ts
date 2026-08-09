@@ -111,10 +111,18 @@ export function inferSavedFoodKind(name: string): 'ingredient' | 'dish' {
   return 'ingredient'
 }
 
-export function truncateMealPreview(text: string, maxLen = 72): string {
+/** Soft cap for list previews; prefers cutting after a whole «item, » segment. */
+export function truncateMealPreview(text: string, maxLen = 120): string {
   const t = text.trim()
   if (t.length <= maxLen) return t
-  return `${t.slice(0, Math.max(1, maxLen - 1)).trimEnd()}…`
+  const budget = Math.max(1, maxLen - 1)
+  const slice = t.slice(0, budget)
+  const lastComma = slice.lastIndexOf(', ')
+  // Keep at least ~⅓ of the budget so we don't collapse to a single short word.
+  if (lastComma >= Math.min(24, Math.floor(budget * 0.35))) {
+    return `${slice.slice(0, lastComma).trimEnd()}…`
+  }
+  return `${slice.trimEnd()}…`
 }
 
 /** After edits: drop stale clarify notes; promote parseSource when all library. */

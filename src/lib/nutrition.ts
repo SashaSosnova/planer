@@ -30,6 +30,16 @@ export function round1(n: number): number {
   return Math.round(n * 10) / 10
 }
 
+/** Body weight (scales often show hundredths, e.g. 62,85). */
+export function round2(n: number): number {
+  return Math.round(n * 100) / 100
+}
+
+/** Display kg with up to 2 decimals and a decimal comma. */
+export function formatKg(n: number): string {
+  return String(round2(n)).replace('.', ',')
+}
+
 export function macrosFromItemFields(item: {
   grams: number
   kcal: number

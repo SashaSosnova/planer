@@ -401,7 +401,7 @@ export function useAppData() {
       const entry: WeightEntry = {
         id: existing?.id ?? newId(),
         date,
-        kg: Math.round(kg * 10) / 10,
+        kg: Math.round(kg * 100) / 100,
         createdAt: existing?.createdAt ?? Date.now(),
       }
       if (useCloud && uid) await upsertDoc(uid, 'weights', entry.id, { ...entry })
@@ -712,7 +712,7 @@ export function useAppData() {
     })()
   }, [ready, data.measurements, persistLocal, uid, useCloud])
 
-  // Seed / refresh canonical care products (v3: Anthelios SPF, evening thermal→toner, BHA pause).
+  // Seed / refresh canonical care products (v4: how-texts without Утро/Вечер stage noise).
   useEffect(() => {
     if (!ready) return
     if (careProductsSeedStarted.current) return

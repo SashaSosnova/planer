@@ -57,7 +57,7 @@ function parseTargetWeight(raw: unknown): number | null {
   if (raw == null || raw === '') return null
   const n = Number(raw)
   if (!Number.isFinite(n) || n < 30 || n > 400) return null
-  return Math.round(n * 10) / 10
+  return Math.round(n * 100) / 100
 }
 
 export function defaultSettings(): AppSettings {

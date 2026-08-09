@@ -629,6 +629,10 @@
   font-size: 1rem;
 }
 
+.chart-range-row {
+  margin: 0 0 6px;
+}
+
 .trend-chart {
   display: flex;
   flex-direction: column;
@@ -1085,11 +1089,69 @@
   flex-shrink: 0;
 }
 
+.metric-history-value-btn {
+  margin: 0;
+  padding: 4px 2px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.metric-history-value-btn:hover,
+.metric-history-value-btn:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
+}
+
+.metric-history-edit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.metric-history-input {
+  width: 4.6rem;
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  line-height: 1.2;
+}
+
+.metric-history-unit {
+  font-family: Fraunces, Georgia, serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
 .metric-history-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
+}
+
+.metric-history-date {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .link-btn.metric-history-date {
@@ -3422,7 +3484,7 @@ button.food-row-open:focus-visible {
 
 .care-check {
   display: grid;
-  grid-template-columns: auto auto 1fr;
+  grid-template-columns: auto 1fr;
   gap: 8px;
   align-items: start;
   padding: 8px 10px;
@@ -3435,14 +3497,6 @@ button.food-row-open:focus-visible {
 .care-check input {
   margin-top: 3px;
   accent-color: var(--warm);
-}
-
-.care-check-num {
-  min-width: 1.1em;
-  color: var(--muted);
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding-top: 2px;
 }
 
 .care-check-body {

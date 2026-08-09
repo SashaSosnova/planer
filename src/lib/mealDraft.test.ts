@@ -145,4 +145,14 @@ describe('inferSavedFoodKind / resolveDraftMealType / notes', () => {
     expect(truncateMealPreview(long, 72).endsWith('…')).toBe(true)
     expect(truncateMealPreview(long, 72).length).toBe(72)
   })
+
+  it('cuts on item boundaries instead of mid-name', () => {
+    const preview =
+      'Багет чесночный, Яйцо куриное, Намазка из семги и сыра, Кофе, Молоко 2,5%'
+    // Old 72-char hard cut produced «Молоко 2,…»
+    expect(truncateMealPreview(preview, 72)).toBe(
+      'Багет чесночный, Яйцо куриное, Намазка из семги и сыра, Кофе…',
+    )
+    expect(truncateMealPreview(preview)).toBe(preview)
+  })
 })

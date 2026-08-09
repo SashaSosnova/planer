@@ -7,7 +7,7 @@ import type {
   WeightEntry,
 } from '../types'
 import { todayIso } from './date'
-import { round1 } from './nutrition'
+import { formatKg, round1, round2 } from './nutrition'
 
 /** Classic rule-of-thumb: ~7700 kcal ≈ 1 kg body fat (rough). */
 export const KCAL_PER_KG = 7700
@@ -25,14 +25,14 @@ export type WeightForecast = {
   scaleRateKg: number | null
   /** Energy balance estimate (intake vs maintain ± steps), full diary */
   energyRateKg: number | null
-  /** Observed scale rate on days near/under calorie goal */
+  /** Observed scale rate in recent deficit intervals (vs maintain) */
   onPlanRateKg: number | null
-  /** Observed scale rate when average intake is over goal */
+  /** Observed scale rate in recent overeating intervals */
   overRateKg: number | null
   sampleDays: number
   sampleCount: number
   mealDays: number
-  /** Projection in 1 week if sticking near calorie goal (falls back to blended rate) */
+  /** Projection in 1 week if keeping deficit tempo (falls back to energy/goal) */
   inOneWeek: number | null
   inTwoWeeks: number | null
   inFourWeeks: number | null
@@ -83,11 +83,11 @@ export function estimateNextMorning(input: {
   )
   if (yesterdayKcal <= 0) return null
 
-  const expectedDeltaKg = round1((yesterdayKcal - maintainKcal) / KCAL_PER_KG)
+  const expectedDeltaKg = round2((yesterdayKcal - maintainKcal) / KCAL_PER_KG)
   return {
-    baseKg: round1(latest.kg),
+    baseKg: round2(latest.kg),
     expectedDeltaKg,
-    expectedKg: round1(latest.kg + expectedDeltaKg),
+    expectedKg: round2(latest.kg + expectedDeltaKg),
     yesterdayKcal,
     maintainKcal,
     yesterday,
@@ -125,6 +125,39 @@ function addDaysIso(iso: string, delta: number): string {
   return `${yy}-${mm}-${dd}`
 }
 
+/** Linear kg/week fit; null if span &lt; 5 days or fewer than 2 points. */
+function linearWeeklyRate(sample: WeightEntry[]): {
+  rate: number | null
+  sampleDays: number
+} {
+  if (sample.length < 2) return { rate: null, sampleDays: 0 }
+  const first = sample[0]!
+  const last = sample[sample.length - 1]!
+  const sampleDays = Math.round((parseIsoMs(last.date) - parseIsoMs(first.date)) / 86_400_000)
+  if (sampleDays < 5) return { rate: null, sampleDays }
+
+  const t0 = parseIsoMs(first.date)
+  const xs = sample.map((w) => (parseIsoMs(w.date) - t0) / 86_400_000)
+  const ys = sample.map((w) => w.kg)
+  const n = xs.length
+  const meanX = xs.reduce((s, x) => s + x, 0) / n
+  const meanY = ys.reduce((s, y) => s + y, 0) / n
+  let num = 0
+  let den = 0
+  for (let i = 0; i < n; i++) {
+    num += (xs[i]! - meanX) * (ys[i]! - meanY)
+    den += (xs[i]! - meanX) ** 2
+  }
+  const daily = den > 0 ? num / den : (last.kg - first.kg) / sampleDays
+  return { rate: round1(daily * 7), sampleDays }
+}
+
+function sortedValidWeights(weights: WeightEntry[]): WeightEntry[] {
+  return [...weights]
+    .filter((w) => w.kg >= 30 && w.kg <= 400)
+    .sort((a, b) => a.date.localeCompare(b.date))
+}
+
 /** Linear weekly rate from the full weigh-in history. */
 export function scaleWeeklyRate(weights: WeightEntry[]): {
   rate: number | null
@@ -132,63 +165,111 @@ export function scaleWeeklyRate(weights: WeightEntry[]): {
   sampleCount: number
   currentKg: number | null
 } {
-  const sorted = [...weights]
-    .filter((w) => w.kg >= 30 && w.kg <= 400)
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const sorted = sortedValidWeights(weights)
   if (sorted.length === 0) {
     return { rate: null, sampleDays: 0, sampleCount: 0, currentKg: null }
   }
 
   const latest = sorted[sorted.length - 1]!
-  const sample = sorted
-
-  let rate: number | null = null
-  let sampleDays = 0
-  if (sample.length >= 2) {
-    const first = sample[0]!
-    const last = sample[sample.length - 1]!
-    sampleDays = Math.round((parseIsoMs(last.date) - parseIsoMs(first.date)) / 86_400_000)
-    if (sampleDays >= 5) {
-      const t0 = parseIsoMs(first.date)
-      const xs = sample.map((w) => (parseIsoMs(w.date) - t0) / 86_400_000)
-      const ys = sample.map((w) => w.kg)
-      const n = xs.length
-      const meanX = xs.reduce((s, x) => s + x, 0) / n
-      const meanY = ys.reduce((s, y) => s + y, 0) / n
-      let num = 0
-      let den = 0
-      for (let i = 0; i < n; i++) {
-        num += (xs[i]! - meanX) * (ys[i]! - meanY)
-        den += (xs[i]! - meanX) ** 2
-      }
-      const daily = den > 0 ? num / den : (last.kg - first.kg) / sampleDays
-      rate = round1(daily * 7)
-    }
-  }
+  const { rate, sampleDays } = linearWeeklyRate(sorted)
 
   return {
     rate,
     sampleDays,
-    sampleCount: sample.length,
+    sampleCount: sorted.length,
     currentKg: latest.kg,
   }
 }
 
-/** Weekly kg change implied by average intake vs maintain, plus step nudge (full diary). */
+/**
+ * Recent scale tempo — prefer the last ~10 days (what “−1 кг за неделю” feels like),
+ * then widen if there aren’t enough points.
+ */
+export function recentScaleWeeklyRate(
+  weights: WeightEntry[],
+  today: string,
+  windowDays = 10,
+): number | null {
+  const sorted = sortedValidWeights(weights).filter((w) => w.date <= today)
+  if (sorted.length < 2) return null
+
+  const windows = [windowDays, 14, 21, 28, 42].filter(
+    (d, i, arr) => arr.indexOf(d) === i,
+  )
+  for (const days of windows) {
+    const cutoff = addDaysIso(today, -days)
+    const sample = sorted.filter((w) => w.date >= cutoff)
+    const { rate } = linearWeeklyRate(sample)
+    if (rate != null) return rate
+  }
+  return null
+}
+
+/** |weekly kg| above this is usually water/glycogen noise between weigh-ins. */
+const WEEKLY_RATE_OUTLIER_KG = 1.5
+/** Only use weigh-in intervals ending within this many days. */
+const RESPONSE_LOOKBACK_DAYS = 90
+
+/** Median of weekly rates after dropping water-like outliers; null if &lt; 2 kept. */
+export function robustWeeklyRate(rates: number[]): number | null {
+  const trimmed = rates.filter((r) => Math.abs(r) <= WEEKLY_RATE_OUTLIER_KG)
+  if (trimmed.length < 2) return null
+  const sorted = [...trimmed].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const med =
+    sorted.length % 2 === 1
+      ? sorted[mid]!
+      : (sorted[mid - 1]! + sorted[mid]!) / 2
+  return round1(med)
+}
+
+/**
+ * Forward “if you keep deficit…” rate: observed deficit intervals first,
+ * then recent energy / goal-implied (not a raw short scale spike).
+ */
+export function pickForwardRate(input: {
+  onPlanRate: number | null
+  energyRate: number | null
+  goalImpliedRate: number | null
+  weeklyRateKg?: number | null
+}): number | null {
+  if (input.onPlanRate != null) return input.onPlanRate
+  if (input.energyRate != null && Math.abs(input.energyRate) >= 0.05) {
+    return input.energyRate
+  }
+  if (input.goalImpliedRate != null) return input.goalImpliedRate
+  if (input.energyRate != null) return input.energyRate
+  return input.weeklyRateKg ?? null
+}
+
+export function goalImpliedWeeklyRate(
+  dailyKcalGoal: number,
+  maintainKcal: number,
+): number | null {
+  if (!(dailyKcalGoal > 0) || !(maintainKcal > 0)) return null
+  return round1(((dailyKcalGoal - maintainKcal) * 7) / KCAL_PER_KG)
+}
+
+/**
+ * Weekly kg change implied by average intake vs maintain, plus step nudge.
+ * Defaults to the last `daysBack` days (14); pass a larger window for full-diary.
+ */
 export function energyWeeklyRate(
   meals: Meal[],
   steps: StepsEntry[],
   maintainKcal: number,
   today: string,
-  _daysBack?: number,
+  daysBack = 14,
 ): { rate: number | null; mealDays: number; avgKcal: number | null } {
   if (!(maintainKcal > 0)) {
     return { rate: null, mealDays: 0, avgKcal: null }
   }
 
+  const cutoff = daysBack > 0 ? addDaysIso(today, -daysBack) : null
   const kcalByDate = new Map<string, number>()
   for (const m of meals) {
     if (m.date > today) continue
+    if (cutoff && m.date < cutoff) continue
     kcalByDate.set(m.date, (kcalByDate.get(m.date) ?? 0) + m.totals.kcal)
   }
   const mealDays = kcalByDate.size
@@ -200,7 +281,14 @@ export function energyWeeklyRate(
     [...kcalByDate.values()].reduce((s, v) => s + v, 0) / mealDays
 
   let stepAdjKcal = 0
-  const stepVals = steps.filter((s) => s.date <= today && s.count > 0).map((s) => s.count)
+  const stepVals = steps
+    .filter(
+      (s) =>
+        s.date <= today &&
+        s.count > 0 &&
+        (!cutoff || s.date >= cutoff),
+    )
+    .map((s) => s.count)
   if (stepVals.length >= 5) {
     const avgSteps = stepVals.reduce((s, v) => s + v, 0) / stepVals.length
     const extra = (avgSteps - STEPS_BASELINE) * KCAL_PER_STEP
@@ -213,25 +301,44 @@ export function energyWeeklyRate(
   return { rate, mealDays, avgKcal: Math.round(avgKcal) }
 }
 
+export type CalorieWeightResponse = {
+  /** Observed weekly kg rate in deficit intervals (robust). */
+  onPlanRate: number | null
+  /** Observed weekly kg rate in overeating intervals (robust). */
+  overRate: number | null
+  onPlanN: number
+  overN: number
+}
+
 /**
- * How the scale moves between weigh-ins when eating near the goal vs over it.
- * Uses the whole diary: each consecutive weigh-in pair → interval avg kcal → weekly kg rate.
+ * How the scale moved between weigh-ins during real deficit vs overeating.
+ * Uses recent intervals (~90d), classifies vs maintain/goal, trims water outliers.
  */
 export function analyzeCalorieWeightResponse(
   weights: WeightEntry[],
   meals: Meal[],
   dailyKcalGoal: number,
-): { onPlanRate: number | null; overRate: number | null; onPlanN: number; overN: number } {
-  if (!(dailyKcalGoal > 0)) {
+  opts?: {
+    maintainKcal?: number | null
+    today?: string
+    lookbackDays?: number
+  },
+): CalorieWeightResponse {
+  const maintainKcal =
+    opts?.maintainKcal != null && opts.maintainKcal > 0 ? opts.maintainKcal : 0
+  const today = opts?.today ?? todayIso()
+  const lookback = opts?.lookbackDays ?? RESPONSE_LOOKBACK_DAYS
+
+  if (!(dailyKcalGoal > 0) && !(maintainKcal > 0)) {
     return { onPlanRate: null, overRate: null, onPlanN: 0, overN: 0 }
   }
 
-  const sorted = [...weights]
-    .filter((w) => w.kg >= 30 && w.kg <= 400)
-    .sort((a, b) => a.date.localeCompare(b.date))
+  const sorted = sortedValidWeights(weights).filter((w) => w.date <= today)
+  const cutoff = addDaysIso(today, -lookback)
 
   const kcalByDate = new Map<string, number>()
   for (const m of meals) {
+    if (m.date > today) continue
     kcalByDate.set(m.date, (kcalByDate.get(m.date) ?? 0) + m.totals.kcal)
   }
 
@@ -241,9 +348,10 @@ export function analyzeCalorieWeightResponse(
   for (let i = 0; i < sorted.length - 1; i++) {
     const a = sorted[i]!
     const b = sorted[i + 1]!
+    if (b.date < cutoff) continue
     const days = Math.round((parseIsoMs(b.date) - parseIsoMs(a.date)) / 86_400_000)
     // Skip same-day / overnight noise and very long gaps (vacation, missing logs).
-    if (days < 2 || days > 18) continue
+    if (days < 2 || days > 14) continue
 
     const from = a.date
     const to = addDaysIso(b.date, -1)
@@ -257,18 +365,29 @@ export function analyzeCalorieWeightResponse(
     const avgKcal = dayKcal.reduce((s, v) => s + v, 0) / dayKcal.length
     const weekly = ((b.kg - a.kg) / days) * 7
 
-    if (avgKcal <= dailyKcalGoal * 1.05) onPlan.push(weekly)
-    else if (avgKcal >= dailyKcalGoal * 1.1) over.push(weekly)
+    const isDeficit =
+      maintainKcal > 0
+        ? avgKcal <= maintainKcal - 100
+        : dailyKcalGoal > 0 && avgKcal <= dailyKcalGoal * 1.05
+    const isOver =
+      !isDeficit &&
+      ((dailyKcalGoal > 0 && avgKcal >= dailyKcalGoal * 1.1) ||
+        (maintainKcal > 0 && avgKcal >= maintainKcal + 100))
+
+    if (isDeficit) onPlan.push(weekly)
+    else if (isOver) over.push(weekly)
   }
 
-  const mean = (xs: number[]) =>
-    xs.length >= 2 ? round1(xs.reduce((s, v) => s + v, 0) / xs.length) : null
+  const onPlanRate = robustWeeklyRate(onPlan)
+  const overRate = robustWeeklyRate(over)
+  const onPlanKept = onPlan.filter((r) => Math.abs(r) <= WEEKLY_RATE_OUTLIER_KG)
+  const overKept = over.filter((r) => Math.abs(r) <= WEEKLY_RATE_OUTLIER_KG)
 
   return {
-    onPlanRate: mean(onPlan),
-    overRate: mean(over),
-    onPlanN: onPlan.length,
-    overN: over.length,
+    onPlanRate,
+    overRate,
+    onPlanN: onPlanKept.length,
+    overN: overKept.length,
   }
 }
 
@@ -292,8 +411,9 @@ function blendRates(scaleRate: number | null, energyRate: number | null): number
 }
 
 function formatDelta(kg: number): string {
-  const sign = kg > 0 ? '+' : ''
-  return `${sign}${kg.toFixed(1).replace('.', ',')} кг`
+  if (Math.abs(kg) < 0.005) return '0 кг'
+  const abs = formatKg(Math.abs(kg))
+  return kg > 0 ? `+${abs} кг` : `−${abs} кг`
 }
 
 /**
@@ -324,7 +444,7 @@ export function computeWeightForecast(
     Number.isFinite(input.targetKg) &&
     input.targetKg >= 30 &&
     input.targetKg <= 400
-      ? round1(input.targetKg)
+      ? round2(input.targetKg)
       : null
 
   const energy = energyWeeklyRate(
@@ -332,15 +452,24 @@ export function computeWeightForecast(
     input.steps ?? [],
     input.maintainKcal ?? 0,
     today,
+    14,
   )
 
   const response = analyzeCalorieWeightResponse(
     input.weights,
     input.meals ?? [],
     input.dailyKcalGoal ?? 0,
+    {
+      maintainKcal: input.maintainKcal,
+      today,
+    },
   )
 
   const weeklyRateKg = blendRates(scale.rate, energy.rate)
+  const implied = goalImpliedWeeklyRate(
+    input.dailyKcalGoal ?? 0,
+    input.maintainKcal ?? 0,
+  )
 
   const waistDelta = waistTrendCm(input.measurements ?? [])
 
@@ -354,12 +483,16 @@ export function computeWeightForecast(
   if (scale.rate != null && energy.rate != null && Math.abs(scale.rate - energy.rate) > 0.35) {
     confidence = 'low'
   }
-  if (response.onPlanN >= 5 && response.overN >= 3) confidence = 'ok'
+  if (response.onPlanN >= 2) confidence = 'ok'
 
-  // Forward-looking numbers assume sticking to calorie goal when we have that signal.
-  const planRateKg = response.onPlanRate ?? weeklyRateKg
+  const planRateKg = pickForwardRate({
+    onPlanRate: response.onPlanRate,
+    energyRate: energy.rate,
+    goalImpliedRate: implied,
+    weeklyRateKg,
+  })
   const project = (weeks: number, rate: number | null = planRateKg) =>
-    rate == null ? null : round1(currentKg + rate * weeks)
+    rate == null ? null : round2(currentKg + rate * weeks)
 
   const inOneWeek = project(1)
   const inTwoWeeks = project(2)
@@ -393,6 +526,7 @@ export function computeWeightForecast(
     currentKg,
     weeklyRateKg,
     planRateKg,
+    overRateKg: response.overRate,
     targetKg: target,
     weeksToTarget,
     confidence,
@@ -429,7 +563,7 @@ function earliestWeightKg(weights: WeightEntry[]): number | null {
       return a.createdAt - b.createdAt
     })
   const first = sorted[0]
-  return first ? round1(first.kg) : null
+  return first ? round2(first.kg) : null
 }
 
 /** Convenience: build forecast from full app data + settings. */
@@ -458,38 +592,44 @@ function buildSummary(f: {
   currentKg: number
   weeklyRateKg: number | null
   planRateKg: number | null
+  overRateKg: number | null
   targetKg: number | null
   weeksToTarget: number | null
   confidence: 'low' | 'ok'
 }): string {
   if (f.weeklyRateKg == null && f.planRateKg == null) {
     if (f.targetKg != null) {
-      const left = round1(f.currentKg - f.targetKg)
+      const left = round2(f.currentKg - f.targetKg)
       if (Math.abs(left) < 0.15) return 'Вы уже около целевого веса.'
       return left > 0
-        ? `До цели ${left.toFixed(1).replace('.', ',')} кг`
-        : `Цель выше текущего на ${Math.abs(left).toFixed(1).replace('.', ',')} кг`
+        ? `До цели ${formatKg(left)} кг`
+        : `Цель выше текущего на ${formatKg(Math.abs(left))} кг`
     }
     return 'Появится темп, когда накопится несколько дней веса и еды'
   }
 
-  const tempoRate = f.weeklyRateKg ?? f.planRateKg!
-  const pace =
-    Math.abs(tempoRate) < 0.05
-      ? 'Темп: вес почти на месте'
-      : `Темп ${formatDelta(tempoRate)}/нед`
+  // Prefer observed deficit / energy plan rate for the forward “if you keep…” line.
+  const forwardRate = f.planRateKg ?? f.weeklyRateKg!
+  const parts: string[] = []
 
-  const parts = [pace]
-
-  if (f.targetKg != null) {
-    const left = round1(f.currentKg - f.targetKg)
-    if (Math.abs(left) < 0.15) parts.push('у цели')
+  if (Math.abs(forwardRate) < 0.05) {
+    parts.push('Если держать так — вес почти на месте')
+  } else {
+    const weekAhead = round2(f.currentKg + forwardRate)
+    const prefix =
+      forwardRate < 0 ? 'Если держать дефицит' : 'Если есть как сейчас'
+    parts.push(
+      `${prefix} — ≈ ${formatDelta(forwardRate)} за неделю → ≈ ${formatKg(weekAhead)} кг`,
+    )
   }
 
-  // Same rate as «Темп» — don't mix with on-plan inOneWeek (can look flat while tempo ≠ 0).
-  if (Math.abs(tempoRate) >= 0.05) {
-    const weekAhead = round1(f.currentKg + tempoRate)
-    parts.push(`через неделю ≈ ${weekAhead.toFixed(1).replace('.', ',')} кг`)
+  if (f.overRateKg != null && Math.abs(f.overRateKg) >= 0.05) {
+    parts.push(`при переедании было ≈ ${formatDelta(f.overRateKg)}/нед`)
+  }
+
+  if (f.targetKg != null) {
+    const left = round2(f.currentKg - f.targetKg)
+    if (Math.abs(left) < 0.15) parts.push('у цели')
   }
 
   const towardRate = f.planRateKg ?? f.weeklyRateKg

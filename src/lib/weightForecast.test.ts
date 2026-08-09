@@ -4,6 +4,9 @@ import {
   computeWeightForecast,
   energyWeeklyRate,
   estimateNextMorning,
+  pickForwardRate,
+  recentScaleWeeklyRate,
+  robustWeeklyRate,
   scaleWeeklyRate,
 } from './weightForecast'
 import type { Meal } from '../types'
@@ -82,6 +85,54 @@ describe('scaleWeeklyRate', () => {
   })
 })
 
+describe('robustWeeklyRate / pickForwardRate', () => {
+  it('drops water-like outliers from the median', () => {
+    expect(robustWeeklyRate([-0.3, -0.4, -3.15])).toBeCloseTo(-0.3, 1)
+    expect(robustWeeklyRate([-3.15, -3.0])).toBeNull()
+  })
+
+  it('prefers observed deficit rate over energy and scale spikes', () => {
+    expect(
+      pickForwardRate({
+        onPlanRate: -0.3,
+        energyRate: -0.25,
+        goalImpliedRate: -0.14,
+        weeklyRateKg: -0.2,
+      }),
+    ).toBe(-0.3)
+
+    expect(
+      pickForwardRate({
+        onPlanRate: null,
+        energyRate: -0.27,
+        goalImpliedRate: -0.14,
+      }),
+    ).toBe(-0.27)
+
+    expect(
+      pickForwardRate({
+        onPlanRate: null,
+        energyRate: null,
+        goalImpliedRate: -0.14,
+      }),
+    ).toBe(-0.14)
+  })
+
+  it('keeps recentScaleWeeklyRate helper for short windows', () => {
+    const recent = recentScaleWeeklyRate(
+      [
+        { id: 'a', date: '2026-08-02', kg: 63.9, createdAt: 1 },
+        { id: 'b', date: '2026-08-05', kg: 63.4, createdAt: 2 },
+        { id: 'c', date: '2026-08-09', kg: 62.9, createdAt: 3 },
+      ],
+      '2026-08-09',
+      10,
+    )
+    expect(recent).not.toBeNull()
+    expect(recent!).toBeLessThanOrEqual(-0.5)
+  })
+})
+
 describe('energyWeeklyRate', () => {
   it('derives weekly kg from deficit vs maintain', () => {
     const meals = Array.from({ length: 7 }, (_, i) =>
@@ -91,6 +142,53 @@ describe('energyWeeklyRate', () => {
     expect(mealDays).toBe(7)
     // (1500-2000)*7/7700 ≈ -0.45
     expect(rate).toBeCloseTo(-0.5, 1)
+  })
+
+  it('limits to daysBack window', () => {
+    const meals = [
+      ...Array.from({ length: 7 }, (_, i) =>
+        meal(`2026-06-${String(i + 1).padStart(2, '0')}`, 2500),
+      ),
+      ...Array.from({ length: 7 }, (_, i) =>
+        meal(`2026-07-${String(i + 1).padStart(2, '0')}`, 1500),
+      ),
+    ]
+    const { rate, mealDays } = energyWeeklyRate(meals, [], 2000, '2026-07-07', 7)
+    expect(mealDays).toBe(7)
+    expect(rate).toBeCloseTo(-0.5, 1)
+  })
+})
+
+describe('analyzeCalorieWeightResponse', () => {
+  it('contrasts deficit vs overeating intervals and trims outliers', () => {
+    const weights = [
+      { id: '1', date: '2026-06-01', kg: 70, createdAt: 1 },
+      { id: '2', date: '2026-06-08', kg: 69.3, createdAt: 2 },
+      { id: '3', date: '2026-06-15', kg: 69.5, createdAt: 3 },
+      { id: '4', date: '2026-06-22', kg: 68.8, createdAt: 4 },
+      { id: '5', date: '2026-06-29', kg: 69.2, createdAt: 5 },
+      // Water rebound outlier between deficit days
+      { id: '6', date: '2026-07-01', kg: 68.3, createdAt: 6 },
+    ]
+    const meals: Meal[] = []
+    for (let d = 1; d <= 7; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 1300))
+    for (let d = 8; d <= 14; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 2200))
+    for (let d = 15; d <= 21; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 1300))
+    for (let d = 22; d <= 28; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 2200))
+    for (let d = 29; d <= 30; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 1300))
+    meals.push(meal('2026-07-01', 1300))
+
+    const resp = analyzeCalorieWeightResponse(weights, meals, 1350, {
+      maintainKcal: 2000,
+      today: '2026-07-01',
+    })
+    expect(resp.onPlanN).toBeGreaterThanOrEqual(2)
+    expect(resp.overN).toBeGreaterThanOrEqual(2)
+    expect(resp.onPlanRate).not.toBeNull()
+    expect(resp.overRate).not.toBeNull()
+    expect(resp.onPlanRate!).toBeLessThan(resp.overRate!)
+    // −3.15 kg/week water drop must not dominate
+    expect(resp.onPlanRate!).toBeGreaterThan(-1.2)
   })
 })
 
@@ -128,6 +226,7 @@ describe('computeWeightForecast', () => {
       ],
       targetKg: 65,
       maintainKcal: 2000,
+      dailyKcalGoal: 1600,
       today: '2026-06-22',
       cycleLengthDays: 28,
       periodLengthDays: 5,
@@ -137,7 +236,7 @@ describe('computeWeightForecast', () => {
     expect(forecast!.currentKg).toBe(68.5)
     expect(forecast!.weeklyRateKg).not.toBeNull()
     expect(forecast!.energyRateKg).not.toBeNull()
-    expect(forecast!.summary).toMatch(/Темп|через неделю|до цели/)
+    expect(forecast!.summary).toMatch(/дефицит|за неделю|до цели/)
     expect(forecast!.summary).not.toMatch(/ещё \d/)
     expect(forecast!.inOneWeek).not.toBeNull()
     expect(forecast!.notes.length).toBeGreaterThan(0)
@@ -158,7 +257,7 @@ describe('computeWeightForecast', () => {
     expect(forecast!.targetKg).toBe(55)
   })
 
-  it('contrasts on-plan vs over-goal intervals across the diary', () => {
+  it('projects from deficit intervals and mentions overeating contrast', () => {
     const weights = [
       { id: '1', date: '2026-06-01', kg: 70, createdAt: 1 },
       { id: '2', date: '2026-06-08', kg: 69.3, createdAt: 2 },
@@ -167,21 +266,10 @@ describe('computeWeightForecast', () => {
       { id: '5', date: '2026-06-29', kg: 69.2, createdAt: 5 },
     ]
     const meals: Meal[] = []
-    // Week 1: on plan ~1350 → loss
     for (let d = 1; d <= 7; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 1300))
-    // Week 2: over → gain
-    for (let d = 8; d <= 14; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 1900))
-    // Week 3: on plan → loss
+    for (let d = 8; d <= 14; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 2200))
     for (let d = 15; d <= 21; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 1300))
-    // Week 4: over → gain
-    for (let d = 22; d <= 28; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 1900))
-
-    const resp = analyzeCalorieWeightResponse(weights, meals, 1350)
-    expect(resp.onPlanN).toBeGreaterThanOrEqual(2)
-    expect(resp.overN).toBeGreaterThanOrEqual(2)
-    expect(resp.onPlanRate).not.toBeNull()
-    expect(resp.overRate).not.toBeNull()
-    expect(resp.onPlanRate!).toBeLessThan(resp.overRate!)
+    for (let d = 22; d <= 28; d++) meals.push(meal(`2026-06-${String(d).padStart(2, '0')}`, 2200))
 
     const forecast = computeWeightForecast({
       weights,
@@ -191,12 +279,40 @@ describe('computeWeightForecast', () => {
       dailyKcalGoal: 1350,
       today: '2026-06-29',
     })
-    expect(forecast!.summary).not.toMatch(/в цели|при переборе/)
-    expect(forecast!.summary).toMatch(/Темп/)
-    expect(forecast!.summary).toMatch(/через неделю/)
+    expect(forecast!.summary).toMatch(/дефицит/)
+    expect(forecast!.summary).toMatch(/за неделю/)
+    expect(forecast!.summary).toMatch(/переедании/)
     expect(forecast!.onPlanRateKg).not.toBeNull()
+    expect(forecast!.overRateKg).not.toBeNull()
     expect(forecast!.inOneWeek).toBe(
-      Math.round((forecast!.currentKg + forecast!.onPlanRateKg!) * 10) / 10,
+      Math.round((forecast!.currentKg + forecast!.onPlanRateKg!) * 100) / 100,
+    )
+  })
+
+  it('falls back to energy when deficit intervals are missing', () => {
+    const weights = [
+      { id: '1', date: '2026-08-01', kg: 64, createdAt: 1 },
+      { id: '2', date: '2026-08-09', kg: 63.5, createdAt: 2 },
+    ]
+    // Only one short interval with meals — not enough for robust on-plan (≥2).
+    const meals = Array.from({ length: 9 }, (_, i) =>
+      meal(`2026-08-${String(i + 1).padStart(2, '0')}`, 1400),
+    )
+    const forecast = computeWeightForecast({
+      weights,
+      meals,
+      maintainKcal: 1800,
+      dailyKcalGoal: 1400,
+      targetKg: 60,
+      today: '2026-08-09',
+    })
+    expect(forecast!.onPlanRateKg).toBeNull()
+    expect(forecast!.energyRateKg).not.toBeNull()
+    expect(forecast!.summary).toMatch(/дефицит|за неделю/)
+    // Forward should follow energy (~−0.4), not raw scale (−0.5 over 8 days ≈ −0.4)
+    expect(forecast!.inOneWeek).toBeCloseTo(
+      forecast!.currentKg + (forecast!.energyRateKg ?? 0),
+      1,
     )
   })
 

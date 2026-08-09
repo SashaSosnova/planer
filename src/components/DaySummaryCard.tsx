@@ -1,5 +1,6 @@
 import { CalorieRing } from './CalorieRing'
 import type { DayStats } from '../lib/dayStats'
+import { formatKg } from '../lib/nutrition'
 
 type Props = {
   day: DayStats
@@ -24,7 +25,7 @@ export function DaySummaryCard({ day, dailyKcalGoal, maintainKcalGoal, onOpen }:
             <div className="stat-chip compact static">
               <span>Вес</span>
               <strong>
-                {day.weightKg != null ? `${String(day.weightKg).replace('.', ',')} кг` : '—'}
+                {day.weightKg != null ? `${formatKg(day.weightKg)} кг` : '—'}
               </strong>
             </div>
             <div className="stat-chip compact static">

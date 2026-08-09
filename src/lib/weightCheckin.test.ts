@@ -34,7 +34,7 @@ describe('buildWeightCheckin', () => {
     const c = buildWeightCheckin({
       weights: [{ id: '1', date: '2026-07-30', kg: 70, createdAt: 1 }],
     })
-    expect(c?.hero).toBe('70,0 кг')
+    expect(c?.hero).toBe('70 кг')
     expect(c?.note).toMatch(/Первая точка/)
   })
 

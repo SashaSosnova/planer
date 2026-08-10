@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   assertNonNegMacros,
   sanitizeMacros,
+  sanitizeMeal,
   sanitizeMealItems,
   totalsFromItems,
 } from './sanitize'
@@ -14,6 +15,58 @@ describe('sanitizeMacros', () => {
       fat: 3,
       carbs: 4,
     })
+  })
+})
+
+describe('sanitizeMeal', () => {
+  it('preserves planned flag', () => {
+    const meal = sanitizeMeal({
+      id: 'm1',
+      date: '2026-07-15',
+      mealType: 'lunch',
+      rawText: 'суп',
+      items: [
+        {
+          name: 'суп',
+          grams: 300,
+          kcal: 120,
+          protein: 5,
+          fat: 3,
+          carbs: 15,
+          source: 'estimate',
+        },
+      ],
+      totals: { kcal: 120, protein: 5, fat: 3, carbs: 15 },
+      isApproximate: false,
+      eatingOut: false,
+      planned: true,
+      createdAt: 1,
+    })
+    expect(meal?.planned).toBe(true)
+  })
+
+  it('defaults planned to false when missing', () => {
+    const meal = sanitizeMeal({
+      id: 'm1',
+      date: '2026-07-15',
+      mealType: 'lunch',
+      rawText: 'суп',
+      items: [
+        {
+          name: 'суп',
+          grams: 300,
+          kcal: 120,
+          protein: 5,
+          fat: 3,
+          carbs: 15,
+          source: 'estimate',
+        },
+      ],
+      isApproximate: false,
+      eatingOut: false,
+      createdAt: 1,
+    })
+    expect(meal?.planned).toBe(false)
   })
 })
 

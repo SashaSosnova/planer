@@ -345,6 +345,7 @@ export function TodayScreen({
       <div className="today-hero">
         <CalorieRing
           eaten={dayStats.totals.kcal}
+          planned={dayStats.plannedTotals.kcal}
           goal={dailyKcalGoal}
           maintainGoal={maintainKcalGoal}
           size="md"
@@ -400,11 +401,19 @@ export function TodayScreen({
                   group.meals.length > 1 ? 'Перекусы' : MEAL_TYPE_LABELS.snack
                 return (
                   <li key="snacks">
-                    <div className="meal-card meal-snack-card">
+                    <div className={`meal-card meal-snack-card${group.meals.every((m) => m.planned) ? ' meal-card-planned' : ''}`}>
                       <div className="meal-card-top">
                         <strong>
                           {title}
                           {group.eatingOut ? ' · вне дома' : ''}
+                          {group.meals.some((m) => m.planned) && group.meals.every((m) => m.planned)
+                            ? (
+                                <>
+                                  {' · '}
+                                  <span className="meal-plan-tag">План</span>
+                                </>
+                              )
+                            : ''}
                         </strong>
                         <span>
                           {group.isApproximate || group.eatingOut ? '≈ ' : ''}
@@ -423,6 +432,12 @@ export function TodayScreen({
                               >
                                 <span className="meal-snack-entry-body">
                                   {truncateMealPreview(mealPreviewText(meal)) || '—'}
+                                  {meal.planned ? (
+                                    <>
+                                      {' · '}
+                                      <span className="meal-plan-tag">План</span>
+                                    </>
+                                  ) : null}
                                   {meal.eatingOut ? ' · вне дома' : ''}
                                   {meal.isApproximate ? ' ≈' : ''}
                                 </span>
@@ -449,12 +464,18 @@ export function TodayScreen({
                 <li key={meal.id}>
                   <button
                     type="button"
-                    className="meal-card meal-card-btn"
+                    className={`meal-card meal-card-btn${meal.planned ? ' meal-card-planned' : ''}`}
                     onClick={() => onOpenMeal(meal.id)}
                   >
                     <div className="meal-card-top">
                       <strong>
                         {MEAL_TYPE_LABELS[meal.mealType]}
+                        {meal.planned ? (
+                          <>
+                            {' · '}
+                            <span className="meal-plan-tag">План</span>
+                          </>
+                        ) : null}
                         {meal.eatingOut ? ' · вне дома' : ''}
                         {hasMg || hasFe ? (
                           <span className="meal-med-tags">

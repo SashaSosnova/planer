@@ -95,6 +95,48 @@ export function dishPer100g(totalMacros: MacroSet, totalCookedGrams: number): Ma
   }
 }
 
+/** Link a recipe line to a catalog product (keeps сырой вес). */
+export function replaceIngredientWithFood(
+  ing: RecipeIngredientLine,
+  food: Pick<FoodItem, 'id' | 'name' | 'per100g'>,
+): RecipeIngredientLine {
+  const yieldInfo = guessYieldFactor(food.name)
+  const next: RecipeIngredientLine = {
+    ...ing,
+    name: food.name,
+    foodId: food.id,
+    per100g: { ...food.per100g },
+    source: 'library',
+    yieldFactor: yieldInfo.factor,
+  }
+  if (yieldInfo.note) next.yieldNote = yieldInfo.note
+  else delete next.yieldNote
+  return next
+}
+
+/** New ingredient row from a catalog product. */
+export function ingredientLineFromFood(
+  food: Pick<FoodItem, 'id' | 'name' | 'per100g' | 'portionGrams'>,
+  gramsRaw?: number,
+): RecipeIngredientLine {
+  const grams =
+    gramsRaw != null && gramsRaw > 0
+      ? gramsRaw
+      : food.portionGrams != null && food.portionGrams > 0
+        ? food.portionGrams
+        : 100
+  return replaceIngredientWithFood(
+    {
+      name: food.name,
+      gramsRaw: grams,
+      per100g: { ...food.per100g },
+      source: 'library',
+      yieldFactor: 1,
+    },
+    food,
+  )
+}
+
 export function computeRecipe(draft: {
   name: string
   ingredients: RecipeIngredientLine[]
@@ -102,22 +144,25 @@ export function computeRecipe(draft: {
   cookedGramsOverride?: number | null
   notes?: string
 }): RecipeDraft {
-  const lines = draft.ingredients.filter((i) => i.gramsRaw > 0 && i.name.trim())
-  const withYield = lines.map((ing) => {
+  // Keep every editor row (including gramsRaw 0) — only contributing lines feed totals.
+  const withYield = draft.ingredients.map((ing) => {
     const y = ing.yieldFactor > 0 ? ing.yieldFactor : guessYieldFactor(ing.name).factor
-    const cookedGrams = round1(ing.gramsRaw * y)
-    const macros = scalePer100g(ing.per100g, ing.gramsRaw)
     return {
       ...ing,
       yieldFactor: y,
-      cookedGrams,
-      macros,
     }
   })
+  const contributing = withYield
+    .filter((i) => i.gramsRaw > 0 && i.name.trim())
+    .map((ing) => ({
+      ...ing,
+      cookedGrams: round1(ing.gramsRaw * ing.yieldFactor),
+      macros: scalePer100g(ing.per100g, ing.gramsRaw),
+    }))
 
-  const totalRawGrams = round1(withYield.reduce((s, i) => s + i.gramsRaw, 0))
-  const totalMacros = sumMacros(withYield.map((i) => i.macros))
-  const estimatedCooked = round1(withYield.reduce((s, i) => s + i.cookedGrams, 0))
+  const totalRawGrams = round1(contributing.reduce((s, i) => s + i.gramsRaw, 0))
+  const totalMacros = sumMacros(contributing.map((i) => i.macros))
+  const estimatedCooked = round1(contributing.reduce((s, i) => s + i.cookedGrams, 0))
   const override =
     draft.cookedGramsOverride != null &&
     Number.isFinite(draft.cookedGramsOverride) &&
@@ -129,7 +174,7 @@ export function computeRecipe(draft: {
 
   return {
     name: draft.name,
-    ingredients: withYield.map(({ macros: _m, cookedGrams: _c, ...rest }) => rest),
+    ingredients: withYield,
     totalRawGrams,
     totalCookedGrams,
     estimatedCookedGrams: estimatedCooked,
@@ -164,7 +209,7 @@ export function recipeToFoodItem(
     ...(portion != null ? { portionGrams: portion } : {}),
     ...(cat ? { category: cat } : {}),
     recipe: {
-      ingredients: recipe.ingredients,
+      ingredients: recipe.ingredients.filter((i) => i.name.trim() && i.gramsRaw > 0),
       totalRawGrams: recipe.totalRawGrams,
       totalCookedGrams: recipe.totalCookedGrams,
       totalMacros: recipe.totalMacros,

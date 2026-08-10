@@ -90,6 +90,8 @@ export type Meal = {
   isApproximate: boolean
   /** Away-from-home / restaurant-style approximate meal */
   eatingOut: boolean
+  /** Forecast for the day — excluded from «съедено» / ring fact */
+  planned?: boolean
   createdAt: number
 }
 

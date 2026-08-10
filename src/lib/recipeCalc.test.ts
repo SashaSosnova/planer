@@ -5,12 +5,14 @@ import {
   draftFromFoodItem,
   ingredientCookedGramsForDish,
   ingredientCookedGramsFromYield,
+  ingredientLineFromFood,
   ingredientPer100Cooked,
   ingredientPer100CookedForDish,
   ingredientPer100RawFromCooked,
   recipeEditorText,
   recipeTextFromDraft,
   recipeToFoodItem,
+  replaceIngredientWithFood,
 } from './recipeCalc'
 
 describe('guessYieldFactor', () => {
@@ -253,5 +255,91 @@ describe('computeRecipe', () => {
       ingredientCookedGramsForDish(base.ingredients[0]!, base) * 2,
       1,
     )
+  })
+
+  it('keeps zero-gram ingredient rows in the draft (does not delete on 0)', () => {
+    const recipe = computeRecipe({
+      name: 'Тест',
+      ingredients: [
+        {
+          name: 'Хлеб',
+          gramsRaw: 30,
+          per100g: { kcal: 260, protein: 8, fat: 2, carbs: 52 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+        {
+          name: 'Яйцо',
+          gramsRaw: 0,
+          per100g: { kcal: 140, protein: 12, fat: 10, carbs: 1 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+      ],
+    })
+    expect(recipe.ingredients).toHaveLength(2)
+    expect(recipe.ingredients[1]!.name).toBe('Яйцо')
+    expect(recipe.ingredients[1]!.gramsRaw).toBe(0)
+    expect(recipe.totalRawGrams).toBe(30)
+    expect(recipe.totalMacros.kcal).toBe(78)
+  })
+
+  it('replaceIngredientWithFood links catalog macros and keeps raw grams', () => {
+    const line = replaceIngredientWithFood(
+      {
+        name: 'яйцо',
+        gramsRaw: 55,
+        per100g: { kcal: 0, protein: 0, fat: 0, carbs: 0 },
+        source: 'estimate',
+        yieldFactor: 1,
+      },
+      {
+        id: 'egg-1',
+        name: 'Яйцо куриное',
+        per100g: { kcal: 157, protein: 12.7, fat: 11.5, carbs: 0.7 },
+      },
+    )
+    expect(line.foodId).toBe('egg-1')
+    expect(line.source).toBe('library')
+    expect(line.name).toBe('Яйцо куриное')
+    expect(line.gramsRaw).toBe(55)
+    expect(line.per100g.kcal).toBe(157)
+  })
+
+  it('ingredientLineFromFood uses portionGrams when present', () => {
+    const line = ingredientLineFromFood({
+      id: 'bread',
+      name: 'Батон',
+      per100g: { kcal: 260, protein: 8, fat: 2, carbs: 52 },
+      portionGrams: 30,
+    })
+    expect(line.gramsRaw).toBe(30)
+    expect(line.foodId).toBe('bread')
+    expect(line.source).toBe('library')
+  })
+
+  it('omits zero-gram lines when saving a dish', () => {
+    const recipe = computeRecipe({
+      name: 'Тест',
+      ingredients: [
+        {
+          name: 'Хлеб',
+          gramsRaw: 30,
+          per100g: { kcal: 260, protein: 8, fat: 2, carbs: 52 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+        {
+          name: 'Яйцо',
+          gramsRaw: 0,
+          per100g: { kcal: 140, protein: 12, fat: 10, carbs: 1 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+      ],
+    })
+    const food = recipeToFoodItem(recipe)
+    expect(food.recipe?.ingredients).toHaveLength(1)
+    expect(food.recipe?.ingredients[0]!.name).toBe('Хлеб')
   })
 })

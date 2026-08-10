@@ -2,6 +2,12 @@ import { useMemo, useRef, useState } from 'react'
 import { CatalogSections } from '../components/CatalogSections'
 import { CategorySelect } from '../components/CategorySelect'
 import { DecimalInput } from '../components/DecimalInput'
+import {
+  catalogPickGroups,
+  foodMatchesCatalogQuery,
+  normalizeCatalogQuery,
+} from '../components/MealDraftEditor'
+import { LibraryMenuIcon } from '../components/MoreMenuIcons'
 import { PlusIcon } from '../components/PlusIcon'
 import { TrashIcon } from '../components/TrashIcon'
 import {
@@ -16,10 +22,12 @@ import {
   dishPer100g,
   draftFromFoodItem,
   ingredientCookedGramsFromYield,
+  ingredientLineFromFood,
   ingredientPer100CookedForDish,
   ingredientPer100RawFromDishCooked,
   recipeEditorText,
   recipeToFoodItem,
+  replaceIngredientWithFood,
 } from '../lib/recipeCalc'
 import { scalePer100g } from '../lib/nutrition'
 import type { AppData, FoodItem, MacroSet, RecipeDraft, RecipeIngredientLine } from '../types'
@@ -59,6 +67,13 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
   )
   /** Expanded ingredient card (compact list like meals). */
   const [editingIngredientIndex, setEditingIngredientIndex] = useState<number | null>(null)
+  /** Catalog replace / search for one ingredient. */
+  const [replacingIndex, setReplacingIndex] = useState<number | null>(null)
+  const [replaceQuery, setReplaceQuery] = useState('')
+  const [relatedOpenIndex, setRelatedOpenIndex] = useState<number | null>(null)
+  /** Add ingredient from catalog. */
+  const [addOpen, setAddOpen] = useState(false)
+  const [addQuery, setAddQuery] = useState('')
   /** Free-text recipe — shown for new dishes or when recalculating. */
   const [showRecipeText, setShowRecipeText] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -106,6 +121,48 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     [data.foods],
   )
 
+  /** Catalog for ingredient pick/replace — products and saved dishes. */
+  const catalogFoods = useMemo(() => data.foods, [data.foods])
+
+  const replaceFilteredFoods = useMemo(() => {
+    const q = normalizeCatalogQuery(replaceQuery)
+    const filtered = q
+      ? catalogFoods.filter((f) => foodMatchesCatalogQuery(f, q))
+      : catalogFoods
+    return [...filtered].sort((a, b) => a.name.localeCompare(b.name, 'ru')).slice(0, 48)
+  }, [catalogFoods, replaceQuery])
+
+  const addFilteredFoods = useMemo(() => {
+    const q = normalizeCatalogQuery(addQuery)
+    if (!q) return []
+    return [...catalogFoods]
+      .filter((f) => foodMatchesCatalogQuery(f, q))
+      .sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+      .slice(0, 36)
+  }, [catalogFoods, addQuery])
+
+  const firstAmbiguousIndex = (ingredients: RecipeIngredientLine[]) =>
+    ingredients.findIndex((ing) => {
+      if (ing.source === 'library' || !ing.name.trim()) return false
+      return catalogPickGroups(ing.name, catalogFoods).primary.length >= 2
+    })
+
+  const collapseIngredient = () => {
+    setEditingIngredientIndex(null)
+    setMacrosEdit(null)
+    setReplacingIndex(null)
+    setReplaceQuery('')
+    setRelatedOpenIndex(null)
+  }
+
+  const openIngredient = (index: number) => {
+    setEditingIngredientIndex(index)
+    setMacrosEdit(null)
+    setReplacingIndex(null)
+    setReplaceQuery('')
+    setRelatedOpenIndex(null)
+  }
+
   const openNew = () => {
     setView('editor')
     setEditId(null)
@@ -116,7 +173,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setServingBasis('portion')
     setEditingCooked(false)
     setMacrosEdit(null)
-    setEditingIngredientIndex(null)
+    collapseIngredient()
+    setAddOpen(false)
+    setAddQuery('')
     setShowRecipeText(true)
     setRecipeText('')
     setDishCategory('other')
@@ -134,7 +193,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setServingBasis(food.portionGrams != null && food.portionGrams > 0 ? 'portion' : 'per100')
     setEditingCooked(false)
     setMacrosEdit(null)
-    setEditingIngredientIndex(null)
+    collapseIngredient()
+    setAddOpen(false)
+    setAddQuery('')
     setShowRecipeText(false)
     setRecipeText(recipeEditorText(food))
     setDishCategory(resolveDishCategory(food))
@@ -150,7 +211,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     setServingBasis('portion')
     setEditingCooked(false)
     setMacrosEdit(null)
-    setEditingIngredientIndex(null)
+    collapseIngredient()
+    setAddOpen(false)
+    setAddQuery('')
     setShowRecipeText(true)
     setDishCategory('other')
     setDishCategoryTouched(false)
@@ -167,7 +230,11 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
       cookedOverrideLockedRef.current = false
       setEditingCooked(false)
       setMacrosEdit(null)
-      setEditingIngredientIndex(null)
+      setReplacingIndex(null)
+      setReplaceQuery('')
+      setRelatedOpenIndex(null)
+      const ambiguous = firstAmbiguousIndex(result.ingredients)
+      setEditingIngredientIndex(ambiguous >= 0 ? ambiguous : null)
       setShowRecipeText(false)
       if (!dishCategoryTouched) {
         setDishCategory(inferDishCategory(result.name, result.ingredients))
@@ -185,25 +252,130 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
     return Number.isFinite(override) && override > 0 ? override : null
   }
 
+  const recomputeDraft = (
+    prev: RecipeDraft,
+    ingredients: RecipeIngredientLine[],
+  ): RecipeDraft => {
+    const next = computeRecipe({
+      name: prev.name,
+      ingredients,
+      cookedGramsOverride: lockedCookedOverride(),
+      notes: prev.notes,
+    })
+    if (!cookedOverrideLockedRef.current) {
+      const value = String(next.totalCookedGrams)
+      cookedOverrideRef.current = value
+      setCookedOverride(value)
+    }
+    return next
+  }
+
   const updateIngredient = (index: number, patch: Partial<RecipeIngredientLine>) => {
+    // Portion 0 would wipe the row via old computeRecipe filter — reject like meals.
+    if (patch.gramsRaw != null && !(patch.gramsRaw > 0)) return
+    setDraft((prev) => {
+      if (!prev) return prev
+      const ingredients = prev.ingredients.map((ing, i) => {
+        if (i !== index) return ing
+        const next = { ...ing, ...patch }
+        // Rename clears catalog link (manual rematch via picker).
+        if (
+          patch.name != null &&
+          patch.name.trim() !== ing.name.trim() &&
+          patch.foodId === undefined &&
+          patch.source === undefined
+        ) {
+          return {
+            ...next,
+            foodId: undefined,
+            source: 'estimate' as const,
+          }
+        }
+        return next
+      })
+      return recomputeDraft(prev, ingredients)
+    })
+  }
+
+  const replaceIngredient = (index: number, food: FoodItem) => {
     setDraft((prev) => {
       if (!prev) return prev
       const ingredients = prev.ingredients.map((ing, i) =>
-        i === index ? { ...ing, ...patch } : ing,
+        i === index ? replaceIngredientWithFood(ing, food) : ing,
       )
-      const next = computeRecipe({
-        name: prev.name,
-        ingredients,
-        cookedGramsOverride: lockedCookedOverride(),
-        notes: prev.notes,
-      })
-      if (!cookedOverrideLockedRef.current) {
-        const value = String(next.totalCookedGrams)
-        cookedOverrideRef.current = value
-        setCookedOverride(value)
-      }
-      return next
+      return recomputeDraft(prev, ingredients)
     })
+    setReplacingIndex(null)
+    setReplaceQuery('')
+    setRelatedOpenIndex(null)
+  }
+
+  const removeIngredient = (index: number) => {
+    setDraft((prev) => {
+      if (!prev) return prev
+      const ingredients = prev.ingredients.filter((_, i) => i !== index)
+      return recomputeDraft(prev, ingredients)
+    })
+    setMacrosEdit((cur) => {
+      if (cur == null) return null
+      if (cur.index === index) return null
+      if (cur.index > index) return { ...cur, index: cur.index - 1 }
+      return cur
+    })
+    setEditingIngredientIndex((cur) => {
+      if (cur == null) return null
+      if (cur === index) return null
+      if (cur > index) return cur - 1
+      return cur
+    })
+    setReplacingIndex((cur) => {
+      if (cur == null) return null
+      if (cur === index) return null
+      if (cur > index) return cur - 1
+      return cur
+    })
+    setRelatedOpenIndex((cur) => {
+      if (cur == null) return null
+      if (cur === index) return null
+      if (cur > index) return cur - 1
+      return cur
+    })
+  }
+
+  const addFromFood = (food: FoodItem) => {
+    let newIndex = 0
+    setDraft((prev) => {
+      if (!prev) return prev
+      newIndex = prev.ingredients.length
+      const ingredients = [...prev.ingredients, ingredientLineFromFood(food)]
+      return recomputeDraft(prev, ingredients)
+    })
+    setAddOpen(false)
+    setAddQuery('')
+    openIngredient(newIndex)
+  }
+
+  const addManualIngredient = () => {
+    const name = addQuery.trim() || 'Ингредиент'
+    let newIndex = 0
+    setDraft((prev) => {
+      if (!prev) return prev
+      newIndex = prev.ingredients.length
+      const ingredients: RecipeIngredientLine[] = [
+        ...prev.ingredients,
+        {
+          name,
+          gramsRaw: 100,
+          per100g: { kcal: 0, protein: 0, fat: 0, carbs: 0 },
+          source: 'estimate',
+          yieldFactor: 1,
+        },
+      ]
+      return recomputeDraft(prev, ingredients)
+    })
+    setAddOpen(false)
+    setAddQuery('')
+    openIngredient(newIndex)
   }
 
   const commitCookedGrams = (n: number) => {
@@ -256,18 +428,7 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
             }
           : row,
       )
-      const next = computeRecipe({
-        name: prev.name,
-        ingredients,
-        cookedGramsOverride: lockedCookedOverride(),
-        notes: prev.notes,
-      })
-      if (!cookedOverrideLockedRef.current) {
-        const value = String(next.totalCookedGrams)
-        cookedOverrideRef.current = value
-        setCookedOverride(value)
-      }
-      return next
+      return recomputeDraft(prev, ingredients)
     })
   }
 
@@ -400,11 +561,23 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                 const per100Cooked = ingredientPer100CookedForDish(ing, draft)
                 // Show сырой×выход — pan override only affects dish density / «на 100 г».
                 const cookedGrams = ingredientCookedGramsFromYield(ing)
-                const portionMacros = scalePer100g(ing.per100g, ing.gramsRaw)
+                const portionMacros = scalePer100g(ing.per100g, Math.max(ing.gramsRaw, 0))
                 const editing = macrosEdit?.index === index ? macrosEdit.basis : null
-                const fromLibrary = ing.source === 'library'
+                const linked = ing.foodId
+                  ? catalogFoods.find((f) => f.id === ing.foodId)
+                  : undefined
+                const fromLibrary = Boolean(linked)
+                const pickGroups = fromLibrary
+                  ? { primary: [] as FoodItem[], related: [] as FoodItem[] }
+                  : catalogPickGroups(ing.name, catalogFoods)
+                const needsPick = !fromLibrary && pickGroups.primary.length >= 2
+                const hasRelated = !fromLibrary && pickGroups.related.length > 0
+                const replacing = replacingIndex === index
+                const showPickPanel =
+                  !replacing && (needsPick || hasRelated)
                 const expanded = editingIngredientIndex === index
                 const label = ing.name.trim() || 'ингредиент'
+                const canEditMacros = !fromLibrary
 
                 if (!expanded) {
                   return (
@@ -412,10 +585,7 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                       <button
                         type="button"
                         className="draft-compact-main draft-compact-open"
-                        onClick={() => {
-                          setEditingIngredientIndex(index)
-                          setMacrosEdit(null)
-                        }}
+                        onClick={() => openIngredient(index)}
                         aria-label={`Редактировать ${label}`}
                       >
                         <div className="draft-compact-text">
@@ -423,7 +593,11 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                             <strong className="draft-compact-name">
                               {ing.name.trim() || 'Без названия'}
                             </strong>
-                            {!fromLibrary && <span className="badge">примерно</span>}
+                            {!fromLibrary && (
+                              <span className="badge">
+                                {needsPick ? 'уточните' : 'примерно'}
+                              </span>
+                            )}
                           </div>
                           <p className="muted small">
                             {ing.gramsRaw} г · ×{ing.yieldFactor} → {cookedGrams} г ·{' '}
@@ -440,29 +614,213 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                     <div className="draft-item-top">
                       {fromLibrary ? (
                         <div className="field grow">
-                          <span>Название</span>
-                          <div className="draft-item-title-name">{ing.name}</div>
+                          <span>Продукт</span>
+                          <button
+                            type="button"
+                            className={`draft-item-title-name draft-item-title-btn${replacing ? ' active' : ''}`}
+                            onClick={() => {
+                              if (replacing) {
+                                setReplacingIndex(null)
+                                setReplaceQuery('')
+                                return
+                              }
+                              setReplacingIndex(index)
+                              setReplaceQuery(ing.name)
+                              setMacrosEdit(null)
+                              setRelatedOpenIndex(null)
+                            }}
+                            aria-expanded={replacing}
+                            aria-label={`Заменить ${label}`}
+                            title="Заменить продукт"
+                          >
+                            <span className="draft-item-title-text">{ing.name}</span>
+                          </button>
                         </div>
                       ) : (
-                        <label className="field grow">
-                          <span>Название</span>
-                          <input
-                            value={ing.name}
-                            onChange={(e) => updateIngredient(index, { name: e.target.value })}
-                            placeholder="Ингредиент"
-                          />
-                        </label>
+                        <div className="field grow">
+                          <span>
+                            Название
+                            {needsPick ? ' · уточните' : ' · примерно'}
+                          </span>
+                          <div className="draft-name-with-action">
+                            <input
+                              value={ing.name}
+                              onChange={(e) => updateIngredient(index, { name: e.target.value })}
+                              placeholder="Ингредиент"
+                            />
+                            <button
+                              type="button"
+                              className={`icon-btn sm draft-rematch-btn${replacing ? ' active' : ''}`}
+                              onClick={() => {
+                                if (replacing) {
+                                  setReplacingIndex(null)
+                                  setReplaceQuery('')
+                                  return
+                                }
+                                setMacrosEdit(null)
+                                setRelatedOpenIndex(null)
+                                setReplacingIndex(index)
+                                setReplaceQuery(ing.name.trim())
+                              }}
+                              aria-expanded={replacing}
+                              aria-label="Найти в каталоге"
+                              title="Найти в каталоге"
+                            >
+                              <LibraryMenuIcon size={16} />
+                            </button>
+                          </div>
+                        </div>
                       )}
                       <label className="field draft-portion-field">
                         <span>Сырой, г</span>
                         <DecimalInput
                           className="draft-portion-input"
                           value={ing.gramsRaw}
-                          onCommit={(gramsRaw) => updateIngredient(index, { gramsRaw })}
+                          onCommit={(gramsRaw) => {
+                            if (!(gramsRaw > 0)) return
+                            updateIngredient(index, { gramsRaw })
+                          }}
                           ariaLabel="Сырой вес, г"
                         />
                       </label>
                     </div>
+
+                    {showPickPanel && (
+                      <div className="draft-pick-panel">
+                        {needsPick && (
+                          <>
+                            <p className="draft-pick-title">В каталоге несколько вариантов</p>
+                            <ul className="draft-food-list">
+                              {pickGroups.primary.map((food) => (
+                                <li key={food.id}>
+                                  <button
+                                    type="button"
+                                    className="draft-food-option"
+                                    onClick={() => replaceIngredient(index, food)}
+                                  >
+                                    <strong>{food.name}</strong>
+                                    <span className="muted small">
+                                      {food.brand ? `${food.brand} · ` : ''}
+                                      {Math.round(food.per100g.kcal)} ккал / 100 г
+                                      {food.portionGrams != null && food.portionGrams > 0
+                                        ? ` · порция ${food.portionGrams} г`
+                                        : ''}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {hasRelated && (
+                          <div className="draft-pick-related">
+                            <button
+                              type="button"
+                              className={
+                                needsPick
+                                  ? 'draft-pick-related-toggle draft-pick-related-toggle-nested'
+                                  : 'draft-pick-related-toggle'
+                              }
+                              aria-expanded={relatedOpenIndex === index}
+                              onClick={() =>
+                                setRelatedOpenIndex((cur) => (cur === index ? null : index))
+                              }
+                            >
+                              <span>
+                                {needsPick ? 'Похожие' : 'Похожие в каталоге'}
+                                <span className="muted"> · {pickGroups.related.length}</span>
+                              </span>
+                              <span className="draft-pick-related-chevron" aria-hidden>
+                                {relatedOpenIndex === index ? '▾' : '▸'}
+                              </span>
+                            </button>
+                            {relatedOpenIndex === index && (
+                              <ul className="draft-food-list">
+                                {pickGroups.related.map((food) => (
+                                  <li key={food.id}>
+                                    <button
+                                      type="button"
+                                      className="draft-food-option"
+                                      onClick={() => replaceIngredient(index, food)}
+                                    >
+                                      <strong>{food.name}</strong>
+                                      <span className="muted small">
+                                        {food.brand ? `${food.brand} · ` : ''}
+                                        {Math.round(food.per100g.kcal)} ккал / 100 г
+                                        {food.portionGrams != null && food.portionGrams > 0
+                                          ? ` · порция ${food.portionGrams} г`
+                                          : ''}
+                                      </span>
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {replacing && (
+                      <div className="draft-replace-panel">
+                        <label className="field">
+                          <span>Поиск в каталоге</span>
+                          <input
+                            value={replaceQuery}
+                            onChange={(e) => setReplaceQuery(e.target.value)}
+                            placeholder="Название или бренд"
+                            autoFocus
+                          />
+                        </label>
+                        <div className="draft-food-picker">
+                          {replaceFilteredFoods.length === 0 ? (
+                            <p className="muted small">
+                              {normalizeCatalogQuery(replaceQuery)
+                                ? 'Ничего не найдено — попробуйте другое слово.'
+                                : 'В каталоге пока пусто.'}
+                            </p>
+                          ) : (
+                            <ul className="draft-food-list">
+                              {replaceFilteredFoods.map((food) => (
+                                <li key={food.id}>
+                                  <button
+                                    type="button"
+                                    className="draft-food-option"
+                                    onClick={() => replaceIngredient(index, food)}
+                                  >
+                                    <span className="food-row-title">
+                                      <strong>{food.name}</strong>
+                                      {food.brand && (
+                                        <span className="brand-chip">{food.brand}</span>
+                                      )}
+                                      {food.kind === 'dish' && (
+                                        <span className="muted small"> · рецепт</span>
+                                      )}
+                                    </span>
+                                    <span className="muted small">
+                                      {Math.round(food.per100g.kcal)} ккал / 100 г
+                                      {food.portionGrams != null && food.portionGrams > 0
+                                        ? ` · порция ${food.portionGrams} г`
+                                        : ''}
+                                    </span>
+                                  </button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="link-btn"
+                          onClick={() => {
+                            setReplacingIndex(null)
+                            setReplaceQuery('')
+                          }}
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    )}
 
                     <p className="muted small">
                       Выход ×{ing.yieldFactor}
@@ -473,7 +831,8 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                       <button
                         type="button"
                         className={`draft-kbju-row${editing === 'cooked' ? ' active' : ''}`}
-                        onClick={() => toggleMacrosEdit(index, 'cooked')}
+                        onClick={() => canEditMacros && toggleMacrosEdit(index, 'cooked')}
+                        disabled={!canEditMacros}
                       >
                         <span className="draft-kbju-label">На 100 г готового</span>
                         <span>{formatMacros(per100Cooked)}</span>
@@ -481,17 +840,37 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                       <button
                         type="button"
                         className={`draft-kbju-row${editing === 'raw' ? ' active' : ''}`}
-                        onClick={() => toggleMacrosEdit(index, 'raw')}
+                        onClick={() => canEditMacros && toggleMacrosEdit(index, 'raw')}
+                        disabled={!canEditMacros}
                       >
                         <span className="draft-kbju-label">На 100 г сырого</span>
                         <span>{formatMacros(ing.per100g)}</span>
                       </button>
                     </div>
+                    {fromLibrary && (
+                      <p className="muted small draft-kbju-hint">
+                        КБЖУ из каталога — меняйте сырой вес, нажмите название чтобы заменить,
+                        или отвяжите для ручного ввода.
+                      </p>
+                    )}
 
-                    {editing && (
+                    <label className="field draft-portion-field">
+                      <span>Коэфф. выхода</span>
+                      <DecimalInput
+                        value={ing.yieldFactor}
+                        onCommit={(yieldFactor) => {
+                          if (yieldFactor > 0) updateIngredient(index, { yieldFactor })
+                        }}
+                        ariaLabel="Коэффициент выхода"
+                      />
+                    </label>
+
+                    {canEditMacros && editing && (
                       <div className="draft-macros">
                         <p className="muted small">
-                          {editing === 'cooked' ? 'КБЖУ на 100 г готового' : 'КБЖУ на 100 г сырого'}
+                          {editing === 'cooked'
+                            ? 'КБЖУ на 100 г готового'
+                            : 'КБЖУ на 100 г сырого'}
                         </p>
                         <div className="form-grid four compact draft-macros-grid">
                           {(
@@ -501,47 +880,60 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                               ['fat', 'Жиры'],
                               ['carbs', 'Углеводы'],
                             ] as const
-                          ).map(([key, label]) => {
+                          ).map(([key, fieldLabel]) => {
                             const basisMacros =
                               editing === 'cooked' ? per100Cooked : ing.per100g
                             return (
                               <label key={key} className="field">
-                                <span>{label}</span>
+                                <span>{fieldLabel}</span>
                                 <DecimalInput
                                   value={basisMacros[key]}
                                   onCommit={(n) =>
                                     commitIngredientMacros(index, ing, editing, { [key]: n })
                                   }
-                                  ariaLabel={label}
+                                  ariaLabel={fieldLabel}
                                 />
                               </label>
                             )
                           })}
                         </div>
-                        <label className="field">
-                          <span>Коэфф. выхода</span>
-                          <DecimalInput
-                            value={ing.yieldFactor}
-                            onCommit={(yieldFactor) => {
-                              if (yieldFactor > 0) updateIngredient(index, { yieldFactor })
-                            }}
-                            ariaLabel="Коэффициент выхода"
-                          />
-                        </label>
                       </div>
                     )}
 
                     <div className="draft-item-footer">
+                      <div className="draft-item-footer-links">
+                        {fromLibrary && (
+                          <button
+                            type="button"
+                            className="link-btn draft-remember-btn"
+                            onClick={() => {
+                              updateIngredient(index, {
+                                foodId: undefined,
+                                source: 'estimate',
+                              })
+                              setMacrosEdit({ index, basis: 'raw' })
+                            }}
+                          >
+                            Править КБЖУ вручную
+                          </button>
+                        )}
+                      </div>
                       <div className="draft-item-footer-actions">
                         <button
                           type="button"
                           className="primary-btn draft-done-btn"
-                          onClick={() => {
-                            setEditingIngredientIndex(null)
-                            setMacrosEdit(null)
-                          }}
+                          onClick={collapseIngredient}
                         >
                           Готово
+                        </button>
+                        <button
+                          type="button"
+                          className="icon-btn danger"
+                          onClick={() => removeIngredient(index)}
+                          aria-label={`Удалить ${label}`}
+                          title="Удалить"
+                        >
+                          <TrashIcon size={18} />
                         </button>
                       </div>
                     </div>
@@ -549,6 +941,83 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                 )
               })}
             </ul>
+
+            {!addOpen ? (
+              <button
+                type="button"
+                className="ghost-btn icon-cta draft-add-btn"
+                onClick={() => {
+                  setAddOpen(true)
+                  collapseIngredient()
+                }}
+                aria-label="Добавить продукт"
+                title="Добавить продукт"
+              >
+                <PlusIcon size={20} />
+              </button>
+            ) : (
+              <div className="draft-add-panel">
+                <label className="field">
+                  <span>Продукт из справочника</span>
+                  <input
+                    value={addQuery}
+                    onChange={(e) => setAddQuery(e.target.value)}
+                    placeholder="Название или бренд"
+                    autoFocus
+                  />
+                </label>
+                <div className="draft-food-picker">
+                  {addFilteredFoods.length === 0 ? (
+                    <p className="muted small">
+                      {normalizeCatalogQuery(addQuery)
+                        ? 'Ничего не найдено — добавьте вручную или уточните запрос.'
+                        : 'Начните вводить название продукта.'}
+                    </p>
+                  ) : (
+                    <ul className="draft-food-list">
+                      {addFilteredFoods.map((food) => (
+                        <li key={food.id}>
+                          <button
+                            type="button"
+                            className="draft-food-option"
+                            onClick={() => addFromFood(food)}
+                          >
+                            <span className="food-row-title">
+                              <strong>{food.name}</strong>
+                              {food.brand && <span className="brand-chip">{food.brand}</span>}
+                              {food.kind === 'dish' && (
+                                <span className="muted small"> · рецепт</span>
+                              )}
+                            </span>
+                            <span className="muted small">
+                              {Math.round(food.per100g.kcal)} ккал / 100 г
+                              {food.portionGrams != null && food.portionGrams > 0
+                                ? ` · порция ${food.portionGrams} г`
+                                : ''}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div className="draft-add-actions">
+                  <button type="button" className="ghost-btn" onClick={addManualIngredient}>
+                    Добавить вручную
+                  </button>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => {
+                      setAddOpen(false)
+                      setAddQuery('')
+                    }}
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="btn-row">
               <button
@@ -569,7 +1038,9 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
                     setServingBasis('portion')
                     setEditingCooked(false)
                     setMacrosEdit(null)
-                    setEditingIngredientIndex(null)
+                    collapseIngredient()
+                    setAddOpen(false)
+                    setAddQuery('')
                     setShowRecipeText(true)
                   }}
                 >

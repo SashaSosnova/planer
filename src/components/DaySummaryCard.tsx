@@ -16,6 +16,7 @@ export function DaySummaryCard({ day, dailyKcalGoal, maintainKcalGoal, onOpen }:
       <div className="day-summary-top">
         <CalorieRing
           eaten={day.totals.kcal}
+          planned={day.plannedTotals.kcal}
           goal={dailyKcalGoal}
           maintainGoal={maintainKcalGoal}
           size="sm"

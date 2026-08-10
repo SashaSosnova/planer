@@ -143,6 +143,7 @@ export function sanitizeMeal(raw: unknown): Meal | null {
     totals: items.length ? totalsFromItems(items) : sanitizeMacros(m.totals as Meal['totals']),
     isApproximate: Boolean(m.isApproximate),
     eatingOut: Boolean(m.eatingOut),
+    planned: Boolean(m.planned),
     createdAt: Number(m.createdAt) || Date.now(),
   }
 }

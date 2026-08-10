@@ -16,7 +16,10 @@ export type DayStats = {
   date: string
   label: string
   meals: Meal[]
+  /** Eaten only (`!planned`). */
   totals: MacroSet
+  /** Sum of planned meals for the day (excluded from totals). */
+  plannedTotals: MacroSet
   /** Grams of vegetable-like items (auto-detected by name). */
   vegGrams: number
   /** Kcal from sweet/treat items (auto-detected by name). */
@@ -46,7 +49,12 @@ export function statsForDate(data: AppData, date: string): DayStats {
   const meals = data.meals
     .filter((m) => m.date === date)
     .sort(compareMealsByTypeThenTime)
-  const totals = meals.length ? sumMacros(meals.map((m) => m.totals)) : emptyMacros()
+  const eaten = meals.filter((m) => !m.planned)
+  const planned = meals.filter((m) => m.planned)
+  const totals = eaten.length ? sumMacros(eaten.map((m) => m.totals)) : emptyMacros()
+  const plannedTotals = planned.length
+    ? sumMacros(planned.map((m) => m.totals))
+    : emptyMacros()
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
   const note = (data.dayNotes ?? []).find((n) => n.date === date)
@@ -56,9 +64,10 @@ export function statsForDate(data: AppData, date: string): DayStats {
     label: shortRuWeekday(date),
     meals,
     totals,
-    vegGrams: vegGramsFromMeals(meals, data.foods),
-    sweetKcal: sweetKcalFromMeals(meals),
-    approximate: meals.some((m) => m.isApproximate || m.eatingOut),
+    plannedTotals,
+    vegGrams: vegGramsFromMeals(eaten, data.foods),
+    sweetKcal: sweetKcalFromMeals(eaten),
+    approximate: eaten.some((m) => m.isApproximate || m.eatingOut),
     weightKg: weight?.kg,
     steps: steps?.count,
     noteText,

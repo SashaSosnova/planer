@@ -24,37 +24,33 @@ export function MealMedChecks({ date, mealType, entry, onToggle }: Props) {
   const ironTime = formatMedTakenAt(ironAt)
 
   return (
-    <div className="meal-med-checks" role="group" aria-label="Добавки">
+    <>
       {mgDose && (
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={Boolean(mgAt)}
-            onChange={(e) => {
-              void onToggle({ date, dose: mgDose, taken: e.target.checked })
-            }}
-          />
-          <span>
-            Магний
-            {mgAt && mgTime ? <span className="meal-med-time"> · {mgTime}</span> : null}
-          </span>
-        </label>
+        <button
+          type="button"
+          className={`meal-type-chip${mgAt ? ' active' : ''}`}
+          aria-pressed={Boolean(mgAt)}
+          onClick={() => {
+            void onToggle({ date, dose: mgDose, taken: !mgAt })
+          }}
+        >
+          Магний
+          {mgAt && mgTime ? ` · ${mgTime}` : ''}
+        </button>
       )}
       {showIron && (
-        <label className="check-row">
-          <input
-            type="checkbox"
-            checked={Boolean(ironAt)}
-            onChange={(e) => {
-              void onToggle({ date, dose: 'iron', taken: e.target.checked })
-            }}
-          />
-          <span>
-            Железо
-            {ironAt && ironTime ? <span className="meal-med-time"> · {ironTime}</span> : null}
-          </span>
-        </label>
+        <button
+          type="button"
+          className={`meal-type-chip${ironAt ? ' active' : ''}`}
+          aria-pressed={Boolean(ironAt)}
+          onClick={() => {
+            void onToggle({ date, dose: 'iron', taken: !ironAt })
+          }}
+        >
+          Железо
+          {ironAt && ironTime ? ` · ${ironTime}` : ''}
+        </button>
       )}
-    </div>
+    </>
   )
 }

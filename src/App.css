@@ -770,6 +770,7 @@
 
 .calorie-ring {
   --ring-color: var(--ok);
+  --ring-planned: var(--accent);
   position: relative;
   display: grid;
   place-items: center;
@@ -792,6 +793,14 @@
   stroke: color-mix(in srgb, var(--ring-color) 18%, var(--line));
 }
 
+.calorie-ring-planned {
+  stroke: var(--ring-planned);
+  opacity: 0.85;
+  transition:
+    stroke-dasharray 0.45s ease,
+    stroke 0.25s ease;
+}
+
 .calorie-ring-progress {
   stroke: var(--ring-color);
   transition:
@@ -811,22 +820,26 @@
   padding: 10px;
 }
 
-.calorie-ring-center strong {
+.calorie-ring-center strong,
+.calorie-ring-eaten {
   font-family: Fraunces, Georgia, serif;
   font-weight: 600;
   line-height: 1;
   color: var(--ring-color);
 }
 
-.calorie-ring.size-lg .calorie-ring-center strong {
+.calorie-ring.size-lg .calorie-ring-center strong,
+.calorie-ring.size-lg .calorie-ring-eaten {
   font-size: 1.45rem;
 }
 
-.calorie-ring.size-md .calorie-ring-center strong {
+.calorie-ring.size-md .calorie-ring-center strong,
+.calorie-ring.size-md .calorie-ring-eaten {
   font-size: 1.22rem;
 }
 
-.calorie-ring.size-sm .calorie-ring-center strong {
+.calorie-ring.size-sm .calorie-ring-center strong,
+.calorie-ring.size-sm .calorie-ring-eaten {
   font-size: 0.78rem;
 }
 
@@ -836,6 +849,18 @@
   color: var(--muted);
   font-size: 0.68rem;
   line-height: 1.15;
+}
+
+.calorie-ring-planned-kcal {
+  color: var(--ring-planned);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.15;
+  margin-top: 2px;
+}
+
+.calorie-ring.size-md .calorie-ring-planned-kcal {
+  font-size: 0.62rem;
 }
 
 .calorie-ring.size-lg .calorie-ring-goal {
@@ -1516,6 +1541,16 @@
   max-width: 100%;
 }
 
+.meal-card-planned {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
+}
+
+.badge-plan {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
 .draft-item {
   display: flex;
   flex-direction: column;
@@ -2056,11 +2091,6 @@
   padding: 0;
 }
 
-.meal-detail-meta .check-row {
-  margin: 0;
-  align-self: center;
-}
-
 .meal-detail-save-hint {
   margin: 0;
 }
@@ -2325,11 +2355,66 @@
   color: var(--accent);
 }
 
+.meal-flag-chips {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 5px;
+}
+
+.meal-flag-chips .meal-type-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 8px;
+  min-height: 0;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.meal-flag-chips .meal-type-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+@media (pointer: coarse) {
+  .meal-flag-chips .meal-type-chip {
+    min-height: 0;
+    padding: 4px 9px;
+  }
+}
+
 .add-date-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+}
+
+.add-meal-type-chips {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 5px;
+}
+
+.add-meal-type-chips .meal-type-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  min-height: 36px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.add-meal-type-chips .meal-type-chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .add-date-field {
@@ -2348,11 +2433,6 @@
 
 .add-date-field .date-field-cal {
   width: 36px;
-}
-
-.add-date-row .check-row.add-eating-out {
-  margin: 0;
-  align-self: center;
 }
 
 .add-parse-actions .primary-btn,
@@ -3893,10 +3973,6 @@ button.food-row-open:focus-visible {
   gap: 10px 14px;
 }
 
-.meal-med-checks .check-row {
-  margin: 0;
-}
-
 .meal-med-time {
   color: var(--warm-text);
   font-weight: 600;
@@ -3904,6 +3980,11 @@ button.food-row-open:focus-visible {
 }
 
 .meal-med-tags {
+  color: var(--warm-text);
+  font-weight: 600;
+}
+
+.meal-plan-tag {
   color: var(--warm-text);
   font-weight: 600;
 }

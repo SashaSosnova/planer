@@ -354,6 +354,7 @@ export function useAppData() {
       items: MealItem[]
       isApproximate: boolean
       eatingOut?: boolean
+      planned?: boolean
     }) => {
       const items = sanitizeMealItems(input.items)
       if (items.length === 0) throw new Error('Добавьте хотя бы один продукт с граммами > 0')
@@ -372,6 +373,7 @@ export function useAppData() {
         totals,
         isApproximate: input.isApproximate,
         eatingOut: Boolean(input.eatingOut),
+        planned: Boolean(input.planned),
         createdAt,
       }
       if (useCloud && uid) await upsertDoc(uid, 'meals', meal.id, { ...meal })

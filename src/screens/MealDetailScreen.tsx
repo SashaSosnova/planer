@@ -34,6 +34,7 @@ type Props = {
     items: MealItem[]
     isApproximate: boolean
     eatingOut: boolean
+    planned?: boolean
   }) => Promise<unknown>
   onDelete: (id: string) => Promise<void>
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
@@ -62,6 +63,7 @@ export function MealDetailScreen({
   const [date, setDate] = useState(meal.date)
   const [mealType, setMealType] = useState(meal.mealType)
   const [eatingOut, setEatingOut] = useState(meal.eatingOut)
+  const [planned, setPlanned] = useState(Boolean(meal.planned))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
@@ -73,8 +75,8 @@ export function MealDetailScreen({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const leavingRef = useRef(false)
   const persistChainRef = useRef(Promise.resolve())
-  const latestRef = useRef({ items, date, mealType, eatingOut, meal })
-  latestRef.current = { items, date, mealType, eatingOut, meal }
+  const latestRef = useRef({ items, date, mealType, eatingOut, planned, meal })
+  latestRef.current = { items, date, mealType, eatingOut, planned, meal }
 
   // Reset local draft only when opening another meal.
   useEffect(() => {
@@ -82,6 +84,7 @@ export function MealDetailScreen({
     setDate(meal.date)
     setMealType(meal.mealType)
     setEatingOut(meal.eatingOut)
+    setPlanned(Boolean(meal.planned))
     setError(null)
     setSaveState('idle')
     skipAutosave.current = true
@@ -130,6 +133,7 @@ export function MealDetailScreen({
           items: kept,
           isApproximate,
           eatingOut: snap.eatingOut,
+          planned: snap.planned,
         })
         // If newer edits landed while we were saving, chain another quiet flush.
         const latest = latestRef.current
@@ -138,6 +142,7 @@ export function MealDetailScreen({
           latest.date !== snap.date ||
           latest.mealType !== snap.mealType ||
           latest.eatingOut !== snap.eatingOut ||
+          latest.planned !== snap.planned ||
           latestKept.length !== kept.length ||
           latestKept.some((it, i) => {
             const prev = kept[i]
@@ -186,7 +191,7 @@ export function MealDetailScreen({
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current)
     }
-  }, [items, date, mealType, eatingOut])
+  }, [items, date, mealType, eatingOut, planned])
 
   const flushAndLeave = async (leave: () => void) => {
     if (leavingRef.current || busy) return
@@ -338,20 +343,34 @@ export function MealDetailScreen({
             max={todayIso()}
             onChange={setDate}
           />
-          <label className="check-row meal-detail-out">
-            <input
-              type="checkbox"
-              checked={eatingOut}
-              onChange={(e) => setEatingOut(e.target.checked)}
+          <div
+            className="meal-type-chips meal-type-chips-inline meal-flag-chips"
+            role="group"
+            aria-label="Метки приёма"
+          >
+            <button
+              type="button"
+              className={`meal-type-chip${eatingOut ? ' active' : ''}`}
+              aria-pressed={eatingOut}
+              onClick={() => setEatingOut(!eatingOut)}
+            >
+              Вне дома
+            </button>
+            <button
+              type="button"
+              className={`meal-type-chip${planned ? ' active' : ''}`}
+              aria-pressed={planned}
+              onClick={() => setPlanned(!planned)}
+            >
+              План
+            </button>
+            <MealMedChecks
+              date={date}
+              mealType={mealType}
+              entry={(data.medDays ?? []).find((m) => m.date === date)}
+              onToggle={onSaveMedCheck}
             />
-            <span>Вне дома</span>
-          </label>
-          <MealMedChecks
-            date={date}
-            mealType={mealType}
-            entry={(data.medDays ?? []).find((m) => m.date === date)}
-            onToggle={onSaveMedCheck}
-          />
+          </div>
         </div>
       </header>
 

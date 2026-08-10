@@ -85,6 +85,75 @@ describe('statsForDate', () => {
     expect(statsForDate(data, '2026-07-15').approximate).toBe(true)
   })
 
+  it('excludes planned meals from eaten totals and veg/sweet', () => {
+    const data: AppData = {
+      ...empty,
+      meals: [
+        meal({
+          id: 'eaten',
+          date: '2026-07-15',
+          mealType: 'breakfast',
+          totals: { kcal: 400, protein: 20, fat: 10, carbs: 30 },
+          items: [
+            {
+              name: 'огурец',
+              grams: 100,
+              kcal: 15,
+              protein: 1,
+              fat: 0,
+              carbs: 3,
+              source: 'estimate',
+            },
+          ],
+        }),
+        meal({
+          id: 'plan',
+          date: '2026-07-15',
+          mealType: 'lunch',
+          planned: true,
+          totals: { kcal: 800, protein: 40, fat: 20, carbs: 60 },
+          items: [
+            {
+              name: 'торт',
+              grams: 100,
+              kcal: 400,
+              protein: 5,
+              fat: 20,
+              carbs: 50,
+              source: 'estimate',
+            },
+          ],
+        }),
+      ],
+    }
+    const day = statsForDate(data, '2026-07-15')
+    expect(day.meals).toHaveLength(2)
+    expect(day.totals.kcal).toBe(400)
+    expect(day.plannedTotals.kcal).toBe(800)
+    expect(day.vegGrams).toBe(100)
+    expect(day.sweetKcal).toBe(0)
+    expect(day.approximate).toBe(false)
+  })
+
+  it('does not mark day approximate from planned eating-out only', () => {
+    const data: AppData = {
+      ...empty,
+      meals: [
+        meal({
+          id: 'plan',
+          date: '2026-07-15',
+          planned: true,
+          eatingOut: true,
+          totals: { kcal: 500, protein: 0, fat: 0, carbs: 0 },
+        }),
+      ],
+    }
+    const day = statsForDate(data, '2026-07-15')
+    expect(day.totals.kcal).toBe(0)
+    expect(day.plannedTotals.kcal).toBe(500)
+    expect(day.approximate).toBe(false)
+  })
+
   it('sums vegetable grams from meal items', () => {
     const data: AppData = {
       ...empty,

@@ -76,6 +76,7 @@ type Props = {
     items: MealItem[]
     isApproximate: boolean
     eatingOut: boolean
+    planned?: boolean
   }) => Promise<unknown>
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
   onDeleteFood: (id: string) => Promise<void>
@@ -112,6 +113,7 @@ export function AddMealScreen({
     return initialDate > today ? today : initialDate
   })
   const [eatingOut, setEatingOut] = useState(false)
+  const [planned, setPlanned] = useState(false)
   const [mealType, setMealType] = useState<MealType>(initialMealType ?? 'breakfast')
   const [mealTypeTouched, setMealTypeTouched] = useState(Boolean(initialMealType))
   const [text, setText] = useState(prefillText?.trim() ?? '')
@@ -277,6 +279,7 @@ export function AddMealScreen({
         items: kept,
         isApproximate: mealItemsAreApproximate(draft.eatingOut, kept),
         eatingOut: draft.eatingOut,
+        planned,
       })
       onBack()
     } catch (err) {
@@ -397,19 +400,6 @@ export function AddMealScreen({
         </button>
       </header>
 
-      <div className="meal-type-chips" role="group" aria-label="Тип приёма">
-        {MEAL_TYPE_ORDER.map((key) => (
-          <button
-            key={key}
-            type="button"
-            className={`meal-type-chip${mealType === key ? ' active' : ''}`}
-            onClick={() => selectMealType(key)}
-          >
-            {MEAL_TYPE_LABELS[key]}
-          </button>
-        ))}
-      </div>
-
       <div className="add-date-row">
         <DateField
           className="add-date-field"
@@ -419,32 +409,18 @@ export function AddMealScreen({
             clearDraftForDateChange(next)
           }}
         />
-        <label className="check-row add-eating-out">
-          <input
-            type="checkbox"
-            checked={eatingOut}
-            onChange={(e) => {
-              const next = e.target.checked
-              setEatingOut(next)
-              setDraft((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      eatingOut: next,
-                      isApproximate: mealItemsAreApproximate(next, prev.items),
-                    }
-                  : prev,
-              )
-            }}
-          />
-          <span>Вне дома</span>
-        </label>
-        <MealMedChecks
-          date={date}
-          mealType={mealType}
-          entry={(data.medDays ?? []).find((m) => m.date === date)}
-          onToggle={onSaveMedCheck}
-        />
+        <div className="meal-type-chips add-meal-type-chips" role="group" aria-label="Тип приёма">
+          {MEAL_TYPE_ORDER.map((key) => (
+            <button
+              key={key}
+              type="button"
+              className={`meal-type-chip${mealType === key ? ' active' : ''}`}
+              onClick={() => selectMealType(key)}
+            >
+              {MEAL_TYPE_LABELS[key]}
+            </button>
+          ))}
+        </div>
         {!isToday && (
           <button
             type="button"
@@ -456,6 +432,43 @@ export function AddMealScreen({
             Сегодня
           </button>
         )}
+      </div>
+
+      <div className="meal-type-chips meal-flag-chips" role="group" aria-label="Метки приёма">
+        <button
+          type="button"
+          className={`meal-type-chip${eatingOut ? ' active' : ''}`}
+          aria-pressed={eatingOut}
+          onClick={() => {
+            const next = !eatingOut
+            setEatingOut(next)
+            setDraft((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    eatingOut: next,
+                    isApproximate: mealItemsAreApproximate(next, prev.items),
+                  }
+                : prev,
+            )
+          }}
+        >
+          Вне дома
+        </button>
+        <button
+          type="button"
+          className={`meal-type-chip${planned ? ' active' : ''}`}
+          aria-pressed={planned}
+          onClick={() => setPlanned(!planned)}
+        >
+          План
+        </button>
+        <MealMedChecks
+          date={date}
+          mealType={mealType}
+          entry={(data.medDays ?? []).find((m) => m.date === date)}
+          onToggle={onSaveMedCheck}
+        />
       </div>
 
       <label className="field">
@@ -557,6 +570,7 @@ export function AddMealScreen({
                 {PARSE_SOURCE_LABEL[draft.parseSource]}
               </span>
               {draft.eatingOut && <span className="badge">вне дома</span>}
+              {planned && <span className="badge badge-plan">план</span>}
             </div>
           </div>
           <MacroBar

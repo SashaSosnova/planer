@@ -43,7 +43,7 @@ describe('week summary cache', () => {
 
   it('returns frozen text and never calls LLM again', async () => {
     localStorage.setItem(
-      'planer-week-summaries-v4',
+      'planer-week-summaries-v5',
       JSON.stringify({
         '2026-07-06': { text: 'Уже сохранённый итог недели.', savedAt: '2026-07-13T08:00:00.000Z' },
       }),
@@ -78,11 +78,14 @@ describe('week summary cache', () => {
     expect(a).toBe(localWeekNutritionNote(w))
   })
 
-  it('does not reuse old v3 cache after version bump', async () => {
+  it('does not reuse old v4 cache after version bump', async () => {
     localStorage.setItem(
-      'planer-week-summaries-v3',
+      'planer-week-summaries-v4',
       JSON.stringify({
-        '2026-07-06': { text: 'Средняя активность низкая, шагов мало.', savedAt: '2026-07-13T08:00:00.000Z' },
+        '2026-07-06': {
+          text: 'На этой неделе ели гречку и сладости. Углеводы преобладают. Шагов мало.',
+          savedAt: '2026-07-13T08:00:00.000Z',
+        },
       }),
     )
     vi.spyOn(await import('./deepseek'), 'isDeepseekConfigured').mockReturnValue(false)
@@ -90,12 +93,27 @@ describe('week summary cache', () => {
     const text = await getWeekNutritionSummary(w)
     expect(text).toBe(localWeekNutritionNote(w))
     expect(text).not.toMatch(/шагов мало/)
-    expect(text).toMatch(/Шаги/)
+    expect(text).not.toMatch(/преобладают/)
+    expect(text).toMatch(/ходьб|шаг/i)
   })
 
   it('mentions average steps in the local note', () => {
     const note = localWeekNutritionNote(week({ avgSteps: 18231 }))
     expect(note).toMatch(/18[\s\u00a0]?231/)
-    expect(note).toMatch(/Шаги/)
+    expect(note).toMatch(/ходьб|шаг/i)
+  })
+
+  it('rejects grocery-list LLM copy and keeps the local review', async () => {
+    vi.spyOn(await import('./deepseek'), 'isDeepseekConfigured').mockReturnValue(true)
+    vi.spyOn(await import('./deepseek'), 'deepseekJson').mockResolvedValue({
+      summary:
+        'На этой неделе чаще всего ели гречку, минтай и курицу, а также кофе с молоком и сладости. Баланс БЖУ: белков 511 г, жиров 426 г, углеводов 900 г — углеводы преобладают. Средние шаги 5077/день.',
+    })
+    const w = week({ avgSteps: 5077 })
+    const text = await getWeekNutritionSummary(w)
+    expect(text).toBe(localWeekNutritionNote(w))
+    expect(text).toMatch(/Хорошо:|Нормально:/)
+    expect(text).not.toMatch(/преобладают/)
+    expect(text).not.toMatch(/кофе/)
   })
 })

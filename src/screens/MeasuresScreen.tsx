@@ -6,6 +6,7 @@ import {
   MEASURE_COLORS,
   MEASURE_FIELDS,
   formatMeasure,
+  measureChangesFromFirst,
   measureFilled,
   type MeasureKey,
 } from '../lib/measures'
@@ -110,6 +111,8 @@ export function MeasuresPanel({ data, onSave, onDelete }: Props) {
     })).filter((s) => s.points.length > 0)
   }, [history])
 
+  const changes = useMemo(() => measureChangesFromFirst(history), [history])
+
   const save = async () => {
     const payload = payloadFromDraft(draft, date, measure?.id)
     if (!MEASURE_FIELDS.some(({ key }) => payload[key] != null)) {
@@ -182,8 +185,17 @@ export function MeasuresPanel({ data, onSave, onDelete }: Props) {
     <div className="panel-stack">
       <div className="panel chart-panel">
         <h2 className="subhead" style={{ marginTop: 0 }}>
-          График
+          {changes.length > 0 ? 'С первых замеров' : 'График'}
         </h2>
+        {changes.length > 0 && (
+          <ul className="measure-changes">
+            {changes.map((c) => (
+              <li key={c.key} className={c.deltaCm < 0 ? 'down' : 'up'}>
+                {c.text}
+              </li>
+            ))}
+          </ul>
+        )}
         {series.length > 0 ? (
           <TrendChart series={series} unit="см" height={108} minRange={4} />
         ) : (

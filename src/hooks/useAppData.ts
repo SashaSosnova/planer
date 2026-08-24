@@ -16,6 +16,7 @@ import {
   assertNonNegMacros,
   dedupeMeasurements,
   dedupePeriodStarts,
+  mergePeriodStarts,
   sanitizeDayNote,
   sanitizeMacros,
   sanitizeMealItems,
@@ -116,6 +117,8 @@ export function useAppData() {
   const suppressedMeasureDates = useRef(new Set<string>())
   /** Food/recipe ids deleted this session — same protection against snapshot races. */
   const suppressedFoodIds = useRef(new Set<string>())
+  /** Period-start dates deleted this session — do not let a stale snapshot restore them. */
+  const suppressedPeriodDates = useRef(new Set<string>())
   const careProductsSeedStarted = useRef(false)
   const spiceProductsSeedStarted = useRef(false)
 
@@ -144,6 +147,7 @@ export function useAppData() {
         spiceProductsSeedStarted.current = false
         suppressedFoodIds.current = new Set()
         suppressedMeasureDates.current = new Set()
+        suppressedPeriodDates.current = new Set()
         try {
           localStorage.removeItem(SEED_CARE_PRODUCTS_KEY)
           localStorage.removeItem(SEED_SPICE_PRODUCTS_KEY)
@@ -163,6 +167,26 @@ export function useAppData() {
               const cloudItems = partial[key]
               if (!Array.isArray(cloudItems)) continue
               const localItems = prev[key] as Array<{ id: string }>
+              if (key === 'periodStarts') {
+                cloudHydrated.current.add(key)
+                const { kept, toUpload, toDelete } = mergePeriodStarts(
+                  localItems as PeriodStart[],
+                  cloudItems as PeriodStart[],
+                  suppressedPeriodDates.current,
+                )
+                Object.assign(next, { periodStarts: kept })
+                if (toUpload.length || toDelete.length) {
+                  void Promise.all([
+                    ...toUpload.map((item) =>
+                      upsertDoc(authUser.uid, 'periodStarts', item.id, {
+                        ...item,
+                      } as Record<string, unknown>),
+                    ),
+                    ...toDelete.map((id) => removeDoc(authUser.uid, 'periodStarts', id)),
+                  ])
+                }
+                continue
+              }
               if (
                 cloudItems.length === 0 &&
                 localItems.length > 0 &&
@@ -187,17 +211,7 @@ export function useAppData() {
                 continue
               }
               cloudHydrated.current.add(key)
-              if (key === 'periodStarts') {
-                const { kept, droppedIds } = dedupePeriodStarts(
-                  cloudItems as PeriodStart[],
-                )
-                Object.assign(next, { periodStarts: kept })
-                if (droppedIds.length) {
-                  void Promise.all(
-                    droppedIds.map((id) => removeDoc(authUser.uid, 'periodStarts', id)),
-                  )
-                }
-              } else if (key === 'measurements') {
+              if (key === 'measurements') {
                 const cloudRaw = cloudItems as MeasurementEntry[]
                 for (const m of cloudRaw) {
                   if (suppressedMeasureDates.current.has(m.date)) {
@@ -650,6 +664,7 @@ export function useAppData() {
       const existing = data.periodStarts.find((p) => p.date === date)
       if (existing) return existing
 
+      suppressedPeriodDates.current.delete(date)
       const entry: PeriodStart = { id: newId(), date, createdAt: Date.now() }
       const wrote = { ok: false }
       persistLocal((prev) => {
@@ -667,11 +682,15 @@ export function useAppData() {
 
   const removePeriodStart = useCallback(
     async (id: string) => {
+      persistLocal((prev) => {
+        const existing = prev.periodStarts.find((p) => p.id === id)
+        if (existing) suppressedPeriodDates.current.add(existing.date)
+        return {
+          ...prev,
+          periodStarts: prev.periodStarts.filter((p) => p.id !== id),
+        }
+      })
       if (useCloud && uid) await removeDoc(uid, 'periodStarts', id)
-      persistLocal((prev) => ({
-        ...prev,
-        periodStarts: prev.periodStarts.filter((p) => p.id !== id),
-      }))
     },
     [persistLocal, uid, useCloud],
   )

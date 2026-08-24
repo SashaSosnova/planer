@@ -19,6 +19,8 @@ import { NavGlyph } from '../components/NavGlyph'
 import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
 import { PlusIcon } from '../components/PlusIcon'
 import { buildWeightProgress } from '../lib/weightProgress'
+import { buildFourWeekAnalysis } from '../lib/fourWeekAnalysis'
+import type { ActivityLevel } from '../lib/calorieGoal'
 import type { AppData, Meal, MealType } from '../types'
 
 type PromptKind = 'weight' | 'steps' | null
@@ -28,6 +30,7 @@ type Props = {
   dailyKcalGoal: number
   maintainKcalGoal: number
   targetWeightKg?: number | null
+  activity?: ActivityLevel | null
   proteinGoal: number | null
   profileReady: boolean
   cycleLengthDays: number
@@ -79,6 +82,7 @@ export function TodayScreen({
   dailyKcalGoal,
   maintainKcalGoal,
   targetWeightKg,
+  activity,
   proteinGoal,
   profileReady,
   cycleLengthDays,
@@ -177,6 +181,19 @@ export function TodayScreen({
       cycleLengthDays,
       periodLengthDays,
     ],
+  )
+
+  const fourWeek = useMemo(
+    () =>
+      buildFourWeekAnalysis({
+        data,
+        dailyKcalGoal,
+        maintainKcal: maintainKcalGoal,
+        targetKg: targetWeightKg,
+        activity,
+        today: date,
+      }),
+    [data, dailyKcalGoal, maintainKcalGoal, targetWeightKg, activity, date],
   )
 
   const cycle = useMemo(
@@ -312,6 +329,17 @@ export function TodayScreen({
         <p className="banner">
           Задайте рост, возраст и активность в профиле — норма калорий посчитается сама.
         </p>
+      )}
+
+      {fourWeek && (
+        <button
+          type="button"
+          className="analysis-teaser"
+          onClick={onOpenHistory}
+        >
+          <span className="analysis-teaser-label">Итоги за месяц</span>
+          <span className="analysis-teaser-text">{fourWeek.headline}</span>
+        </button>
       )}
 
       {(weightProgress || (cycle.phase !== 'unknown' && cycle.dayInCycle != null)) && (

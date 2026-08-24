@@ -443,6 +443,44 @@ export function dedupePeriodStarts(starts: PeriodStart[]): {
   return dedupeByDate(starts)
 }
 
+/**
+ * Union device + cloud period starts so a stale or empty snapshot cannot drop
+ * dates that only exist locally yet. Re-upload those; delete cloud dupes and
+ * dates the user removed this session.
+ */
+export function mergePeriodStarts(
+  local: PeriodStart[],
+  cloud: PeriodStart[],
+  suppressedDates: ReadonlySet<string> = new Set(),
+): {
+  kept: PeriodStart[]
+  toUpload: PeriodStart[]
+  toDelete: string[]
+} {
+  const combined: PeriodStart[] = []
+  for (const s of cloud) {
+    if (!suppressedDates.has(s.date)) combined.push(s)
+  }
+  for (const s of local) {
+    if (!suppressedDates.has(s.date)) combined.push(s)
+  }
+  const { kept, droppedIds } = dedupePeriodStarts(combined)
+  const cloudIds = new Set(cloud.map((s) => s.id))
+  const keptIds = new Set(kept.map((s) => s.id))
+  const toDelete = new Set<string>()
+  for (const id of droppedIds) {
+    if (!keptIds.has(id)) toDelete.add(id)
+  }
+  for (const s of cloud) {
+    if (suppressedDates.has(s.date) && !keptIds.has(s.id)) toDelete.add(s.id)
+  }
+  return {
+    kept,
+    toUpload: kept.filter((s) => !cloudIds.has(s.id)),
+    toDelete: [...toDelete],
+  }
+}
+
 export function dedupeMeasurements(entries: MeasurementEntry[]): {
   kept: MeasurementEntry[]
   droppedIds: string[]

@@ -1,11 +1,12 @@
 import { deepseekJson, isDeepseekConfigured } from './deepseek'
 import type { WeekStats } from './dayStats'
+import { buildWeekReview, weekReviewFacts } from './weekReview'
 
 /**
  * Permanent per-week reports (written once when the week first closes).
- * Bump version to drop bad frozen copy (e.g. “мало шагов” before steps were synced).
+ * Bump version to drop bad frozen copy (grocery lists, “carbs dominate”, shame).
  */
-const CACHE_KEY = 'planer-week-summaries-v4'
+const CACHE_KEY = 'planer-week-summaries-v5'
 
 type Cached = {
   text: string
@@ -36,22 +37,16 @@ export function getCachedWeekSummary(weekStart: string): string | null {
 }
 
 export function localWeekNutritionNote(week: WeekStats): string {
-  const daysWithFood = week.days.filter((d) => d.meals.length > 0).length || 1
-  const avg = Math.round(week.totals.kcal / daysWithFood)
-  const p = Math.round(week.totals.protein / daysWithFood)
-  const f = Math.round(week.totals.fat / daysWithFood)
-  const c = Math.round(week.totals.carbs / daysWithFood)
-  const outDays = week.days.filter((d) => d.meals.some((m) => m.eatingOut)).length
-  const parts = [`В среднем ${avg} ккал/день (Б ${p} · Ж ${f} · У ${c}).`]
-  if (week.avgSteps != null && week.avgSteps > 0) {
-    parts.push(`Шаги ≈ ${week.avgSteps.toLocaleString('ru-RU')}/день.`)
-  }
-  if (outDays > 0) parts.push(`Вне дома: ${outDays} дн.`)
-  if (week.weightDelta != null) {
-    const sign = week.weightDelta > 0 ? '+' : ''
-    parts.push(`Вес ${sign}${week.weightDelta} кг.`)
-  }
-  return parts.join(' ')
+  return buildWeekReview(week).text
+}
+
+function isUsableWeekSummary(text: string): boolean {
+  const t = text.trim()
+  if (t.length < 40 || t.length > 900) return false
+  if (!/Хорошо:|Нормально:|Можно подкрутить:/.test(t)) return false
+  if (/углевод\w*\s+преобладают/i.test(t)) return false
+  if (/баланс БЖУ|белков \d/i.test(t)) return false
+  return true
 }
 
 function freezeWeekSummary(weekStart: string, text: string): void {
@@ -76,33 +71,29 @@ export async function getWeekNutritionSummary(week: WeekStats): Promise<string> 
   const task = (async () => {
     let text = localWeekNutritionNote(week)
 
-    if (isDeepseekConfigured() && week.mealSnippets.length > 0) {
+    if (isDeepseekConfigured()) {
       try {
-        const stepsLine =
-          week.avgSteps != null && week.avgSteps > 0
-            ? `Средние шаги: ${week.avgSteps}/день${
-                week.avgSteps >= 8000
-                  ? ' (это высокая активность — НЕ пиши, что шагов мало или активность низкая)'
-                  : week.avgSteps < 4000
-                    ? ' (низковато)'
-                    : ''
-              }`
-            : 'Средние шаги: нет данных (не выдумывай про активность)'
-        const parsed = await deepseekJson<{ summary: string }>(`Краткая сводка питания за неделю для трекера похудения.
-Это итоговый отчёт за закрытую неделю — пиши коротко и по делу.
+        const parsed = await deepseekJson<{ summary: string }>(`Итог недели для трекера похудения. Спокойный коучинг, без стыда.
 
 Неделя: ${week.label}
-Итого ккал: ${Math.round(week.totals.kcal)} из цели ${week.kcalGoal}
-Белки/жиры/углеводы: ${Math.round(week.totals.protein)} / ${Math.round(week.totals.fat)} / ${Math.round(week.totals.carbs)}
-Изменение веса: ${week.weightDelta != null ? `${week.weightDelta} кг` : 'нет данных'}
-${stepsLine}
 
-Приёмы пищи:
-${week.mealSnippets.slice(0, 40).join('\n')}
+Пиши ТОЛЬКО в формате (пропусти секцию, если нечего сказать):
+Хорошо: … Нормально: … Можно подкрутить: …
 
-Верни JSON: { "summary": "2–3 коротких предложения на русском: что ели чаще, баланс БЖУ, привычки вне дома; шаги упоминай только по цифре выше, без нравоучений" }`)
+Правила:
+- Не перечисляй меню и напитки. Кофе, чай, молоко — не тема.
+- Не пиши недельные суммы БЖУ и не делай вывод «углеводы преобладают». Углеводы при калориях около цели — норма.
+- Сладкое в бюджете (~300 ккал/день) — часть рациона, не промах и не «съела сладкое — ошиблась».
+- ~5000 шагов — обычная городская неделя, не мало.
+- Подкрутки — что добавить (овощи, белок, прогулка), не голод и не запреты.
+- Опирайся на черновик: можно чуть живее перефразировать, смысл не меняй. 2–4 коротких предложения суммарно.
+
+Факты:
+${weekReviewFacts(week)}
+
+Верни JSON: { "summary": "текст в формате Хорошо/Нормально/Можно подкрутить" }`)
         const summary = String(parsed.summary ?? '').trim()
-        if (summary) text = summary
+        if (isUsableWeekSummary(summary)) text = summary
       } catch {
         // keep local note
       }

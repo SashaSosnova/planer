@@ -215,6 +215,7 @@ export default function App() {
             dailyKcalGoal={dailyKcalGoal}
             maintainKcalGoal={maintainKcalGoal}
             targetWeightKg={settings.targetWeightKg}
+            activity={settings.profile?.activity}
             proteinGoal={proteinGoal}
             profileReady={profileReady}
             cycleLengthDays={cycleLengthDays}
@@ -366,6 +367,8 @@ export default function App() {
             data={data}
             dailyKcalGoal={dailyKcalGoal}
             maintainKcalGoal={maintainKcalGoal}
+            targetWeightKg={settings.targetWeightKg}
+            activity={settings.profile?.activity}
             onBack={closeOverlay}
             onOpenDay={(date) => {
               setFocusDate(date)
@@ -379,6 +382,7 @@ export default function App() {
             onAddMeal={(date) =>
               setOverlay({ type: 'add-meal', date })
             }
+            onOpenProfile={() => setOverlay({ type: 'profile' })}
           />
         )}
 

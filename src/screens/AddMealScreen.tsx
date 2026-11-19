@@ -40,6 +40,9 @@ import type {
 } from '../types'
 import { CloseIcon } from '../components/CloseIcon'
 import { DateField } from '../components/DateField'
+import { MicIcon } from '../components/MicIcon'
+import { startMealDictation, type MealDictation } from '../lib/mealDictation'
+import { resolveSpokenMeal } from '../lib/spokenMeal'
 import { LibraryScreen } from './LibraryScreen'
 
 const PARSE_SOURCE_LABEL: Record<MealParseSource, string> = {
@@ -108,12 +111,21 @@ export function AddMealScreen({
   const [savingFoodIndex, setSavingFoodIndex] = useState<number | null>(null)
   const [estimatingProduct, setEstimatingProduct] = useState(false)
   const [estimatingItemIndex, setEstimatingItemIndex] = useState<number | null>(null)
+  const [listening, setListening] = useState(false)
   const viewRef = useRef(view)
   viewRef.current = view
   const seedAppliedRef = useRef(false)
   const textAreaRef = useRef<HTMLTextAreaElement>(null)
   /** Text that produced the current draft — edit only clears draft when it diverges. */
   const parsedTextRef = useRef<string | null>(null)
+  const dictationRef = useRef<MealDictation | null>(null)
+  const dictationStoppingRef = useRef(false)
+  const dictationArmingRef = useRef(false)
+  /** True only while the mic button is physically held. */
+  const dictationHeldRef = useRef(false)
+  const releaseHoldRef = useRef<(() => void) | null>(null)
+  /** Field text before the current dictation, kept while live transcript replaces the box. */
+  const dictationBaseRef = useRef('')
 
   const applyRepeatMeal = (meal: Meal) => {
     const next = cloneMealAsDraft(meal)
@@ -212,16 +224,149 @@ export function AddMealScreen({
     setMealType((prev) => (prev === next ? prev : next))
   }, [date, dayMealTypesKey, text, mealTypeTouched])
 
-  const runParse = async () => {
+  useEffect(() => {
+    return () => {
+      const release = releaseHoldRef.current
+      releaseHoldRef.current = null
+      if (release) {
+        window.removeEventListener('pointerup', release)
+        window.removeEventListener('pointercancel', release)
+      }
+      const session = dictationRef.current
+      dictationRef.current = null
+      void session?.stop().catch(() => undefined)
+    }
+  }, [])
+
+  const finishDictation = async (session: MealDictation) => {
+    setBusy(true)
+    setError(null)
+    let heard = ''
+    try {
+      heard = await session.stop()
+    } catch (err) {
+      setBusy(false)
+      setError(err instanceof Error ? err.message : 'Не удалось распознать речь')
+      return
+    }
+    const base = dictationBaseRef.current
+    const trimmed = heard.trim()
+    if (!trimmed) {
+      setText(base)
+      setBusy(false)
+      setError('Ничего не распознано. Скажите продукты и граммы.')
+      return
+    }
+    const resolved = resolveSpokenMeal(trimmed)
+    if (!resolved.text.trim()) {
+      setText([base, trimmed].filter(Boolean).join('\n'))
+      setBusy(false)
+      setError('Не получилось разобрать продукты. Например: молоко 100 грамм, хлеб 20 грамм.')
+      return
+    }
+    const next = [base, resolved.text].filter(Boolean).join('\n')
+    const typeOverride = resolved.mealType && !mealTypeTouched ? resolved.mealType : undefined
+    await runParse(next, typeOverride)
+  }
+
+  const endDictation = async () => {
+    const active = dictationRef.current
+    if (!active || dictationStoppingRef.current) return
+    dictationStoppingRef.current = true
+    dictationRef.current = null
+    setListening(false)
+    try {
+      await finishDictation(active)
+    } finally {
+      dictationStoppingRef.current = false
+    }
+  }
+
+  const armDictation = async () => {
+    if (dictationArmingRef.current || dictationRef.current) return
+    dictationArmingRef.current = true
+    try {
+      const session = await startMealDictation(
+        (partial) => {
+          const live = [dictationBaseRef.current, partial].filter(Boolean).join('\n')
+          setText(live)
+          setDraft(null)
+          setInfo(null)
+          parsedTextRef.current = null
+        },
+        () => {
+          void endDictation()
+        },
+      )
+      if (dictationStoppingRef.current) {
+        void session.stop().catch(() => undefined)
+        return
+      }
+      dictationRef.current = session
+      if (!dictationHeldRef.current) await endDictation()
+    } catch (err) {
+      dictationHeldRef.current = false
+      setListening(false)
+      setError(err instanceof Error ? err.message : 'Не удалось включить микрофон')
+    } finally {
+      dictationArmingRef.current = false
+    }
+  }
+
+  const endHold = () => {
+    if (!dictationHeldRef.current) return
+    dictationHeldRef.current = false
+    const release = releaseHoldRef.current
+    releaseHoldRef.current = null
+    if (release) {
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('pointercancel', release)
+    }
+    setListening(false)
+    if (dictationRef.current) void endDictation()
+  }
+
+  const beginHold = (target: HTMLButtonElement, pointerId?: number) => {
+    if (busy || dictationHeldRef.current || dictationArmingRef.current || dictationRef.current) return
+    dictationHeldRef.current = true
+    setListening(true)
+    setError(null)
+    setInfo(null)
+    dictationBaseRef.current = text.trim()
+    if (pointerId != null) {
+      try {
+        target.setPointerCapture(pointerId)
+      } catch {
+        /* the window listener still ends the hold */
+      }
+    }
+    const release = () => endHold()
+    releaseHoldRef.current = release
+    window.addEventListener('pointerup', release)
+    window.addEventListener('pointercancel', release)
+    void armDictation()
+  }
+
+  const runParse = async (sourceText?: string, mealTypeOverride?: MealType) => {
+    const raw = (sourceText ?? text).trim()
+    if (!raw) {
+      setError('Введите, что вы съели')
+      return
+    }
     setBusy(true)
     setError(null)
     setInfo(null)
-    const selectedType = mealType
-    const typeTouched = mealTypeTouched
+    const selectedType = mealTypeOverride ?? mealType
+    const typeTouched = mealTypeOverride ? true : mealTypeTouched
+    if (mealTypeOverride) {
+      setMealType(mealTypeOverride)
+      setMealTypeTouched(true)
+    }
+    if (sourceText != null) setText(sourceText)
     try {
-      const result = await parseMeal(text, foodsRef, selectedType, eatingOut)
+      const result = await parseMeal(raw, foodsRef, selectedType, eatingOut)
       const nextType = resolveDraftMealType({
-        text,
+        text: raw,
         userMealType: selectedType,
         mealTypeTouched: typeTouched,
         parsedMealType: result.mealType,
@@ -231,9 +376,9 @@ export function AddMealScreen({
       setEatingOut(result.eatingOut)
       setMealType(nextType)
       setMealTypeTouched(true)
-      const cleaned = extractMealTypeFromText(text).cleaned
-      const nextText = cleaned && cleaned !== text.trim() ? cleaned : text
-      if (nextText !== text) setText(nextText)
+      const cleaned = extractMealTypeFromText(raw).cleaned
+      const nextText = cleaned && cleaned !== raw ? cleaned : raw
+      if (nextText !== raw) setText(nextText)
       parsedTextRef.current = nextText
       if (result.notes && shouldShowParseNotes(result.parseSource)) setInfo(result.notes)
     } catch (err) {
@@ -459,17 +604,47 @@ export function AddMealScreen({
           }}
           placeholder={'Творог 200 г\nЯблоко 100 г\n...'}
           aria-label="Что было съедено и сколько граммов"
+          readOnly={listening}
         />
       </label>
 
-      <button
-        type="button"
-        className="primary-btn"
-        disabled={busy || !text.trim()}
-        onClick={() => void runParse()}
-      >
-        {busy ? 'Считаю…' : 'Рассчитать'}
-      </button>
+      <div className="btn-row add-parse-actions">
+        <button
+          type="button"
+          className="primary-btn"
+          disabled={busy || listening || !text.trim()}
+          onClick={() => void runParse()}
+        >
+          {busy ? 'Считаю…' : 'Рассчитать'}
+        </button>
+        <button
+          type="button"
+          className={`dictation-btn${listening ? ' listening' : ''}`}
+          disabled={busy}
+          aria-pressed={listening}
+          aria-label="Надиктовать, удерживайте"
+          title="Удерживайте и говорите"
+          onPointerDown={(e) => {
+            if (e.button !== 0) return
+            e.preventDefault()
+            beginHold(e.currentTarget, e.pointerId)
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+          onKeyDown={(e) => {
+            if (e.repeat || (e.key !== ' ' && e.key !== 'Enter')) return
+            e.preventDefault()
+            beginHold(e.currentTarget)
+          }}
+          onKeyUp={(e) => {
+            if (e.key !== ' ' && e.key !== 'Enter') return
+            e.preventDefault()
+            endHold()
+          }}
+        >
+          <MicIcon size={22} />
+        </button>
+      </div>
+      {listening && <p className="muted small dictation-hint">Говорите…</p>}
 
       {!draft && recentMeals.length > 0 && (
         <div className="recent-meals">

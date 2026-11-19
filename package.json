@@ -20,6 +20,7 @@
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.4.2",
     "@capgo/capacitor-health": "^8.9.3",
+    "@capgo/capacitor-speech-recognition": "^8.6.0",
     "firebase": "^12.16.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

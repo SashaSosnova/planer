@@ -2557,9 +2557,9 @@
 }
 
 .dictation-btn {
-  width: 76px;
-  height: 76px;
-  flex: 0 0 76px;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
   border: 1px solid color-mix(in srgb, var(--warm) 40%, var(--line));
   border-radius: 50%;
   background: var(--warm-soft);
@@ -2575,8 +2575,8 @@
 
 .dictation-btn svg {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 22px;
+  height: 22px;
 }
 
 .dictation-btn:disabled {

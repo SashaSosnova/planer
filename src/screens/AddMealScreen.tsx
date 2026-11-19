@@ -526,7 +526,7 @@ export function AddMealScreen({
           title="Скажите продукты и граммы"
           onClick={() => void dictate()}
         >
-          <MicIcon size={32} />
+          <MicIcon size={22} />
         </button>
       </div>
       {listening && <p className="muted small dictation-hint">Говорите в открывшемся окне</p>}

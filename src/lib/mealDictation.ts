@@ -6,8 +6,6 @@ export type MealDictation = {
   stop: () => Promise<string>
 }
 
-const LISTEN_MS = 90_000
-
 /**
  * Start Russian dictation.
  * On Android this uses the system recognizer and keeps listening through pauses.
@@ -43,25 +41,23 @@ async function startNative(
   let live = false
   let starting = false
   let fatal: Error | null = null
+  let sawStopped = false
+  let stopWait: (() => void) | null = null
   const handles: PluginListenerHandle[] = []
 
   const emit = () => onPartial(joinTranscript(sealed, tail))
-
-  const sealTail = () => {
-    sealed = joinTranscript(sealed, tail)
-    tail = ''
-  }
 
   const begin = async () => {
     if (!want || starting || live) return
     starting = true
     try {
+      await SpeechRecognition.setPTTState({ held: true, mute: true })
       await SpeechRecognition.start({
         language: 'ru-RU',
         maxResults: 1,
         partialResults: true,
         popup: false,
-        keepListeningMs: LISTEN_MS,
+        continuousPTT: true,
         muteRecognizerBeep: true,
       })
       live = true
@@ -95,14 +91,11 @@ async function startNative(
         return
       }
       live = false
-      if (!want || event.reason === 'userStop' || event.reason === 'forceStop' || fatal) return
-      // Session ended on a pause (Android 12 and below, or the keep-listening window).
-      // The recognizer is already recreated by the time this event arrives.
-      sealTail()
-      emit()
-      void begin().catch((err: unknown) => {
-        fail(err instanceof Error ? err : new Error('Не удалось распознать речь.'))
-      })
+      if (!want) {
+        sawStopped = true
+        stopWait?.()
+        return
+      }
     }),
   )
   handles.push(
@@ -123,19 +116,37 @@ async function startNative(
   return {
     async stop() {
       want = false
+      const finished = new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 2500)
+        stopWait = () => {
+          clearTimeout(timer)
+          resolve()
+        }
+        if (sawStopped) {
+          clearTimeout(timer)
+          resolve()
+        }
+      })
+      let snapshot = ''
+      try {
+        await SpeechRecognition.setPTTState({ held: false })
+      } catch {
+        /* already idle */
+      }
       try {
         await SpeechRecognition.stop()
       } catch {
         /* session already ended */
       }
-      let extra = ''
       try {
         const last = await SpeechRecognition.getLastPartialResult()
-        extra = last.text || last.matches?.[0] || ''
+        snapshot = last.text?.trim() ?? ''
       } catch {
-        /* no cached partial */
+        /* cache already cleared */
       }
-      const transcript = joinTranscript(sealed, tail, extra)
+      await finished
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      const transcript = joinTranscript(sealed, tail, snapshot)
       await cleanup()
       if (!transcript && fatal) throw fatal
       return transcript
@@ -145,7 +156,12 @@ async function startNative(
 
 function partialText(event: SpeechRecognitionPartialResultEvent): string {
   if (event.accumulatedText?.trim()) return event.accumulatedText.trim()
-  return [event.accumulated, event.matches?.[0]].filter(Boolean).join(' ').trim()
+  const accumulated = event.accumulated?.trim() ?? ''
+  const match = event.matches?.[0]?.trim() ?? ''
+  if (!accumulated) return match
+  if (!match || accumulated.endsWith(match)) return accumulated
+  if (match.endsWith(accumulated)) return match
+  return `${accumulated} ${match}`.trim()
 }
 
 function fatalSpeechMessage(code: string): string | null {
@@ -219,13 +235,23 @@ function startWeb(
   return Promise.resolve({
     stop() {
       stopped = true
-      try {
-        rec.stop()
-      } catch {
-        /* already stopped */
-      }
-      if (!transcript && fatal) return Promise.reject(fatal)
-      return Promise.resolve(transcript.trim())
+      return new Promise((resolve, reject) => {
+        let settled = false
+        const finish = () => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          if (!transcript && fatal) reject(fatal)
+          else resolve(transcript.trim())
+        }
+        const timer = setTimeout(finish, 1200)
+        rec.onend = finish
+        try {
+          rec.stop()
+        } catch {
+          finish()
+        }
+      })
     },
   })
 }

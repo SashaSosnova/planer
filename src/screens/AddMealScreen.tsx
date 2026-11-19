@@ -226,19 +226,15 @@ export function AddMealScreen({
 
   useEffect(() => {
     return () => {
-      const release = releaseHoldRef.current
+      releaseHoldRef.current?.()
       releaseHoldRef.current = null
-      if (release) {
-        window.removeEventListener('pointerup', release)
-        window.removeEventListener('pointercancel', release)
-      }
       const session = dictationRef.current
       dictationRef.current = null
       void session?.stop().catch(() => undefined)
     }
   }, [])
 
-  const finishDictation = async (session: MealDictation) => {
+  const finishDictation = async (session: MealDictation, emptyIsHint = false) => {
     setBusy(true)
     setError(null)
     let heard = ''
@@ -254,7 +250,8 @@ export function AddMealScreen({
     if (!trimmed) {
       setText(base)
       setBusy(false)
-      setError('Ничего не распознано. Скажите продукты и граммы.')
+      if (emptyIsHint) setInfo('Удерживайте микрофон и говорите.')
+      else setError('Ничего не распознано. Удерживайте микрофон и проговорите продукты с граммами.')
       return
     }
     const resolved = resolveSpokenMeal(trimmed)
@@ -269,14 +266,14 @@ export function AddMealScreen({
     await runParse(next, typeOverride)
   }
 
-  const endDictation = async () => {
+  const endDictation = async (emptyIsHint = false) => {
     const active = dictationRef.current
     if (!active || dictationStoppingRef.current) return
     dictationStoppingRef.current = true
     dictationRef.current = null
     setListening(false)
     try {
-      await finishDictation(active)
+      await finishDictation(active, emptyIsHint)
     } finally {
       dictationStoppingRef.current = false
     }
@@ -285,9 +282,11 @@ export function AddMealScreen({
   const armDictation = async () => {
     if (dictationArmingRef.current || dictationRef.current) return
     dictationArmingRef.current = true
+    let heardPartial = false
     try {
       const session = await startMealDictation(
         (partial) => {
+          if (partial.trim()) heardPartial = true
           const live = [dictationBaseRef.current, partial].filter(Boolean).join('\n')
           setText(live)
           setDraft(null)
@@ -303,7 +302,7 @@ export function AddMealScreen({
         return
       }
       dictationRef.current = session
-      if (!dictationHeldRef.current) await endDictation()
+      if (!dictationHeldRef.current) await endDictation(!heardPartial)
     } catch (err) {
       dictationHeldRef.current = false
       setListening(false)
@@ -314,20 +313,20 @@ export function AddMealScreen({
   }
 
   const endHold = () => {
-    if (!dictationHeldRef.current) return
+    if (!dictationHeldRef.current && !dictationRef.current && !dictationArmingRef.current) return
     dictationHeldRef.current = false
-    const release = releaseHoldRef.current
+    releaseHoldRef.current?.()
     releaseHoldRef.current = null
-    if (release) {
-      window.removeEventListener('pointerup', release)
-      window.removeEventListener('pointercancel', release)
-    }
     setListening(false)
     if (dictationRef.current) void endDictation()
   }
 
   const beginHold = (target: HTMLButtonElement, pointerId?: number) => {
-    if (busy || dictationHeldRef.current || dictationArmingRef.current || dictationRef.current) return
+    if (busy) return
+    if (dictationHeldRef.current || dictationArmingRef.current || dictationRef.current) {
+      endHold()
+      return
+    }
     dictationHeldRef.current = true
     setListening(true)
     setError(null)
@@ -340,10 +339,22 @@ export function AddMealScreen({
         /* the window listener still ends the hold */
       }
     }
-    const release = () => endHold()
-    releaseHoldRef.current = release
+    const release = (event: Event) => {
+      if (pointerId != null && event instanceof PointerEvent && event.pointerId !== pointerId) return
+      endHold()
+    }
+    const blockScroll = (event: TouchEvent) => {
+      if (dictationHeldRef.current) event.preventDefault()
+    }
+    const cleanup = () => {
+      window.removeEventListener('pointerup', release)
+      window.removeEventListener('touchend', release)
+      window.removeEventListener('touchmove', blockScroll)
+    }
+    releaseHoldRef.current = cleanup
     window.addEventListener('pointerup', release)
-    window.addEventListener('pointercancel', release)
+    window.addEventListener('touchend', release)
+    window.addEventListener('touchmove', blockScroll, { passive: false })
     void armDictation()
   }
 
@@ -641,10 +652,19 @@ export function AddMealScreen({
             endHold()
           }}
         >
-          <MicIcon size={22} />
+          <MicIcon size={32} />
         </button>
       </div>
       {listening && <p className="muted small dictation-hint">Говорите…</p>}
+      {error && (
+        <div className="form-msg-block">
+          <p className="form-msg error">{error}</p>
+          {!isDeepseekConfigured() && (
+            <p className="muted small">Умный разбор выключен — используется локальный парсер.</p>
+          )}
+        </div>
+      )}
+      {info && <p className="form-msg">{info}</p>}
 
       {!draft && recentMeals.length > 0 && (
         <div className="recent-meals">
@@ -677,16 +697,6 @@ export function AddMealScreen({
           )}
         </div>
       )}
-
-      {error && (
-        <div className="form-msg-block">
-          <p className="form-msg error">{error}</p>
-          {!isDeepseekConfigured() && (
-            <p className="muted small">Умный разбор выключен — используется локальный парсер.</p>
-          )}
-        </div>
-      )}
-      {info && <p className="form-msg">{info}</p>}
 
       {draft && (
         <div className="panel confirm-panel">

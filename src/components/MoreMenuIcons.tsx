@@ -156,34 +156,6 @@ export function LibraryMenuIcon({ size = 24 }: IconProps) {
   )
 }
 
-/** Синхронизация — мягкие стрелки */
-export function SyncMenuIcon({ size = 24 }: IconProps) {
-  return (
-    <svg {...svgProps(size)}>
-      <circle cx="12" cy="12" r="8" fill="currentColor" opacity="0.14" />
-      <path
-        d="M5.2 12a6.8 6.8 0 0 1 11.2-5.2"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M18.8 12a6.8 6.8 0 0 1-11.2 5.2"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-      />
-      <path
-        d="M15.2 4.4v3.2h3.2M8.8 19.6v-3.2H5.6"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
 /** Уход — бутылочка с уходовым средством */
 export function CareMenuIcon({ size = 24 }: IconProps) {
   return (

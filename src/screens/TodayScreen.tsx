@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CalorieRing } from '../components/CalorieRing'
 import { DayScale } from '../components/DayScale'
 import { PromptDialog } from '../components/PromptDialog'
-import { cyclePhaseLabel, getCycleInfo } from '../lib/cycle'
 import { addDaysIso, formatRuDate, todayIso } from '../lib/date'
 import { statsForDate } from '../lib/dayStats'
 import { isHealthStepsSupported } from '../lib/healthSteps'
@@ -10,18 +9,12 @@ import { MEAL_TYPE_LABELS, mealPreviewText } from '../lib/labels'
 import {
   formatMealClock,
   groupDayMealsForList,
-  truncateMealPreview,
 } from '../lib/mealDraft'
-import { formatKg } from '../lib/nutrition'
-import { VEG_GOAL_G } from '../lib/macroGoals'
-import { calcSweetBudgetKcal } from '../lib/sweets'
-import { NavGlyph } from '../components/NavGlyph'
-import { mgDoseKeyForMealType, medTakenAt } from '../lib/medRoutine'
+import { formatKg, round2 } from '../lib/nutrition'
 import { PlusIcon } from '../components/PlusIcon'
-import { buildWeightProgress } from '../lib/weightProgress'
 import { buildFourWeekAnalysis } from '../lib/fourWeekAnalysis'
 import type { ActivityLevel } from '../lib/calorieGoal'
-import type { AppData, Meal, MealType } from '../types'
+import type { AppData, MealType } from '../types'
 
 type PromptKind = 'weight' | 'steps' | null
 
@@ -32,20 +25,17 @@ type Props = {
   targetWeightKg?: number | null
   activity?: ActivityLevel | null
   proteinGoal: number | null
+  vegGoalG: number
+  sweetGoalKcal: number
   profileReady: boolean
-  cycleLengthDays: number
-  periodLengthDays: number
   onAddMeal: (opts?: { text?: string; mealType?: MealType; date?: string }) => void
   onOpenMeal: (mealId: string) => void
   onOpenProfile: () => void
-  onOpenCycle: () => void
   onOpenWeightHistory: () => void
   onOpenStepsHistory: () => void
-  onOpenDiary: () => void
   onOpenHistory: () => void
   onOpenMeasures: () => void
   onOpenLibrary: () => void
-  onOpenCare: () => void
   /** Jump to this date when set (e.g. from History); clear via onFocusDateConsumed. */
   focusDate?: string | null
   onFocusDateConsumed?: () => void
@@ -61,15 +51,19 @@ function formatMealBju(totals: { protein: number; fat: number; carbs: number }):
   return `Б ${Math.round(totals.protein)} · Ж ${Math.round(totals.fat)} · У ${Math.round(totals.carbs)}`
 }
 
-function mealMedTags(
-  meal: Meal,
-  medDay: AppData['medDays'][number] | undefined,
-): { hasMg: boolean; hasFe: boolean } {
-  const mgDose = mgDoseKeyForMealType(meal.mealType)
-  return {
-    hasMg: mgDose ? Boolean(medTakenAt(medDay, mgDose)) : false,
-    hasFe: meal.mealType === 'breakfast' && Boolean(medTakenAt(medDay, 'iron')),
+function deltaSincePreviousWeighIn(
+  weights: { date: string; kg: number }[],
+  date: string,
+): number | null {
+  const current = weights.find((w) => w.date === date)
+  if (!current) return null
+  let previous: { date: string; kg: number } | null = null
+  for (const entry of weights) {
+    if (entry.date >= date) continue
+    if (!previous || entry.date > previous.date) previous = entry
   }
+  if (!previous) return null
+  return round2(current.kg - previous.kg)
 }
 
 function num(v: string): number | undefined {
@@ -84,20 +78,17 @@ export function TodayScreen({
   targetWeightKg,
   activity,
   proteinGoal,
+  vegGoalG,
+  sweetGoalKcal,
   profileReady,
-  cycleLengthDays,
-  periodLengthDays,
   onAddMeal,
   onOpenMeal,
   onOpenProfile,
-  onOpenCycle,
   onOpenWeightHistory,
   onOpenStepsHistory,
-  onOpenDiary,
   onOpenHistory,
   onOpenMeasures,
   onOpenLibrary,
-  onOpenCare,
   focusDate,
   onFocusDateConsumed,
   registerBackHandler,
@@ -110,8 +101,11 @@ export function TodayScreen({
   const isToday = date === today
   const weight = data.weights.find((w) => w.date === date)
   const steps = data.steps.find((s) => s.date === date)
-  const medDay = (data.medDays ?? []).find((m) => m.date === date)
 
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuOpenRef = useRef(false)
+  menuOpenRef.current = menuOpen
+  const menuRef = useRef<HTMLDivElement>(null)
   const [prompt, setPrompt] = useState<PromptKind>(null)
   const [busy, setBusy] = useState(false)
   const [promptError, setPromptError] = useState<string | null>(null)
@@ -128,8 +122,28 @@ export function TodayScreen({
   }, [focusDate, onFocusDateConsumed])
 
   useEffect(() => {
+    if (!menuOpen) return
+    const onPointer = (event: PointerEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setMenuOpen(false)
+    }
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', onPointer)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', onPointer)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [menuOpen])
+
+  useEffect(() => {
     if (!registerBackHandler || !backEnabled) return
     return registerBackHandler(() => {
+      if (menuOpenRef.current) {
+        setMenuOpen(false)
+        return true
+      }
       if (promptRef.current) {
         setPrompt(null)
         setPromptError(null)
@@ -156,32 +170,7 @@ export function TodayScreen({
     () => groupDayMealsForList(dayStats.meals),
     [dayStats.meals],
   )
-  const sweetBudget = useMemo(
-    () => calcSweetBudgetKcal(dailyKcalGoal),
-    [dailyKcalGoal],
-  )
-
-  const weightProgress = useMemo(
-    () =>
-      buildWeightProgress({
-        data,
-        today: date,
-        maintainKcal: maintainKcalGoal,
-        dailyKcalGoal,
-        targetKg: targetWeightKg,
-        cycleLengthDays,
-        periodLengthDays,
-      }),
-    [
-      data,
-      date,
-      maintainKcalGoal,
-      dailyKcalGoal,
-      targetWeightKg,
-      cycleLengthDays,
-      periodLengthDays,
-    ],
-  )
+  const weightDelta = deltaSincePreviousWeighIn(data.weights, date)
 
   const fourWeek = useMemo(
     () =>
@@ -194,11 +183,6 @@ export function TodayScreen({
         today: date,
       }),
     [data, dailyKcalGoal, maintainKcalGoal, targetWeightKg, activity, date],
-  )
-
-  const cycle = useMemo(
-    () => getCycleInfo(data.periodStarts, date, cycleLengthDays, periodLengthDays),
-    [data.periodStarts, date, cycleLengthDays, periodLengthDays],
   )
 
   const openWeight = () => {
@@ -260,48 +244,44 @@ export function TodayScreen({
   return (
     <section className="screen today-screen">
       <header className="screen-header today-header">
-        <div className="today-menu-row" role="toolbar" aria-label="Меню">
-          <button type="button" className="today-nav-item" onClick={onOpenDiary}>
-            <span className="today-nav-icon">
-              <NavGlyph name="diary" label="Дневник" />
-            </span>
-            <span className="today-nav-label">Дневник</span>
-          </button>
-          <button type="button" className="today-nav-item" onClick={onOpenHistory}>
-            <span className="today-nav-icon">
-              <NavGlyph name="history" label="История" />
-            </span>
-            <span className="today-nav-label">История</span>
-          </button>
-          <button type="button" className="today-nav-item" onClick={onOpenCare}>
-            <span className="today-nav-icon">
-              <NavGlyph name="care" label="Уход" />
-            </span>
-            <span className="today-nav-label">Уход</span>
-          </button>
-          <button type="button" className="today-nav-item" onClick={onOpenMeasures}>
-            <span className="today-nav-icon">
-              <NavGlyph name="measures" label="Обмеры" />
-            </span>
-            <span className="today-nav-label">Обмеры</span>
-          </button>
-          <button type="button" className="today-nav-item" onClick={onOpenLibrary}>
-            <span className="today-nav-icon">
-              <NavGlyph name="library" label="Каталог" />
-            </span>
-            <span className="today-nav-label">Каталог</span>
-          </button>
+        <div className="today-menu-row">
+          <div className="today-menu-cluster" ref={menuRef}>
           <button
             type="button"
-            className={`today-nav-item${profileReady ? '' : ' warn'}`}
-            onClick={onOpenProfile}
-            aria-label="Профиль и норма калорий"
+            className="today-tool-btn"
+            aria-label="Меню"
+            aria-expanded={menuOpen}
+            aria-haspopup="menu"
+            onClick={() => setMenuOpen((open) => !open)}
           >
-            <span className="today-nav-icon">
-              <NavGlyph name="profile" label="Профиль" />
-            </span>
-            <span className="today-nav-label">Профиль</span>
+            <svg viewBox="0 0 24 24" aria-hidden>
+              <circle cx="12" cy="5" r="1.7" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.7" fill="currentColor" />
+              <circle cx="12" cy="19" r="1.7" fill="currentColor" />
+            </svg>
           </button>
+          {menuOpen && (
+            <div className="today-text-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onOpenHistory() }}>
+                История
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onOpenMeasures() }}>
+                Обмеры
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); onOpenLibrary() }}>
+                Каталог
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={profileReady ? undefined : 'warn'}
+                onClick={() => { setMenuOpen(false); onOpenProfile() }}
+              >
+                Профиль
+              </button>
+            </div>
+          )}
+          </div>
         </div>
         <div className="today-date-nav">
           <button
@@ -342,38 +322,9 @@ export function TodayScreen({
         </button>
       )}
 
-      {(weightProgress || (cycle.phase !== 'unknown' && cycle.dayInCycle != null)) && (
-        <div className="progress-card progress-card--compact">
-          <div className="progress-card-top">
-            {weightProgress ? (
-              <strong className={`progress-card-delta ${weightProgress.tone}`}>
-                {weightProgress.hero}
-              </strong>
-            ) : (
-              <span className="progress-card-label">Цикл</span>
-            )}
-            {cycle.phase !== 'unknown' && cycle.dayInCycle != null && (
-              <button
-                type="button"
-                className="progress-card-cycle"
-                onClick={onOpenCycle}
-              >
-                день {cycle.dayInCycle} · {cyclePhaseLabel(cycle.phase)}
-              </button>
-            )}
-          </div>
-          {(weightProgress?.note || cycle.weightNote) && (
-            <p className="muted small">
-              {[cycle.weightNote, weightProgress?.note].filter(Boolean).join(' · ')}
-            </p>
-          )}
-        </div>
-      )}
-
       <div className="today-hero">
         <CalorieRing
           eaten={dayStats.totals.kcal}
-          planned={dayStats.plannedTotals.kcal}
           goal={dailyKcalGoal}
           maintainGoal={maintainKcalGoal}
           size="md"
@@ -383,6 +334,19 @@ export function TodayScreen({
             <button type="button" className="stat-chip compact" onClick={openWeight}>
               <span>Вес</span>
               <strong>{weight ? `${formatKg(weight.kg)} кг` : '—'}</strong>
+              {weightDelta != null && (
+                <span
+                  className={`stat-chip-delta ${
+                    weightDelta > 0.005 ? 'up' : weightDelta < -0.005 ? 'down' : 'flat'
+                  }`}
+                >
+                  {weightDelta > 0.005
+                    ? `+${formatKg(weightDelta)}`
+                    : weightDelta < -0.005
+                      ? `−${formatKg(Math.abs(weightDelta))}`
+                      : '0'}
+                </span>
+              )}
             </button>
             <button type="button" className="stat-chip compact" onClick={openSteps}>
               <span>Шаги</span>
@@ -406,14 +370,14 @@ export function TodayScreen({
           <DayScale
             label="Овощи"
             current={dayStats.vegGrams}
-            goal={VEG_GOAL_G}
+            goal={vegGoalG}
             unit="г"
             mode="toward"
           />
           <DayScale
             label="Сладкое"
             current={dayStats.sweetKcal}
-            goal={sweetBudget}
+            goal={sweetGoalKcal}
             unit="ккал"
             mode="budget"
           />
@@ -429,22 +393,13 @@ export function TodayScreen({
                   group.meals.length > 1 ? 'Перекусы' : MEAL_TYPE_LABELS.snack
                 return (
                   <li key="snacks">
-                    <div className={`meal-card meal-snack-card${group.meals.every((m) => m.planned) ? ' meal-card-planned' : ''}`}>
+                    <div className="meal-card meal-snack-card">
                       <div className="meal-card-top">
                         <strong>
                           {title}
-                          {group.eatingOut ? ' · вне дома' : ''}
-                          {group.meals.some((m) => m.planned) && group.meals.every((m) => m.planned)
-                            ? (
-                                <>
-                                  {' · '}
-                                  <span className="meal-plan-tag">План</span>
-                                </>
-                              )
-                            : ''}
                         </strong>
                         <span>
-                          {group.isApproximate || group.eatingOut ? '≈ ' : ''}
+                          {group.isApproximate ? '≈ ' : ''}
                           {Math.round(group.totals.kcal)} ккал
                         </span>
                       </div>
@@ -459,14 +414,7 @@ export function TodayScreen({
                                 onClick={() => onOpenMeal(meal.id)}
                               >
                                 <span className="meal-snack-entry-body">
-                                  {truncateMealPreview(mealPreviewText(meal)) || '—'}
-                                  {meal.planned ? (
-                                    <>
-                                      {' · '}
-                                      <span className="meal-plan-tag">План</span>
-                                    </>
-                                  ) : null}
-                                  {meal.eatingOut ? ' · вне дома' : ''}
+                                  {mealPreviewText(meal) || '—'}
                                   {meal.isApproximate ? ' ≈' : ''}
                                 </span>
                                 {time ? (
@@ -486,31 +434,17 @@ export function TodayScreen({
               }
 
               const meal = group.meal
-              const { hasMg, hasFe } = mealMedTags(meal, medDay)
               const time = formatMealClock(meal.createdAt)
               return (
                 <li key={meal.id}>
                   <button
                     type="button"
-                    className={`meal-card meal-card-btn${meal.planned ? ' meal-card-planned' : ''}`}
+                    className="meal-card meal-card-btn"
                     onClick={() => onOpenMeal(meal.id)}
                   >
                     <div className="meal-card-top">
                       <strong>
                         {MEAL_TYPE_LABELS[meal.mealType]}
-                        {meal.planned ? (
-                          <>
-                            {' · '}
-                            <span className="meal-plan-tag">План</span>
-                          </>
-                        ) : null}
-                        {meal.eatingOut ? ' · вне дома' : ''}
-                        {hasMg || hasFe ? (
-                          <span className="meal-med-tags">
-                            {hasMg ? ' · Mg' : ''}
-                            {hasFe ? ' · Fe' : ''}
-                          </span>
-                        ) : null}
                       </strong>
                       <span>
                         {meal.isApproximate ? '≈ ' : ''}
@@ -518,7 +452,7 @@ export function TodayScreen({
                       </span>
                     </div>
                     <p className="meal-preview">
-                      {truncateMealPreview(mealPreviewText(meal))}
+                      {mealPreviewText(meal)}
                     </p>
                     <div className="meal-card-foot">
                       <p className="meal-bju">{formatMealBju(meal.totals)}</p>

@@ -90,7 +90,7 @@ describe('buildFourWeekAnalysis', () => {
     expect(analysis!.deltaKg).toBeLessThan(-2)
     expect(analysis!.actions.some((a) => a.id === 'keep-goal')).toBe(true)
     expect(analysis!.actions.some((a) => a.id === 'daily-noise')).toBe(true)
-    expect(analysis!.actions.some((a) => a.id === 'eta')).toBe(true)
+    expect(analysis!.actions.some((a) => a.id === 'eta')).toBe(false)
   })
 
   it('asks to raise sedentary activity when steps are high', () => {
@@ -137,7 +137,7 @@ describe('buildFourWeekAnalysis', () => {
     expect(analysis?.actions.some((a) => a.id === 'incomplete')).toBe(true)
   })
 
-  it('ignores planned meals', () => {
+  it('counts meals that were stored as planned', () => {
     const start = '2026-07-28'
     const meals: Meal[] = []
     const weights: WeightEntry[] = []
@@ -154,6 +154,6 @@ describe('buildFourWeekAnalysis', () => {
       today: '2026-08-24',
     })
 
-    expect(analysis?.avgKcal).toBe(1300)
+    expect(analysis?.avgKcal).toBe(2200)
   })
 })

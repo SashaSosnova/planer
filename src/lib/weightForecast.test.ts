@@ -219,7 +219,6 @@ describe('computeWeightForecast', () => {
         count: 9000,
         createdAt: 1,
       })),
-      periodStarts: [{ id: 'p1', date: '2026-06-05', createdAt: 1 }],
       measurements: [
         { id: 'm1', date: '2026-06-01', waist: 75, createdAt: 1 },
         { id: 'm2', date: '2026-06-22', waist: 73, createdAt: 1 },
@@ -228,8 +227,6 @@ describe('computeWeightForecast', () => {
       maintainKcal: 2000,
       dailyKcalGoal: 1600,
       today: '2026-06-22',
-      cycleLengthDays: 28,
-      periodLengthDays: 5,
     })
     expect(forecast).not.toBeNull()
     expect(forecast!.startKg).toBe(70)

@@ -101,7 +101,7 @@ export function AccountPanel({ user, onImportDiary }: Props) {
       <p className="muted small">
         Сейчас: <strong>{authAccountLabel(user)}</strong>
         {linked
-          ? ' · данные в облаке, можно открыть на другом телефоне'
+          ? ' · каталог общий, дневник и вес — только этого аккаунта'
           : ' · пока только на этом устройстве. Ниже — аккаунт (email и пароль), чтобы не потерять данные'}
       </p>
 

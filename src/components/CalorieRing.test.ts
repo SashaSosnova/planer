@@ -19,10 +19,4 @@ describe('zoneFor', () => {
   it('goes red past goal when maintain equals goal', () => {
     expect(zoneFor(1801, 1800, 1800)).toBe('over')
   })
-
-  it('zones only by eaten, not planned', () => {
-    // Planned would exceed maintain, but zoneFor ignores it.
-    expect(zoneFor(500, 1800, 2000)).toBe('ok')
-    expect(zoneFor(1900, 1800, 2000)).toBe('warn')
-  })
 })

@@ -461,11 +461,6 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
           ← К списку рецептов
         </button>
         <h2 className="subhead">{editId ? 'Изменить блюдо' : 'Новое блюдо'}</h2>
-        {!draft && (
-          <p className="muted small">
-            Ингредиенты с весом до готовки → КБЖУ готового с учётом набухания/ужарки
-          </p>
-        )}
 
         {error && <p className="form-msg error">{error}</p>}
 
@@ -1064,12 +1059,12 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
         {showRecipeText && (
           <>
             <label className="field">
-              <span>Рецепт текстом</span>
               <textarea
                 rows={draft ? 6 : 8}
                 value={recipeText}
                 onChange={(e) => setRecipeText(e.target.value)}
                 placeholder={RECIPE_PLACEHOLDER}
+                aria-label="Рецепт"
               />
             </label>
             <div className="btn-row">
@@ -1121,9 +1116,6 @@ export function RecipesPanel({ data, onSave, onDelete }: Props) {
           <PlusIcon size={20} />
         </button>
       </div>
-      <p className="muted small">
-        Блюда, собранные из ингредиентов — КБЖУ на 100 г готового
-      </p>
       <CatalogSections
         groups={dishGroups}
         expandAll={Boolean(query.trim())}

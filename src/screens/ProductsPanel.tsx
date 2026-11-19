@@ -30,6 +30,88 @@ function formatKbjuLine(m: MacroSet): string {
   return `${m.kcal} ${m.protein} ${m.fat} ${m.carbs}`
 }
 
+function foldBrand(value: string): string {
+  return value.trim().toLowerCase().replace(/ё/g, 'е')
+}
+
+/** Unique brands, newest product first. */
+function knownBrands(foods: FoodItem[]): string[] {
+  const byKey = new Map<string, { label: string; at: number }>()
+  for (const food of foods) {
+    const label = food.brand?.trim()
+    if (!label) continue
+    const key = foldBrand(label)
+    const at = food.updatedAt || 0
+    const current = byKey.get(key)
+    if (!current || at >= current.at) byKey.set(key, { label, at })
+  }
+  return [...byKey.values()]
+    .sort((a, b) => b.at - a.at || a.label.localeCompare(b.label, 'ru'))
+    .map((row) => row.label)
+}
+
+function BrandField({
+  value,
+  brands,
+  onChange,
+  placeholder,
+  disabled,
+}: {
+  value: string
+  brands: string[]
+  onChange: (value: string) => void
+  placeholder: string
+  disabled?: boolean
+}) {
+  const query = foldBrand(value)
+  const matches = query
+    ? brands.filter((brand) => foldBrand(brand).includes(query))
+    : brands.slice(0, 3)
+  const exact = brands.find((brand) => foldBrand(brand) === query)
+  const draft = value.trim()
+  const showNew = Boolean(draft) && !exact
+
+  return (
+    <div className="brand-field">
+      <label className="field">
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          aria-label="Марка"
+          autoComplete="off"
+          disabled={disabled}
+        />
+      </label>
+      {(matches.length > 0 || showNew) && (
+        <div className="brand-pick-row" role="listbox" aria-label="Марки, кафе и магазины">
+          {matches.map((brand) => (
+            <button
+              key={foldBrand(brand)}
+              type="button"
+              className={`place-chip sm${exact && foldBrand(exact) === foldBrand(brand) ? ' active' : ''}`}
+              disabled={disabled}
+              onClick={() => onChange(brand)}
+            >
+              {brand}
+            </button>
+          ))}
+          {showNew && (
+            <button
+              type="button"
+              className="place-chip sm active"
+              disabled={disabled}
+              onClick={() => onChange(draft)}
+            >
+              + {draft}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function parseKbjuLine(line: string): MacroSet | null {
   const parts = line
     .trim()
@@ -84,6 +166,7 @@ type FormFieldsProps = {
   onGallery?: () => void
   onCamera?: () => void
   onText?: () => void
+  brands: string[]
 }
 
 function formatPreview(m: MacroSet): string {
@@ -116,6 +199,7 @@ function ProductFormCard({
   onGallery,
   onCamera,
   onText,
+  brands,
 }: FormFieldsProps) {
   const portionGrams = parsePortionGrams(portion)
   const entered = parseKbjuLine(kbju)
@@ -137,6 +221,40 @@ function ProductFormCard({
       <h2 className="subhead" style={{ marginTop: 0 }}>
         {title}
       </h2>
+      {showPhoto && (onGallery || onCamera || onText) && (
+        <div className="product-import-row">
+          {onGallery && (
+            <button
+              type="button"
+              className="ghost-btn product-import-btn"
+              disabled={busy || photoBusy}
+              onClick={onGallery}
+            >
+              {photoBusy ? 'Читаю…' : 'Галерея'}
+            </button>
+          )}
+          {onCamera && (
+            <button
+              type="button"
+              className="ghost-btn product-import-btn"
+              disabled={busy || photoBusy}
+              onClick={onCamera}
+            >
+              Камера
+            </button>
+          )}
+          {onText && (
+            <button
+              type="button"
+              className="ghost-btn product-import-btn"
+              disabled={busy || photoBusy}
+              onClick={onText}
+            >
+              Текст
+            </button>
+          )}
+        </div>
+      )}
       <label className="field">
         <input
           value={name}
@@ -151,15 +269,13 @@ function ProductFormCard({
         onChange={(id) => onCategory(id as FoodCategoryId)}
         disabled={busy || photoBusy}
       />
-      <label className="field">
-        <input
-          value={brand}
-          onChange={(e) => onBrand(e.target.value)}
-          placeholder="Марка / кафе / магазин (необязательно)"
-          aria-label="Марка"
-          autoComplete="off"
-        />
-      </label>
+      <BrandField
+        value={brand}
+        brands={brands}
+        onChange={onBrand}
+        placeholder="Марка / кафе / магазин (необязательно)"
+        disabled={busy || photoBusy}
+      />
       <div className="meal-type-chips-inline" role="group" aria-label="КБЖУ относительно">
         <button
           type="button"
@@ -237,36 +353,6 @@ function ProductFormCard({
         <button type="button" className="ghost-btn" disabled={busy || photoBusy} onClick={onCancel}>
           Отмена
         </button>
-        {showPhoto && onGallery && (
-          <button
-            type="button"
-            className="ghost-btn"
-            disabled={busy || photoBusy}
-            onClick={onGallery}
-          >
-            {photoBusy ? 'Читаю…' : 'Галерея'}
-          </button>
-        )}
-        {showPhoto && onCamera && (
-          <button
-            type="button"
-            className="ghost-btn"
-            disabled={busy || photoBusy}
-            onClick={onCamera}
-          >
-            Камера
-          </button>
-        )}
-        {showPhoto && onText && (
-          <button
-            type="button"
-            className="ghost-btn"
-            disabled={busy || photoBusy}
-            onClick={onText}
-          >
-            Текст
-          </button>
-        )}
       </div>
       {photoStage && <p className="form-msg muted">{photoStage}</p>}
       {error && <p className="form-msg error">{error}</p>}
@@ -299,6 +385,8 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
   const [reviewRows, setReviewRows] = useState<ReviewRow[] | null>(null)
   const galleryRef = useRef<HTMLInputElement>(null)
   const cameraRef = useRef<HTMLInputElement>(null)
+
+  const brands = useMemo(() => knownBrands(data.foods), [data.foods])
 
   const products = useMemo(
     () =>
@@ -606,6 +694,7 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
     onPortion: setPortion,
     onKbjuBasis: switchKbjuBasis,
     onSubmit: () => void submit(),
+    brands,
   }
 
   return (
@@ -680,15 +769,13 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
           <p className="muted small" style={{ margin: '0 0 8px' }}>
             Вставьте список: название, КБЖУ, при желании марка и порция.
           </p>
-          <label className="field">
-            <input
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              placeholder="Марка / кафе / магазин (для всех, необязательно)"
-              aria-label="Марка"
-              autoComplete="off"
-            />
-          </label>
+          <BrandField
+            value={brand}
+            brands={brands}
+            onChange={setBrand}
+            placeholder="Марка / кафе / магазин (для всех, необязательно)"
+            disabled={photoBusy}
+          />
           <label className="field">
             <span className="visually-hidden">Текст продуктов</span>
             <textarea
@@ -784,18 +871,17 @@ export function ProductsPanel({ data, onSave, onDelete }: Props) {
                     }}
                     disabled={busy || photoBusy}
                   />
-                  <input
+                  <BrandField
                     value={row.brand}
-                    onChange={(e) => {
-                      const next = e.target.value
+                    brands={brands}
+                    onChange={(next) => {
                       setReviewRows(
                         (prev) =>
                           prev?.map((r) => (r.key === row.key ? { ...r, brand: next } : r)) ?? null,
                       )
                     }}
-                    aria-label="Марка"
                     placeholder="Марка / кафе / магазин"
-                    autoComplete="off"
+                    disabled={busy || photoBusy}
                   />
                   <input
                     value={row.kbju}

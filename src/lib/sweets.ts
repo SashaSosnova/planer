@@ -5,7 +5,6 @@ const W = '[а-яa-z0-9]'
 
 /**
  * Treats / sweets — tasty, not a meal.
- * Shared with cycle calorie insights.
  *
  * Matching is name-only (substring / short stems). Prefer stems that cover
  * inflections (бисквит → бисквитный) and avoid bare words that hit savory food.

@@ -40,9 +40,6 @@ import type {
 } from '../types'
 import { CloseIcon } from '../components/CloseIcon'
 import { DateField } from '../components/DateField'
-import { MealMedChecks } from '../components/MealMedChecks'
-import type { MedDoseKey } from '../lib/medRoutine'
-import type { MenuImportResult } from '../lib/menuSync'
 import { LibraryScreen } from './LibraryScreen'
 
 const PARSE_SOURCE_LABEL: Record<MealParseSource, string> = {
@@ -76,19 +73,9 @@ type Props = {
     items: MealItem[]
     isApproximate: boolean
     eatingOut: boolean
-    planned?: boolean
   }) => Promise<unknown>
   onSaveFood: (input: Omit<FoodItem, 'id' | 'updatedAt'> & { id?: string }) => Promise<FoodItem>
   onDeleteFood: (id: string) => Promise<void>
-  onImportMenuRecipes: (
-    raw: unknown,
-    onProgress?: (msg: string) => void,
-  ) => Promise<MenuImportResult>
-  onSaveMedCheck: (input: {
-    date: string
-    dose: MedDoseKey
-    taken: boolean
-  }) => Promise<unknown>
   registerBackHandler?: (fn: () => boolean) => () => void
 }
 
@@ -102,8 +89,6 @@ export function AddMealScreen({
   onSaveMeal,
   onSaveFood,
   onDeleteFood,
-  onImportMenuRecipes,
-  onSaveMedCheck,
   registerBackHandler,
 }: Props) {
   const [view, setView] = useState<View>('meal')
@@ -113,7 +98,6 @@ export function AddMealScreen({
     return initialDate > today ? today : initialDate
   })
   const [eatingOut, setEatingOut] = useState(false)
-  const [planned, setPlanned] = useState(false)
   const [mealType, setMealType] = useState<MealType>(initialMealType ?? 'breakfast')
   const [mealTypeTouched, setMealTypeTouched] = useState(Boolean(initialMealType))
   const [text, setText] = useState(prefillText?.trim() ?? '')
@@ -205,9 +189,14 @@ export function AddMealScreen({
   )
 
   const recentMeals = useMemo(
-    () => listRecentMeals(data.meals, 8, mealType),
+    () => listRecentMeals(data.meals, Number.POSITIVE_INFINITY, mealType),
     [data.meals, mealType],
   )
+  const [recentShown, setRecentShown] = useState(10)
+  useEffect(() => {
+    setRecentShown(10)
+  }, [mealType])
+  const visibleRecent = recentMeals.slice(0, recentShown)
 
   const dayMeals = data.meals
     .filter((m) => m.date === date)
@@ -279,7 +268,6 @@ export function AddMealScreen({
         items: kept,
         isApproximate: mealItemsAreApproximate(draft.eatingOut, kept),
         eatingOut: draft.eatingOut,
-        planned,
       })
       onBack()
     } catch (err) {
@@ -380,7 +368,6 @@ export function AddMealScreen({
         onBack={() => setView('meal')}
         onSaveFood={onSaveFood}
         onDeleteFood={onDeleteFood}
-        onImportMenuRecipes={onImportMenuRecipes}
         backLabel="← К добавлению"
       />
     )
@@ -434,43 +421,6 @@ export function AddMealScreen({
         )}
       </div>
 
-      <div className="meal-type-chips meal-flag-chips" role="group" aria-label="Метки приёма">
-        <button
-          type="button"
-          className={`meal-type-chip${eatingOut ? ' active' : ''}`}
-          aria-pressed={eatingOut}
-          onClick={() => {
-            const next = !eatingOut
-            setEatingOut(next)
-            setDraft((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    eatingOut: next,
-                    isApproximate: mealItemsAreApproximate(next, prev.items),
-                  }
-                : prev,
-            )
-          }}
-        >
-          Вне дома
-        </button>
-        <button
-          type="button"
-          className={`meal-type-chip${planned ? ' active' : ''}`}
-          aria-pressed={planned}
-          onClick={() => setPlanned(!planned)}
-        >
-          План
-        </button>
-        <MealMedChecks
-          date={date}
-          mealType={mealType}
-          entry={(data.medDays ?? []).find((m) => m.date === date)}
-          onToggle={onSaveMedCheck}
-        />
-      </div>
-
       <label className="field">
         <textarea
           ref={textAreaRef}
@@ -507,7 +457,7 @@ export function AddMealScreen({
               }
             })
           }}
-          placeholder="200 г творога, яблоко…"
+          placeholder={'Творог 200 г\nЯблоко 100 г\n...'}
           aria-label="Что было съедено и сколько граммов"
         />
       </label>
@@ -525,7 +475,7 @@ export function AddMealScreen({
         <div className="recent-meals">
           <h2 className="recent-meals-title">Недавние</h2>
           <ul className="recent-meals-list">
-            {recentMeals.map((meal) => (
+            {visibleRecent.map((meal) => (
               <li key={meal.id}>
                 <button
                   type="button"
@@ -536,12 +486,20 @@ export function AddMealScreen({
                   <span className="recent-meal-preview">{mealPreviewText(meal)}</span>
                   <span className="muted small">
                     {Math.round(meal.totals.kcal)} ккал
-                    {meal.eatingOut ? ' · вне дома' : ''}
                   </span>
                 </button>
               </li>
             ))}
           </ul>
+          {recentMeals.length > visibleRecent.length && (
+            <button
+              type="button"
+              className="recent-meals-more"
+              onClick={() => setRecentShown((n) => n + 10)}
+            >
+              Ещё
+            </button>
+          )}
         </div>
       )}
 
@@ -569,8 +527,6 @@ export function AddMealScreen({
               >
                 {PARSE_SOURCE_LABEL[draft.parseSource]}
               </span>
-              {draft.eatingOut && <span className="badge">вне дома</span>}
-              {planned && <span className="badge badge-plan">план</span>}
             </div>
           </div>
           <MacroBar

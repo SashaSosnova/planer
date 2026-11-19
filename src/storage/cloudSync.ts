@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   getDoc,
+  getDocs,
   onSnapshot,
   setDoc,
   deleteDoc,
@@ -95,9 +96,15 @@ export async function ensureAuth(): Promise<User | null> {
 
 /** Top-level collection in kid-sheduler (alongside families / tomSawyerFamilies). */
 export const PLANER_COLLECTION = 'planer'
+/** Shared product and recipe catalog. Personal diaries stay under planer/{uid}. */
+export const CATALOG_COLLECTION = 'planerCatalog'
 
 function planerCol(uid: string, name: string) {
   return collection(getFirebaseDb(), PLANER_COLLECTION, uid, name)
+}
+
+function catalogFoodsCol() {
+  return collection(getFirebaseDb(), CATALOG_COLLECTION, 'shared', 'foods')
 }
 
 export type CloudHandlers = {
@@ -127,7 +134,6 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
     )
   }
 
-  watch<FoodItem>('foods', 'foods', (id, data) => sanitizeFood({ ...data, id }))
   watch<Meal>('meals', 'meals', (id, data) => sanitizeMeal({ ...data, id }))
   watch<WeightEntry>('weights', 'weights', (id, data) => sanitizeWeight({ ...data, id }))
   watch<MeasurementEntry>('measurements', 'measurements', (id, data) =>
@@ -147,6 +153,44 @@ export function subscribeUserData(uid: string, handlers: CloudHandlers): Unsubsc
   return () => {
     for (const u of unsubs) u()
   }
+}
+
+export function subscribeCatalogFoods(
+  handlers: {
+    onFoods: (foods: FoodItem[]) => void
+    onError?: (err: unknown) => void
+  },
+): Unsubscribe {
+  return onSnapshot(
+    catalogFoodsCol(),
+    (snap) => {
+      const foods = snap.docs
+        .map((d) => sanitizeFood({ ...d.data(), id: d.id }))
+        .filter((x): x is FoodItem => x != null)
+      handlers.onFoods(foods)
+    },
+    (err) => handlers.onError?.(err),
+  )
+}
+
+/** One-time read of the legacy per-account catalog (`planer/{uid}/foods`). */
+export async function fetchPersonalFoods(uid: string): Promise<FoodItem[]> {
+  const snap = await getDocs(planerCol(uid, 'foods'))
+  return snap.docs
+    .map((d) => sanitizeFood({ ...d.data(), id: d.id }))
+    .filter((x): x is FoodItem => x != null)
+}
+
+export async function upsertCatalogFood(
+  id: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  const clean = stripUndefined(data) as Record<string, unknown>
+  await setDoc(doc(catalogFoodsCol(), id), clean, { merge: true })
+}
+
+export async function removeCatalogFood(id: string): Promise<void> {
+  await deleteDoc(doc(catalogFoodsCol(), id))
 }
 
 /** Firestore rejects `undefined` field values — drop them before write. */

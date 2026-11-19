@@ -17,12 +17,12 @@ export type WeekReview = {
 }
 
 function foodDays(week: WeekStats): number {
-  const n = week.days.filter((d) => d.meals.some((m) => !m.planned)).length
+  const n = week.days.filter((d) => d.meals.length > 0).length
   return n > 0 ? n : 1
 }
 
 function eatenMeals(week: WeekStats): Meal[] {
-  return week.days.flatMap((d) => d.meals.filter((m) => !m.planned))
+  return week.days.flatMap((d) => d.meals)
 }
 
 function avg(total: number, days: number): number {
@@ -87,7 +87,7 @@ export function buildWeekReview(week: WeekStats): WeekReview {
   )
   const sweetShare =
     week.totals.kcal > 0 ? week.days.reduce((s, d) => s + d.sweetKcal, 0) / week.totals.kcal : 0
-  const outDays = week.days.filter((d) => d.meals.some((m) => m.eatingOut && !m.planned)).length
+  const outDays = week.days.filter((d) => d.meals.some((m) => m.eatingOut)).length
   const meals = eatenMeals(week)
   const hasDayDetail = week.days.some((d) => d.meals.length > 0)
 

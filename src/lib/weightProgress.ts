@@ -82,8 +82,6 @@ export function buildWeightProgress(input: {
   maintainKcal?: number | null
   dailyKcalGoal?: number | null
   targetKg?: number | null
-  cycleLengthDays?: number
-  periodLengthDays?: number
 }): WeightProgress | null {
   const today = input.today ?? todayIso()
   const maintain =
@@ -110,8 +108,6 @@ export function buildWeightProgress(input: {
         : null,
     targetKg:
       input.targetKg != null && input.targetKg > 0 ? input.targetKg : null,
-    cycleLengthDays: input.cycleLengthDays,
-    periodLengthDays: input.periodLengthDays,
   })
 
   if (!morning && !forecast) return null

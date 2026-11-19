@@ -1,9 +1,7 @@
-type NavIconName = 'diary' | 'history' | 'care' | 'measures' | 'library' | 'profile'
+type NavIconName = 'history' | 'measures' | 'library' | 'profile'
 
 const SRC: Record<NavIconName, string> = {
-  diary: '/icons/nav-diary.png',
   history: '/icons/nav-history.png',
-  care: '/icons/nav-care.png',
   measures: '/icons/nav-measures.png',
   library: '/icons/nav-library.png',
   profile: '/icons/nav-profile.png',

@@ -57,7 +57,6 @@ function day(date: string, meals: Meal[], extra: Partial<DayStats> = {}): DaySta
     label: date,
     meals,
     totals,
-    plannedTotals: emptyMacros(),
     vegGrams: extra.vegGrams ?? 0,
     sweetKcal: extra.sweetKcal ?? 0,
     approximate: false,

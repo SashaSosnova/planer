@@ -16,8 +16,6 @@ import {
   getWeekNutritionSummary,
 } from './lib/weekSummaryLlm'
 import { AddMealScreen } from './screens/AddMealScreen'
-import { CareScreen } from './screens/CareScreen'
-import { DiaryScreen } from './screens/DiaryScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
 import { LibraryScreen } from './screens/LibraryScreen'
 import { MealDetailScreen } from './screens/MealDetailScreen'
@@ -38,14 +36,12 @@ type Overlay =
       seedMealId?: string
     }
   | { type: 'edit-meal'; mealId: string }
-  | { type: 'profile'; openCycleCal?: boolean }
+  | { type: 'profile' }
   | { type: 'weight-history' }
   | { type: 'steps-history' }
-  | { type: 'diary' }
   | { type: 'history' }
   | { type: 'measures' }
   | { type: 'library' }
-  | { type: 'care' }
   | null
 
 export default function App() {
@@ -67,17 +63,6 @@ export default function App() {
     saveSteps,
     saveMeasurement,
     deleteMeasurement,
-    saveDayNote,
-    saveMedCheck,
-    savePeriodStart,
-    removePeriodStart,
-    saveCareProduct,
-    archiveCareProduct,
-    toggleCareProductCheck,
-    setCareSlotChecks,
-    saveCareDaySkin,
-    importMenuRecipes,
-    dedupeMenuDishesCatalog,
   } = useAppData()
 
   const latestWeightKg = useMemo(() => {
@@ -90,9 +75,10 @@ export default function App() {
     dailyKcalGoal,
     maintainKcalGoal,
     proteinGoal,
+    vegGoalG,
+    sweetGoalKcal,
     profileReady,
-    cycleLengthDays,
-    periodLengthDays,
+    targetWeightKg,
     saveProfile,
     syncGoalFromWeight,
     saveTargets,
@@ -214,12 +200,12 @@ export default function App() {
             data={data}
             dailyKcalGoal={dailyKcalGoal}
             maintainKcalGoal={maintainKcalGoal}
-            targetWeightKg={settings.targetWeightKg}
+            targetWeightKg={targetWeightKg}
             activity={settings.profile?.activity}
             proteinGoal={proteinGoal}
+            vegGoalG={vegGoalG}
+            sweetGoalKcal={sweetGoalKcal}
             profileReady={profileReady}
-            cycleLengthDays={cycleLengthDays}
-            periodLengthDays={periodLengthDays}
             onAddMeal={(opts) =>
               setOverlay({
                 type: 'add-meal',
@@ -230,14 +216,11 @@ export default function App() {
             }
             onOpenMeal={(mealId) => setOverlay({ type: 'edit-meal', mealId })}
             onOpenProfile={() => setOverlay({ type: 'profile' })}
-            onOpenCycle={() => setOverlay({ type: 'profile', openCycleCal: true })}
             onOpenWeightHistory={() => setOverlay({ type: 'weight-history' })}
             onOpenStepsHistory={() => setOverlay({ type: 'steps-history' })}
-            onOpenDiary={() => setOverlay({ type: 'diary' })}
             onOpenHistory={() => setOverlay({ type: 'history' })}
             onOpenMeasures={() => setOverlay({ type: 'measures' })}
             onOpenLibrary={() => setOverlay({ type: 'library' })}
-            onOpenCare={() => setOverlay({ type: 'care' })}
             focusDate={focusDate}
             onFocusDateConsumed={() => setFocusDate(null)}
             registerBackHandler={registerBackHandler}
@@ -264,8 +247,6 @@ export default function App() {
             onSaveMeal={saveMeal}
             onSaveFood={saveFood}
             onDeleteFood={deleteFood}
-            onImportMenuRecipes={importMenuRecipes}
-            onSaveMedCheck={saveMedCheck}
             registerBackHandler={registerBackHandler}
           />
         )}
@@ -278,7 +259,6 @@ export default function App() {
             onSave={saveMeal}
             onDelete={deleteMeal}
             onSaveFood={saveFood}
-            onSaveMedCheck={saveMedCheck}
             registerBackHandler={registerBackHandler}
             onRepeatToday={() =>
               setOverlay({
@@ -301,17 +281,13 @@ export default function App() {
 
         {overlay?.type === 'profile' && (
           <ProfileScreen
-            key={`${uid ?? 'local'}-${overlay.openCycleCal ? 'cal' : 'base'}`}
+            key={uid ?? 'local'}
             data={data}
             user={user}
             settings={settings}
             onBack={closeOverlay}
             onSaveProfile={saveProfile}
             onSaveTargets={saveTargets}
-            onSavePeriodStart={savePeriodStart}
-            onRemovePeriodStart={removePeriodStart}
-            initialCycleCalOpen={Boolean(overlay.openCycleCal)}
-            registerBackHandler={registerBackHandler}
           />
         )}
 
@@ -330,8 +306,6 @@ export default function App() {
             onBack={closeOverlay}
             onSaveFood={saveFood}
             onDeleteFood={deleteFood}
-            onImportMenuRecipes={importMenuRecipes}
-            onDedupeMenuDishes={dedupeMenuDishesCatalog}
           />
         )}
 
@@ -354,20 +328,12 @@ export default function App() {
           <StepsHistoryScreen data={data} onBack={closeOverlay} onSave={saveSteps} />
         )}
 
-        {overlay?.type === 'diary' && (
-          <DiaryScreen
-            data={data}
-            onBack={closeOverlay}
-            onSaveDayNote={saveDayNote}
-          />
-        )}
-
         {overlay?.type === 'history' && (
           <HistoryScreen
             data={data}
             dailyKcalGoal={dailyKcalGoal}
             maintainKcalGoal={maintainKcalGoal}
-            targetWeightKg={settings.targetWeightKg}
+            targetWeightKg={targetWeightKg}
             activity={settings.profile?.activity}
             onBack={closeOverlay}
             onOpenDay={(date) => {
@@ -383,19 +349,6 @@ export default function App() {
               setOverlay({ type: 'add-meal', date })
             }
             onOpenProfile={() => setOverlay({ type: 'profile' })}
-          />
-        )}
-
-        {overlay?.type === 'care' && (
-          <CareScreen
-            careProducts={data.careProducts ?? []}
-            careDays={data.careDays ?? []}
-            onBack={closeOverlay}
-            onToggleCheck={toggleCareProductCheck}
-            onSetSlotChecks={setCareSlotChecks}
-            onSaveSkin={saveCareDaySkin}
-            onSaveProduct={saveCareProduct}
-            onArchiveProduct={archiveCareProduct}
           />
         )}
       </main>

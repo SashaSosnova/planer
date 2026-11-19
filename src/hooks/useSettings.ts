@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { calcDailyKcalGoal, calcMaintainKcalGoal, type BodyProfile } from '../lib/calorieGoal'
-import { calcProteinGoal } from '../lib/macroGoals'
+import {
+  anchoredFormulaWeight,
+  calcDailyKcalGoal,
+  calcMaintainKcalGoal,
+  calcOptimalWeightKg,
+  type BodyProfile,
+} from '../lib/calorieGoal'
+import { calcProteinGoal, VEG_GOAL_G } from '../lib/macroGoals'
+import { calcSweetBudgetKcal } from '../lib/sweets'
 import {
   getSettingsOwnerUid,
   loadSettings,
   parseSettingsBlob,
+  reconcileWeightFormulas,
   refreshGoalFromWeight,
   replaceSettings,
   resetSettings,
@@ -80,24 +88,62 @@ export function useSettings(latestWeightKg?: number, uid?: string | null) {
     })
   }, [uid])
 
+  const formulaKg = useMemo(
+    () => anchoredFormulaWeight(settings.formulaWeightKg, latestWeightKg),
+    [settings.formulaWeightKg, latestWeightKg],
+  )
+
+  useEffect(() => {
+    if (latestWeightKg == null || !(latestWeightKg > 0)) return
+    const next = reconcileWeightFormulas(latestWeightKg)
+    if (
+      next.formulaWeightKg === settings.formulaWeightKg &&
+      next.proteinGoalG === settings.proteinGoalG &&
+      next.vegGoalG === settings.vegGoalG &&
+      next.targetWeightKg === settings.targetWeightKg &&
+      next.dailyKcalGoal === settings.dailyKcalGoal
+    ) {
+      return
+    }
+    commit(next)
+  }, [
+    latestWeightKg,
+    settings.formulaWeightKg,
+    settings.proteinGoalG,
+    settings.vegGoalG,
+    settings.targetWeightKg,
+    settings.dailyKcalGoal,
+    settings.profile,
+    commit,
+  ])
+
   const dailyKcalGoal = useMemo(() => {
-    if (settings.profile && latestWeightKg != null && latestWeightKg > 0) {
-      return calcDailyKcalGoal(settings.profile, latestWeightKg)
+    if (settings.profile && formulaKg != null && formulaKg > 0) {
+      return calcDailyKcalGoal(settings.profile, formulaKg)
     }
     return settings.dailyKcalGoal
-  }, [settings, latestWeightKg])
+  }, [settings, formulaKg])
 
   const maintainKcalGoal = useMemo(() => {
-    if (settings.profile && latestWeightKg != null && latestWeightKg > 0) {
-      return calcMaintainKcalGoal(settings.profile, latestWeightKg)
+    if (settings.profile && formulaKg != null && formulaKg > 0) {
+      return calcMaintainKcalGoal(settings.profile, formulaKg)
     }
     return dailyKcalGoal
-  }, [settings.profile, latestWeightKg, dailyKcalGoal])
+  }, [settings.profile, formulaKg, dailyKcalGoal])
 
-  const proteinGoal = useMemo(
-    () => (latestWeightKg != null ? calcProteinGoal(latestWeightKg) : null),
-    [latestWeightKg],
-  )
+  const proteinGoal = useMemo(() => {
+    if (settings.proteinGoalG != null) return settings.proteinGoalG
+    return formulaKg != null ? calcProteinGoal(formulaKg) : null
+  }, [settings.proteinGoalG, formulaKg])
+
+  const targetWeightKg = useMemo(() => {
+    if (settings.targetWeightKg != null) return settings.targetWeightKg
+    if (!settings.profile) return null
+    return calcOptimalWeightKg(settings.profile.sex, settings.profile.heightCm)
+  }, [settings.targetWeightKg, settings.profile])
+
+  const vegGoalG = settings.vegGoalG ?? VEG_GOAL_G
+  const sweetGoalKcal = settings.sweetGoalKcal ?? calcSweetBudgetKcal()
 
   const profileReady = Boolean(settings.profile)
 
@@ -107,28 +153,44 @@ export function useSettings(latestWeightKg?: number, uid?: string | null) {
   )
 
   const syncGoalFromWeight = useCallback(
-    (weightKg: number) => commit(refreshGoalFromWeight(weightKg)),
-    [commit],
+    (weightKg: number) => {
+      const next = refreshGoalFromWeight(weightKg)
+      if (
+        next.formulaWeightKg === settings.formulaWeightKg &&
+        next.proteinGoalG === settings.proteinGoalG &&
+        next.vegGoalG === settings.vegGoalG &&
+        next.targetWeightKg === settings.targetWeightKg &&
+        next.dailyKcalGoal === settings.dailyKcalGoal
+      ) {
+        return next
+      }
+      return commit(next)
+    },
+    [
+      commit,
+      settings.formulaWeightKg,
+      settings.proteinGoalG,
+      settings.vegGoalG,
+      settings.targetWeightKg,
+      settings.dailyKcalGoal,
+    ],
   )
 
   const saveTargets = useCallback(
     (input: {
       targetWeightKg?: number | null
-      cycleLengthDays?: number
-      periodLengthDays?: number
+      proteinGoalG?: number | null
+      vegGoalG?: number | null
+      sweetGoalKcal?: number | null
     }) => {
-      const savingCycle =
-        input.cycleLengthDays != null || input.periodLengthDays != null
       return commit(
         saveSettings({
           ...(input.targetWeightKg !== undefined
             ? { targetWeightKg: input.targetWeightKg }
             : {}),
-          ...(input.cycleLengthDays != null ? { cycleLengthDays: input.cycleLengthDays } : {}),
-          ...(input.periodLengthDays != null
-            ? { periodLengthDays: input.periodLengthDays }
-            : {}),
-          ...(savingCycle ? { cycleConfigured: true } : {}),
+          ...(input.proteinGoalG !== undefined ? { proteinGoalG: input.proteinGoalG } : {}),
+          ...(input.vegGoalG !== undefined ? { vegGoalG: input.vegGoalG } : {}),
+          ...(input.sweetGoalKcal !== undefined ? { sweetGoalKcal: input.sweetGoalKcal } : {}),
         }),
       )
     },
@@ -140,11 +202,10 @@ export function useSettings(latestWeightKg?: number, uid?: string | null) {
     dailyKcalGoal,
     maintainKcalGoal,
     proteinGoal,
+    vegGoalG,
+    sweetGoalKcal,
     profileReady,
-    targetWeightKg: settings.targetWeightKg,
-    cycleLengthDays: settings.cycleLengthDays,
-    periodLengthDays: settings.periodLengthDays,
-    cycleConfigured: settings.cycleConfigured,
+    targetWeightKg,
     saveProfile,
     syncGoalFromWeight,
     saveTargets,

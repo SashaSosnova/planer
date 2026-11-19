@@ -1,19 +1,69 @@
 import { describe, expect, it } from 'vitest'
 import {
+  ageFromBirthDate,
+  anchoredFormulaWeight,
   bmrMifflin,
   calcDailyKcalGoal,
   calcMaintainKcalGoal,
+  calcOptimalWeightKg,
   isProfileComplete,
+  profileAge,
   type BodyProfile,
 } from './calorieGoal'
 
 const baseProfile: BodyProfile = {
   sex: 'female',
+  birthDate: null,
   age: 30,
   heightCm: 165,
   activity: 'moderate',
   goalMode: 'mild',
 }
+
+describe('anchoredFormulaWeight', () => {
+  it('adopts the first weigh-in and ignores smaller swings', () => {
+    expect(anchoredFormulaWeight(null, 64.7)).toBe(64.7)
+    expect(anchoredFormulaWeight(64.7, 65.4)).toBe(64.7)
+    expect(anchoredFormulaWeight(64.7, 63.8)).toBe(64.7)
+  })
+
+  it('moves the anchor after a shift of 1 kg', () => {
+    expect(anchoredFormulaWeight(64.7, 65.7)).toBe(65.7)
+    expect(anchoredFormulaWeight(64.7, 63.7)).toBe(63.7)
+  })
+})
+
+describe('calcOptimalWeightKg', () => {
+  it('uses the Lorentz formula', () => {
+    expect(calcOptimalWeightKg('female', 160)).toBe(55)
+    expect(calcOptimalWeightKg('male', 180)).toBe(72.5)
+    expect(calcOptimalWeightKg('female', 100)).toBeNull()
+  })
+})
+
+describe('ageFromBirthDate', () => {
+  const today = new Date(2026, 10, 19)
+
+  it('counts completed years', () => {
+    expect(ageFromBirthDate('1994-11-19', today)).toBe(32)
+    expect(ageFromBirthDate('1994-11-20', today)).toBe(31)
+    expect(ageFromBirthDate('1992-02-29', today)).toBe(34)
+  })
+
+  it('rejects impossible and future dates', () => {
+    expect(ageFromBirthDate('1994-02-29', today)).toBeNull()
+    expect(ageFromBirthDate('2027-01-01', today)).toBeNull()
+    expect(ageFromBirthDate('19.04.1994', today)).toBeNull()
+  })
+
+  it('uses the birth date instead of a stale stored age', () => {
+    const profile: BodyProfile = { ...baseProfile, birthDate: '1990-01-01', age: 99 }
+    expect(profileAge(profile, today)).toBe(36)
+    expect(calcDailyKcalGoal(profile, 60, today)).toBe(
+      calcDailyKcalGoal({ ...baseProfile, age: 36 }, 60, today),
+    )
+  })
+})
 
 describe('bmrMifflin', () => {
   it('computes Mifflin–St Jeor for female', () => {

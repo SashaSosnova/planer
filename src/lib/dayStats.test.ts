@@ -85,7 +85,7 @@ describe('statsForDate', () => {
     expect(statsForDate(data, '2026-07-15').approximate).toBe(true)
   })
 
-  it('excludes planned meals from eaten totals and veg/sweet', () => {
+  it('counts meals marked planned in eaten totals', () => {
     const data: AppData = {
       ...empty,
       meals: [
@@ -128,14 +128,13 @@ describe('statsForDate', () => {
     }
     const day = statsForDate(data, '2026-07-15')
     expect(day.meals).toHaveLength(2)
-    expect(day.totals.kcal).toBe(400)
-    expect(day.plannedTotals.kcal).toBe(800)
+    expect(day.totals.kcal).toBe(1200)
     expect(day.vegGrams).toBe(100)
-    expect(day.sweetKcal).toBe(0)
+    expect(day.sweetKcal).toBe(400)
     expect(day.approximate).toBe(false)
   })
 
-  it('does not mark day approximate from planned eating-out only', () => {
+  it('marks the day approximate when an eating-out meal was stored as planned', () => {
     const data: AppData = {
       ...empty,
       meals: [
@@ -149,9 +148,8 @@ describe('statsForDate', () => {
       ],
     }
     const day = statsForDate(data, '2026-07-15')
-    expect(day.totals.kcal).toBe(0)
-    expect(day.plannedTotals.kcal).toBe(500)
-    expect(day.approximate).toBe(false)
+    expect(day.totals.kcal).toBe(500)
+    expect(day.approximate).toBe(true)
   })
 
   it('sums vegetable grams from meal items', () => {
@@ -246,7 +244,7 @@ describe('buildTodayTimeline', () => {
     expect(tl.historyWeeks.some((w) => w.weekStart === '2026-07-13')).toBe(false)
   })
 
-  it('includes note-only days and weeks', () => {
+  it('does not surface journal-only days', () => {
     const data: AppData = {
       ...empty,
       dayNotes: [
@@ -267,10 +265,8 @@ describe('buildTodayTimeline', () => {
       ],
     }
     const tl = buildTodayTimeline(data, 1800, '2026-07-15')
-    expect(tl.recentDays.some((d) => d.date === '2026-07-14' && d.noteText === 'Было ок')).toBe(
-      true,
-    )
-    expect(tl.historyWeeks.some((w) => w.weekStart === '2026-07-06')).toBe(true)
+    expect(tl.recentDays.some((d) => d.date === '2026-07-14')).toBe(false)
+    expect(tl.historyWeeks.some((w) => w.weekStart === '2026-07-06')).toBe(false)
     expect(tl.historyWeeks.some((w) => w.weekStart === '2026-07-13')).toBe(false)
   })
 })

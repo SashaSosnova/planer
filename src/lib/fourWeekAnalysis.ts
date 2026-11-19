@@ -56,13 +56,9 @@ export type FourWeekAnalysis = {
   actions: AnalysisAction[]
 }
 
-function eatenMeals(meals: Meal[]): Meal[] {
-  return meals.filter((m) => !m.planned)
-}
-
 function kcalByDate(meals: Meal[], from: string, to: string): Map<string, number> {
   const map = new Map<string, number>()
-  for (const m of eatenMeals(meals)) {
+  for (const m of meals) {
     if (m.date < from || m.date > to) continue
     map.set(m.date, (map.get(m.date) ?? 0) + (Number(m.totals?.kcal) || 0))
   }
@@ -225,7 +221,6 @@ export function buildFourWeekAnalysis(input: {
   const maintain =
     input.maintainKcal != null && input.maintainKcal > 0 ? input.maintainKcal : null
   const incompleteShare = 1 - loggedDates.length / calendarDays
-  const periodInWindow = input.data.periodStarts.some((p) => p.date >= from && p.date <= today)
 
   const firstHalf = (weeks[0]?.deltaKg ?? 0) + (weeks[1]?.deltaKg ?? 0)
   const secondHalf = (weeks[2]?.deltaKg ?? 0) + (weeks[3]?.deltaKg ?? 0)
@@ -238,7 +233,7 @@ export function buildFourWeekAnalysis(input: {
       kind: 'watch',
       title: 'Не равняйте утро с вчерашними калориями',
       detail:
-        'За сутки жир почти не виден на весах. Вода, соль и цикл сильнее, чем ±300 ккал. Смотрите неделю.',
+        'За сутки жир почти не виден на весах. Вода и соль сильнее, чем ±300 ккал. Смотрите неделю.',
     })
   }
 
@@ -259,7 +254,7 @@ export function buildFourWeekAnalysis(input: {
       id: 'activity',
       kind: 'do',
       title: `Поставьте активность «${ACTIVITY_LABELS[bump]}»`,
-      detail: `Сейчас в профиле «${ACTIVITY_LABELS[activity]}», а шаги и темп веса говорят, что поддержка выше формулы${maintain != null ? ` (~${maintain} ккал)` : ''}. Кольцо и прогноз будут честнее.`,
+      detail: `Сейчас в профиле «${ACTIVITY_LABELS[activity]}», а шаги и темп веса говорят, что поддержка выше формулы${maintain != null ? ` (~${maintain} ккал)` : ''}. Кольцо будет честнее.`,
       go: 'profile',
     })
   }
@@ -300,28 +295,6 @@ export function buildFourWeekAnalysis(input: {
       title: 'Замедление после старта — нормально',
       detail:
         'Первые недели часто уходит вода и гликоген. Дальше темп ближе к жиру: меньше кг на тех же калориях.',
-    })
-  }
-
-  if (periodInWindow) {
-    actions.push({
-      id: 'cycle',
-      kind: 'watch',
-      title: 'Вокруг цикла весы врут на 0,3–0,6 кг',
-      detail:
-        'В этом окне были месячные. Не режьте калории из‑за двух тяжёлых утр — смотрите ту же неделю через 5–7 дней.',
-    })
-  }
-
-  const target = input.targetKg != null && input.targetKg > 0 ? input.targetKg : null
-  const pace = recentWeeklyRateKg ?? weeklyRateKg
-  if (target != null && kgEnd > target + 0.3 && pace < -0.12) {
-    const weeksLeft = Math.max(1, Math.round((kgEnd - target) / -pace))
-    actions.push({
-      id: 'eta',
-      kind: 'keep',
-      title: `До цели ~${weeksLeft} нед. при текущем темпе`,
-      detail: `Остаётся ${formatKg(round2(kgEnd - target))} кг. Темп последних недель ${signedKg(pace)}/нед. — если дневник полный и шаги не падают.`,
     })
   }
 

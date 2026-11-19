@@ -2,7 +2,6 @@ import type {
   AppData,
   MeasurementEntry,
   Meal,
-  PeriodStart,
   StepsEntry,
   WeightEntry,
 } from '../types'
@@ -98,15 +97,12 @@ export type ForecastInput = {
   weights: WeightEntry[]
   meals?: Meal[]
   steps?: StepsEntry[]
-  periodStarts?: PeriodStart[]
   measurements?: MeasurementEntry[]
   targetKg?: number | null
   /** TDEE / maintain kcal per day */
   maintainKcal?: number | null
   /** Daily calorie goal (deficit target) — for on-plan vs over analysis */
   dailyKcalGoal?: number | null
-  cycleLengthDays?: number
-  periodLengthDays?: number
   today?: string
 }
 
@@ -417,7 +413,7 @@ function formatDelta(kg: number): string {
 }
 
 /**
- * Forecast from scale trend + energy balance, with soft notes from cycle and measures.
+ * Forecast from scale trend + energy balance, with soft notes from measures.
  */
 export function computeWeightForecast(input: ForecastInput): WeightForecast | null
 /** @deprecated Prefer ForecastInput object */
@@ -573,8 +569,6 @@ export function forecastFromAppData(
     targetKg?: number | null
     maintainKcal?: number | null
     dailyKcalGoal?: number | null
-    cycleLengthDays?: number
-    periodLengthDays?: number
     today?: string
   },
 ): WeightForecast | null {
@@ -582,7 +576,6 @@ export function forecastFromAppData(
     weights: data.weights,
     meals: data.meals,
     steps: data.steps,
-    periodStarts: data.periodStarts,
     measurements: data.measurements,
     ...opts,
   })

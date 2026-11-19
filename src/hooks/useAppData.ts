@@ -24,30 +24,28 @@ import {
 import { isCareDayEmpty } from '../lib/careSchedule'
 import { isMedDayEmpty, MED_DOSE_AT_FIELD, type MedDoseKey } from '../lib/medRoutine'
 import {
-  buildSeedCareProducts,
-  hasSeededCareProducts,
-  markSeededCareProducts,
-  RETIRED_CARE_PRODUCT_IDS,
-  SEED_CARE_PRODUCTS_KEY,
-} from '../lib/seedCareProducts'
-import {
   hasSeededSpiceProducts,
   markSeededSpiceProducts,
   mergeSeedSpiceProducts,
   SEED_SPICE_PRODUCTS_KEY,
 } from '../lib/seedSpiceProducts'
-import {
-  buildMenuImportPlan,
-  findOrphanMenuDishes,
-  parseMenuDishesBundle,
-  summarizeMenuImport,
-  type MenuImportResult,
-  type OrphanMenuDish,
-} from '../lib/menuSync'
-import { dedupeMenuDishes, findMenuDishDuplicates } from '../lib/menuDishDedupe'
 import { parseTelegramImportBundle } from '../lib/tgImport'
 import { applyKnownWeightFixes } from '../lib/weightCleanup'
-import { ensureAuth, removeDoc, subscribeUserData, upsertDoc } from '../storage/cloudSync'
+import {
+  foodsToCopyIntoShared,
+  isCatalogMigrated,
+  markCatalogMigrated,
+} from '../lib/sharedCatalog'
+import {
+  ensureAuth,
+  fetchPersonalFoods,
+  removeCatalogFood,
+  removeDoc,
+  subscribeCatalogFoods,
+  subscribeUserData,
+  upsertCatalogFood,
+  upsertDoc,
+} from '../storage/cloudSync'
 import { emptyAppData, loadLocalData, saveLocalData } from '../storage/localStore'
 import type {
   AppData,
@@ -91,7 +89,6 @@ async function uploadInBatches<T>(
 }
 
 const CLOUD_KEYS: (keyof AppData)[] = [
-  'foods',
   'meals',
   'weights',
   'measurements',
@@ -119,8 +116,9 @@ export function useAppData() {
   const suppressedFoodIds = useRef(new Set<string>())
   /** Period-start dates deleted this session — do not let a stale snapshot restore them. */
   const suppressedPeriodDates = useRef(new Set<string>())
-  const careProductsSeedStarted = useRef(false)
   const spiceProductsSeedStarted = useRef(false)
+  /** uid whose personal→shared catalog copy is already running */
+  const catalogMigrationUid = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isFirebaseConfigured()) {
@@ -128,6 +126,7 @@ export function useAppData() {
       return
     }
     let unsubData: (() => void) | undefined
+    let unsubCatalog: (() => void) | undefined
     let cancelled = false
 
     const attachUser = (authUser: User) => {
@@ -138,18 +137,19 @@ export function useAppData() {
       setUid(authUser.uid)
       setCloudError(null)
       if (switched) {
-        // Different account: do not seed previous device data into the new uid
-        const empty = emptyAppData()
-        saveLocalData(empty)
-        setData(empty)
+        // Different account: drop the diary, keep the shared catalog already on device.
+        catalogMigrationUid.current = null
+        setData((prev) => {
+          const next = { ...emptyAppData(), foods: prev.foods }
+          saveLocalData(next)
+          return next
+        })
         cloudHydrated.current = new Set(CLOUD_KEYS)
-        careProductsSeedStarted.current = false
         spiceProductsSeedStarted.current = false
         suppressedFoodIds.current = new Set()
         suppressedMeasureDates.current = new Set()
         suppressedPeriodDates.current = new Set()
         try {
-          localStorage.removeItem(SEED_CARE_PRODUCTS_KEY)
           localStorage.removeItem(SEED_SPICE_PRODUCTS_KEY)
         } catch {
           /* ignore */
@@ -198,9 +198,7 @@ export function useAppData() {
                     ? (localItems as MeasurementEntry[]).filter(
                         (item) => !suppressedMeasureDates.current.has(item.date),
                       )
-                    : key === 'foods'
-                      ? localItems.filter((item) => !suppressedFoodIds.current.has(item.id))
-                      : localItems
+                    : localItems
                 void Promise.all(
                   toUpload.map((item) =>
                     upsertDoc(authUser.uid, key, item.id, {
@@ -228,16 +226,6 @@ export function useAppData() {
                     droppedIds.map((id) => removeDoc(authUser.uid, 'measurements', id)),
                   )
                 }
-              } else if (key === 'foods') {
-                const cloudRaw = cloudItems as FoodItem[]
-                for (const f of cloudRaw) {
-                  if (suppressedFoodIds.current.has(f.id)) {
-                    void removeDoc(authUser.uid, 'foods', f.id)
-                  }
-                }
-                Object.assign(next, {
-                  foods: cloudRaw.filter((f) => !suppressedFoodIds.current.has(f.id)),
-                })
               } else {
                 Object.assign(next, { [key]: cloudItems })
               }
@@ -248,6 +236,60 @@ export function useAppData() {
         },
         onError: (err) => {
           setCloudError(err instanceof Error ? err.message : 'Ошибка синхронизации')
+        },
+      })
+      unsubCatalog?.()
+      unsubCatalog = subscribeCatalogFoods({
+        onFoods: (shared) => {
+          const visible = shared.filter((f) => !suppressedFoodIds.current.has(f.id))
+          for (const food of shared) {
+            if (suppressedFoodIds.current.has(food.id)) void removeCatalogFood(food.id)
+          }
+          setData((prev) => {
+            const migrated = isCatalogMigrated(authUser.uid)
+            let foods = visible
+            if (visible.length === 0 && prev.foods.length > 0) {
+              foods = prev.foods.filter((f) => !suppressedFoodIds.current.has(f.id))
+            } else if (!migrated) {
+              const sharedIds = new Set(visible.map((f) => f.id))
+              const extras = prev.foods.filter(
+                (f) => !sharedIds.has(f.id) && !suppressedFoodIds.current.has(f.id),
+              )
+              foods = [...visible, ...extras]
+            }
+            if (!migrated && catalogMigrationUid.current !== authUser.uid) {
+              catalogMigrationUid.current = authUser.uid
+              const localSnapshot = prev.foods
+              void (async () => {
+                try {
+                  const personal = await fetchPersonalFoods(authUser.uid)
+                  const copy = foodsToCopyIntoShared(
+                    visible,
+                    personal,
+                    localSnapshot,
+                    suppressedFoodIds.current,
+                  )
+                  if (copy.length > 0) {
+                    await uploadInBatches(copy, 8, (food) =>
+                      upsertCatalogFood(food.id, { ...food }),
+                    )
+                  }
+                  markCatalogMigrated(authUser.uid)
+                } catch (err) {
+                  catalogMigrationUid.current = null
+                  setCloudError(
+                    err instanceof Error ? err.message : 'Не удалось открыть общий каталог',
+                  )
+                }
+              })()
+            }
+            const next = { ...prev, foods }
+            saveLocalData(next)
+            return next
+          })
+        },
+        onError: (err) => {
+          setCloudError(err instanceof Error ? err.message : 'Ошибка каталога')
         },
       })
       setReady(true)
@@ -281,6 +323,7 @@ export function useAppData() {
       cancelled = true
       unsubAuth()
       unsubData?.()
+      unsubCatalog?.()
     }
   }, [])
 
@@ -325,7 +368,7 @@ export function useAppData() {
       if (useCloud && uid) {
         // merge:true keeps stale fields unless we explicitly clear them
         const recipe = item.recipe
-        await upsertDoc(uid, 'foods', item.id, {
+        await upsertCatalogFood(item.id, {
           ...item,
           place: null, // legacy field retired → brand
           brand: brand || null,
@@ -353,7 +396,7 @@ export function useAppData() {
   const deleteFood = useCallback(
     async (id: string) => {
       suppressedFoodIds.current.add(id)
-      if (useCloud && uid) await removeDoc(uid, 'foods', id)
+      if (useCloud && uid) await removeCatalogFood(id)
       persistLocal((prev) => ({ ...prev, foods: prev.foods.filter((f) => f.id !== id) }))
     },
     [persistLocal, uid, useCloud],
@@ -368,7 +411,6 @@ export function useAppData() {
       items: MealItem[]
       isApproximate: boolean
       eatingOut?: boolean
-      planned?: boolean
     }) => {
       const items = sanitizeMealItems(input.items)
       if (items.length === 0) throw new Error('Добавьте хотя бы один продукт с граммами > 0')
@@ -387,7 +429,7 @@ export function useAppData() {
         totals,
         isApproximate: input.isApproximate,
         eatingOut: Boolean(input.eatingOut),
-        planned: Boolean(input.planned),
+        planned: false,
         createdAt,
       }
       if (useCloud && uid) await upsertDoc(uid, 'meals', meal.id, { ...meal })
@@ -733,31 +775,6 @@ export function useAppData() {
     })()
   }, [ready, data.measurements, persistLocal, uid, useCloud])
 
-  // Seed / refresh canonical care products (v4: how-texts without Утро/Вечер stage noise).
-  useEffect(() => {
-    if (!ready) return
-    if (careProductsSeedStarted.current) return
-    if (hasSeededCareProducts() && (data.careProducts ?? []).length > 0) return
-    careProductsSeedStarted.current = true
-    const seeded = buildSeedCareProducts()
-    const seedIds = new Set(seeded.map((p) => p.id))
-    const retired = new Set<string>(RETIRED_CARE_PRODUCT_IDS)
-    markSeededCareProducts()
-    void (async () => {
-      const customKeep = (data.careProducts ?? []).filter(
-        (p) => !seedIds.has(p.id) && !retired.has(p.id),
-      )
-      const next = [...seeded, ...customKeep]
-      if (useCloud && uid) {
-        await Promise.all([
-          ...seeded.map((p) => upsertDoc(uid, 'careProducts', p.id, { ...p })),
-          ...[...retired].map((id) => removeDoc(uid, 'careProducts', id)),
-        ])
-      }
-      persistLocal((prev) => ({ ...prev, careProducts: next }))
-    })()
-  }, [ready, data.careProducts, persistLocal, uid, useCloud])
-
   // Seed catalog products for recipes (spices, veg, sauces…). Version bump re-merges missing.
   useEffect(() => {
     if (!ready) return
@@ -769,7 +786,7 @@ export function useAppData() {
     if (added.length === 0) return
     void (async () => {
       if (useCloud && uid) {
-        await Promise.all(added.map((f) => upsertDoc(uid, 'foods', f.id, { ...f })))
+        await Promise.all(added.map((f) => upsertCatalogFood(f.id, { ...f })))
       }
       persistLocal((prev) => {
         const merged = mergeSeedSpiceProducts(prev.foods)
@@ -963,12 +980,6 @@ export function useAppData() {
 
   const resetLocal = useCallback(() => {
     const empty = emptyAppData()
-    careProductsSeedStarted.current = false
-    try {
-      localStorage.removeItem(SEED_CARE_PRODUCTS_KEY)
-    } catch {
-      /* ignore */
-    }
     saveLocalData(empty)
     setData(empty)
   }, [])
@@ -1056,104 +1067,6 @@ export function useAppData() {
     [data.meals, data.weights, persistLocal, uid, useCloud],
   )
 
-  const importMenuRecipes = useCallback(
-    async (
-      raw: unknown,
-      onProgress?: (msg: string) => void,
-    ): Promise<MenuImportResult> => {
-      const dishes = parseMenuDishesBundle(raw)
-      const spiceMerge = mergeSeedSpiceProducts(data.foods)
-      if (spiceMerge.added.length > 0) {
-        markSeededSpiceProducts()
-        for (const spice of spiceMerge.added) {
-          if (useCloud && uid) await upsertDoc(uid, 'foods', spice.id, { ...spice })
-        }
-        persistLocal((prev) => ({ ...prev, foods: spiceMerge.foods }))
-      }
-      const plan = buildMenuImportPlan(dishes, spiceMerge.foods)
-      const results: MenuImportResult['results'] = []
-
-      for (const entry of plan) {
-        onProgress?.(`${entry.dish.name}…`)
-        try {
-          await saveFood(entry.input)
-          results.push({
-            menuId: entry.dish.id,
-            name: entry.dish.name,
-            status: entry.existingId ? 'updated' : 'created',
-            matched: entry.input.recipe!.ingredients.filter((i) => i.source === 'library').length,
-            total: entry.input.recipe!.ingredients.length,
-            unmatched: entry.unmatched,
-          })
-        } catch (err) {
-          results.push({
-            menuId: entry.dish.id,
-            name: entry.dish.name,
-            status: 'error',
-            matched: 0,
-            total: entry.input.recipe?.ingredients.length ?? 0,
-            unmatched: entry.unmatched,
-            error: err instanceof Error ? err.message : 'Ошибка сохранения',
-          })
-        }
-        await yieldUi()
-      }
-
-      const { created, updated, errors } = summarizeMenuImport(results)
-      const menuIds = dishes.map((d) => d.id)
-
-      let removedIds: string[] = []
-      let orphans: OrphanMenuDish[] = []
-      persistLocal((prev) => {
-        const merged = dedupeMenuDishes(prev.foods)
-        removedIds = merged.removedIds
-        const foods = removedIds.length > 0 ? merged.foods : prev.foods
-        orphans = findOrphanMenuDishes(foods, menuIds)
-        if (removedIds.length === 0) return prev
-        return { ...prev, foods: merged.foods }
-      })
-      if (removedIds.length > 0) {
-        for (const id of removedIds) suppressedFoodIds.current.add(id)
-        if (useCloud && uid) {
-          await Promise.all(removedIds.map((id) => removeDoc(uid, 'foods', id)))
-        }
-      }
-
-      return {
-        results,
-        created,
-        updated,
-        errors,
-        removedDupes: removedIds.length,
-        menuIds,
-        orphans,
-      }
-    },
-    [data.foods, persistLocal, saveFood, uid, useCloud],
-  )
-
-  const dedupeMenuDishesCatalog = useCallback(async (): Promise<{
-    removed: number
-    groups: ReturnType<typeof findMenuDishDuplicates>
-  }> => {
-    let removedIds: string[] = []
-    let groups: ReturnType<typeof findMenuDishDuplicates> = []
-    persistLocal((prev) => {
-      const merged = dedupeMenuDishes(prev.foods)
-      removedIds = merged.removedIds
-      groups = merged.groups
-      if (merged.removedIds.length === 0) return prev
-      return { ...prev, foods: merged.foods }
-    })
-    if (removedIds.length > 0) {
-      for (const id of removedIds) suppressedFoodIds.current.add(id)
-      if (useCloud && uid) {
-        await Promise.all(removedIds.map((id) => removeDoc(uid, 'foods', id)))
-      }
-    }
-    return { removed: removedIds.length, groups }
-  }, [persistLocal, uid, useCloud])
-
   const mode = useMemo(
     () => (useCloud ? 'cloud' : isFirebaseConfigured() ? 'connecting' : 'local'),
     [useCloud],
@@ -1186,7 +1099,5 @@ export function useAppData() {
     saveCareDaySkin,
     resetLocal,
     importDiaryBundle,
-    importMenuRecipes,
-    dedupeMenuDishesCatalog,
   }
 }

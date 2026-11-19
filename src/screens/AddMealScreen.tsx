@@ -41,7 +41,7 @@ import type {
 import { CloseIcon } from '../components/CloseIcon'
 import { DateField } from '../components/DateField'
 import { MicIcon } from '../components/MicIcon'
-import { startMealDictation, type MealDictation } from '../lib/mealDictation'
+import { MealSpeechCancelled, recognizeMealSpeech } from '../lib/mealDictation'
 import { resolveSpokenMeal } from '../lib/spokenMeal'
 import { LibraryScreen } from './LibraryScreen'
 
@@ -118,18 +118,6 @@ export function AddMealScreen({
   const textAreaRef = useRef<HTMLTextAreaElement>(null)
   /** Text that produced the current draft — edit only clears draft when it diverges. */
   const parsedTextRef = useRef<string | null>(null)
-  const dictationRef = useRef<MealDictation | null>(null)
-  const dictationStoppingRef = useRef(false)
-  const dictationArmingRef = useRef(false)
-  /** True only while the mic button is physically held. */
-  const dictationHeldRef = useRef(false)
-  const dictationReadyAtRef = useRef(0)
-  const releasedDuringArmAtRef = useRef(0)
-  const dictationCancelRef = useRef(false)
-  const releaseHoldRef = useRef<(() => void) | null>(null)
-  /** Field text before the current dictation, kept while live transcript replaces the box. */
-  const dictationBaseRef = useRef('')
-
   const applyRepeatMeal = (meal: Meal) => {
     const next = cloneMealAsDraft(meal)
     setDraft(next)
@@ -227,158 +215,36 @@ export function AddMealScreen({
     setMealType((prev) => (prev === next ? prev : next))
   }, [date, dayMealTypesKey, text, mealTypeTouched])
 
-  useEffect(() => {
-    return () => {
-      releaseHoldRef.current?.()
-      releaseHoldRef.current = null
-      const session = dictationRef.current
-      dictationRef.current = null
-      void session?.stop().catch(() => undefined)
-    }
-  }, [])
-
-  const finishDictation = async (session: MealDictation, emptyIsHint = false) => {
-    setBusy(true)
+  const dictate = async () => {
+    if (busy || listening) return
+    setListening(true)
     setError(null)
+    setInfo(null)
+    const base = text.trim()
     let heard = ''
     try {
-      heard = await session.stop()
+      heard = await recognizeMealSpeech()
     } catch (err) {
-      setBusy(false)
+      setListening(false)
+      if (err instanceof MealSpeechCancelled) return
       setError(err instanceof Error ? err.message : 'Не удалось распознать речь')
       return
     }
-    const base = dictationBaseRef.current
+    setListening(false)
     const trimmed = heard.trim()
     if (!trimmed) {
-      setText(base)
-      setBusy(false)
-      if (emptyIsHint) setInfo('Удерживайте микрофон и говорите.')
-      else setError('Ничего не распознано. Удерживайте микрофон и проговорите продукты с граммами.')
+      setError('Ничего не распознано. Скажите продукты и граммы в окне распознавания.')
       return
     }
     const resolved = resolveSpokenMeal(trimmed)
     if (!resolved.text.trim()) {
       setText([base, trimmed].filter(Boolean).join('\n'))
-      setBusy(false)
       setError('Не получилось разобрать продукты. Например: молоко 100 грамм, хлеб 20 грамм.')
       return
     }
     const next = [base, resolved.text].filter(Boolean).join('\n')
     const typeOverride = resolved.mealType && !mealTypeTouched ? resolved.mealType : undefined
     await runParse(next, typeOverride)
-  }
-
-  const endDictation = async (emptyIsHint = false) => {
-    const active = dictationRef.current
-    if (!active || dictationStoppingRef.current) return
-    dictationStoppingRef.current = true
-    dictationRef.current = null
-    setListening(false)
-    try {
-      await finishDictation(active, emptyIsHint)
-    } finally {
-      dictationStoppingRef.current = false
-    }
-  }
-
-  const armDictation = async () => {
-    if (dictationArmingRef.current || dictationRef.current) return
-    dictationArmingRef.current = true
-    let heardPartial = false
-    try {
-      const session = await startMealDictation(
-        (partial) => {
-          if (partial.trim()) heardPartial = true
-          const live = [dictationBaseRef.current, partial].filter(Boolean).join('\n')
-          setText(live)
-          setDraft(null)
-          setInfo(null)
-          parsedTextRef.current = null
-        },
-        () => {
-          void endDictation()
-        },
-      )
-      if (dictationStoppingRef.current) {
-        void session.stop().catch(() => undefined)
-        return
-      }
-      dictationReadyAtRef.current = Date.now()
-      dictationRef.current = session
-      const releasedAgo = releasedDuringArmAtRef.current
-        ? Date.now() - releasedDuringArmAtRef.current
-        : 0
-      // Permission dialog: the finger has been up for a while. A second tap
-      // during startup also cancels. A release in the same instant the
-      // recognizer starts is the WebView cancelling the gesture, so keep going.
-      if (dictationCancelRef.current || (!dictationHeldRef.current && releasedAgo > 700)) {
-        releaseHoldRef.current?.()
-        releaseHoldRef.current = null
-        await endDictation(!heardPartial)
-      }
-    } catch (err) {
-      dictationHeldRef.current = false
-      setListening(false)
-      setError(err instanceof Error ? err.message : 'Не удалось включить микрофон')
-    } finally {
-      dictationArmingRef.current = false
-    }
-  }
-
-  const endHold = () => {
-    if (!dictationHeldRef.current && !dictationRef.current && !dictationArmingRef.current) return
-    dictationCancelRef.current = true
-    dictationHeldRef.current = false
-    releaseHoldRef.current?.()
-    releaseHoldRef.current = null
-    setListening(false)
-    if (dictationRef.current) void endDictation()
-  }
-
-  const beginHold = (target: HTMLButtonElement, pointerId?: number) => {
-    if (busy) return
-    if (dictationHeldRef.current || dictationArmingRef.current || dictationRef.current) {
-      endHold()
-      return
-    }
-    dictationCancelRef.current = false
-    dictationHeldRef.current = true
-    dictationReadyAtRef.current = 0
-    releasedDuringArmAtRef.current = 0
-    setListening(true)
-    setError(null)
-    setInfo(null)
-    dictationBaseRef.current = text.trim()
-    if (pointerId != null) {
-      try {
-        target.setPointerCapture(pointerId)
-      } catch {
-        /* the window listener still ends the hold */
-      }
-    }
-    const release = (event: PointerEvent) => {
-      if (pointerId != null && event.pointerId !== pointerId) return
-      if (!dictationReadyAtRef.current) {
-        releasedDuringArmAtRef.current = Date.now()
-        dictationHeldRef.current = false
-        return
-      }
-      // Starting the recognizer cancels the touch. Ignore that blip.
-      if (Date.now() - dictationReadyAtRef.current < 500) return
-      endHold()
-    }
-    const blockScroll = (event: TouchEvent) => {
-      if (dictationHeldRef.current) event.preventDefault()
-    }
-    const cleanup = () => {
-      window.removeEventListener('pointerup', release)
-      window.removeEventListener('touchmove', blockScroll)
-    }
-    releaseHoldRef.current = cleanup
-    window.addEventListener('pointerup', release)
-    window.addEventListener('touchmove', blockScroll, { passive: false })
-    void armDictation()
   }
 
   const runParse = async (sourceText?: string, mealTypeOverride?: MealType) => {
@@ -654,33 +520,16 @@ export function AddMealScreen({
         <button
           type="button"
           className={`dictation-btn${listening ? ' listening' : ''}`}
-          disabled={busy}
+          disabled={busy || listening}
           aria-pressed={listening}
-          aria-label="Надиктовать, удерживайте"
-          title="Удерживайте и говорите"
-          onPointerDown={(e) => {
-            if (e.button !== 0) return
-            e.preventDefault()
-            beginHold(e.currentTarget, e.pointerId)
-          }}
-          onContextMenu={(e) => e.preventDefault()}
-          onKeyDown={(e) => {
-            if (e.repeat || (e.key !== ' ' && e.key !== 'Enter')) return
-            e.preventDefault()
-            beginHold(e.currentTarget)
-          }}
-          onKeyUp={(e) => {
-            if (e.key !== ' ' && e.key !== 'Enter') return
-            e.preventDefault()
-            endHold()
-          }}
+          aria-label="Надиктовать продукты"
+          title="Скажите продукты и граммы"
+          onClick={() => void dictate()}
         >
           <MicIcon size={32} />
         </button>
       </div>
-      {listening && (
-        <p className="muted small dictation-hint">Говорите… отпустите или нажмите ещё раз</p>
-      )}
+      {listening && <p className="muted small dictation-hint">Говорите в открывшемся окне</p>}
       {error && (
         <div className="form-msg-block">
           <p className="form-msg error">{error}</p>

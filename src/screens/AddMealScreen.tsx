@@ -123,6 +123,9 @@ export function AddMealScreen({
   const dictationArmingRef = useRef(false)
   /** True only while the mic button is physically held. */
   const dictationHeldRef = useRef(false)
+  const dictationReadyAtRef = useRef(0)
+  const releasedDuringArmAtRef = useRef(0)
+  const dictationCancelRef = useRef(false)
   const releaseHoldRef = useRef<(() => void) | null>(null)
   /** Field text before the current dictation, kept while live transcript replaces the box. */
   const dictationBaseRef = useRef('')
@@ -301,8 +304,19 @@ export function AddMealScreen({
         void session.stop().catch(() => undefined)
         return
       }
+      dictationReadyAtRef.current = Date.now()
       dictationRef.current = session
-      if (!dictationHeldRef.current) await endDictation(!heardPartial)
+      const releasedAgo = releasedDuringArmAtRef.current
+        ? Date.now() - releasedDuringArmAtRef.current
+        : 0
+      // Permission dialog: the finger has been up for a while. A second tap
+      // during startup also cancels. A release in the same instant the
+      // recognizer starts is the WebView cancelling the gesture, so keep going.
+      if (dictationCancelRef.current || (!dictationHeldRef.current && releasedAgo > 700)) {
+        releaseHoldRef.current?.()
+        releaseHoldRef.current = null
+        await endDictation(!heardPartial)
+      }
     } catch (err) {
       dictationHeldRef.current = false
       setListening(false)
@@ -314,6 +328,7 @@ export function AddMealScreen({
 
   const endHold = () => {
     if (!dictationHeldRef.current && !dictationRef.current && !dictationArmingRef.current) return
+    dictationCancelRef.current = true
     dictationHeldRef.current = false
     releaseHoldRef.current?.()
     releaseHoldRef.current = null
@@ -327,7 +342,10 @@ export function AddMealScreen({
       endHold()
       return
     }
+    dictationCancelRef.current = false
     dictationHeldRef.current = true
+    dictationReadyAtRef.current = 0
+    releasedDuringArmAtRef.current = 0
     setListening(true)
     setError(null)
     setInfo(null)
@@ -339,8 +357,15 @@ export function AddMealScreen({
         /* the window listener still ends the hold */
       }
     }
-    const release = (event: Event) => {
-      if (pointerId != null && event instanceof PointerEvent && event.pointerId !== pointerId) return
+    const release = (event: PointerEvent) => {
+      if (pointerId != null && event.pointerId !== pointerId) return
+      if (!dictationReadyAtRef.current) {
+        releasedDuringArmAtRef.current = Date.now()
+        dictationHeldRef.current = false
+        return
+      }
+      // Starting the recognizer cancels the touch. Ignore that blip.
+      if (Date.now() - dictationReadyAtRef.current < 500) return
       endHold()
     }
     const blockScroll = (event: TouchEvent) => {
@@ -348,12 +373,10 @@ export function AddMealScreen({
     }
     const cleanup = () => {
       window.removeEventListener('pointerup', release)
-      window.removeEventListener('touchend', release)
       window.removeEventListener('touchmove', blockScroll)
     }
     releaseHoldRef.current = cleanup
     window.addEventListener('pointerup', release)
-    window.addEventListener('touchend', release)
     window.addEventListener('touchmove', blockScroll, { passive: false })
     void armDictation()
   }
@@ -655,7 +678,9 @@ export function AddMealScreen({
           <MicIcon size={32} />
         </button>
       </div>
-      {listening && <p className="muted small dictation-hint">Говорите…</p>}
+      {listening && (
+        <p className="muted small dictation-hint">Говорите… отпустите или нажмите ещё раз</p>
+      )}
       {error && (
         <div className="form-msg-block">
           <p className="form-msg error">{error}</p>

@@ -41,7 +41,6 @@ async function startNative(
   let live = false
   let starting = false
   let fatal: Error | null = null
-  let sawStopped = false
   let stopWait: (() => void) | null = null
   const handles: PluginListenerHandle[] = []
 
@@ -51,14 +50,16 @@ async function startNative(
     if (!want || starting || live) return
     starting = true
     try {
-      await SpeechRecognition.setPTTState({ held: true, mute: true })
+      await SpeechRecognition.setPTTState({ held: true })
       await SpeechRecognition.start({
         language: 'ru-RU',
         maxResults: 1,
         partialResults: true,
         popup: false,
         continuousPTT: true,
-        muteRecognizerBeep: true,
+        // Muting the system stream on start reroutes audio on some phones and the
+        // recognizer then captures silence.
+        muteRecognizerBeep: false,
       })
       live = true
     } finally {
@@ -73,7 +74,9 @@ async function startNative(
 
   handles.push(
     await SpeechRecognition.addListener('partialResults', (event) => {
-      tail = partialText(event)
+      const text = partialText(event)
+      if (!text) return
+      tail = text
       emit()
     }),
   )
@@ -91,11 +94,7 @@ async function startNative(
         return
       }
       live = false
-      if (!want) {
-        sawStopped = true
-        stopWait?.()
-        return
-      }
+      if (!want) stopWait?.()
     }),
   )
   handles.push(
@@ -122,36 +121,37 @@ async function startNative(
           clearTimeout(timer)
           resolve()
         }
-        if (sawStopped) {
-          clearTimeout(timer)
-          resolve()
-        }
       })
       let snapshot = ''
+      try {
+        const last = await SpeechRecognition.getLastPartialResult()
+        snapshot = last.text?.trim() ?? ''
+      } catch {
+        /* recognizer has nothing cached yet */
+      }
       try {
         await SpeechRecognition.setPTTState({ held: false })
       } catch {
         /* already idle */
       }
       try {
+        // stopListening() asks Android to return the audio already buffered.
         await SpeechRecognition.stop()
       } catch {
         /* session already ended */
       }
-      try {
-        const last = await SpeechRecognition.getLastPartialResult()
-        snapshot = last.text?.trim() ?? ''
-      } catch {
-        /* cache already cleared */
-      }
       await finished
-      await new Promise((resolve) => setTimeout(resolve, 200))
+      await delay(200)
       const transcript = joinTranscript(sealed, tail, snapshot)
       await cleanup()
       if (!transcript && fatal) throw fatal
       return transcript
     },
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function partialText(event: SpeechRecognitionPartialResultEvent): string {
